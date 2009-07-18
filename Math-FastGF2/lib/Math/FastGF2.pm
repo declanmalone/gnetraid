@@ -14,7 +14,7 @@ require Exporter;
 		 'info' => [ qw(gf2_info) ],
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-@EXPORT = ( @{ $EXPORT_TAGS{'ops'} } );
+@EXPORT = (  );
 $VERSION = '0.01';
 
 require XSLoader;
@@ -30,7 +30,7 @@ Math::FastGF2 - Perl extension for fast Galois Field arithmetic
 
 =head1 SYNOPSIS
 
-  use Math::FastGF2;
+  use Math::FastGF2 ":ops";
   use strict;
   my ($a,$b,$c,$d);
 
@@ -86,18 +86,18 @@ some applications, consult the references listed below.
 
 =head2 EXPORT
 
-By default, the module exports only four methods:
-
+By default, the module does not export any methods. By adding the
+":ops" parameter to the "use" line, it exports the following routines:
 
 =over
 
-=item * gf2_mul( $field_size, $op1, $op2)
+=item * gf2_mul( $field_size, $op1, $op2 )
 
-=item * gf2_inv( $field_size, $op1)
+=item * gf2_inv( $field_size, $op1 )
 
-=item * gf2_div( $field_size, $op1, $op2)
+=item * gf2_div( $field_size, $op1, $op2 )
 
-=item * gf2_pow( $field_size, $op1, $op2)
+=item * gf2_pow( $field_size, $op1, $op2 )
 
 =back
 
@@ -291,11 +291,13 @@ applications involving codes or cryptography. The main ones are:
 
 =item * The Advanced Encryption Standard (Rijndael) algorithm for encrpytion. This operates on 8-bit fields and uses the same irreducible polynomial as implemented in this library.
 
-=item * Error-correcting codes, particularly Reed-Solomon encoding.
+=item * Error-correcting codes, particularly Reed-Solomon encoding. (RS encoding and Rabin's IDA are actually versions of the same algorithm)
 
 =back
 
-See the SEE ALSO section for links.
+See the SEE ALSO section for links. Also, see the included scripts
+C<shamir-split.pl> and C<shamir-combine.pl>, which implement Shamir's
+threshold system for secret sharing.
 
 =head2 DIVISION BY ZERO (and friends)
 
@@ -397,10 +399,18 @@ Despite being aimed at hardware, this paper also contains a wealth of
 information on software algorithms including several field inversion
 algorithms.
 
+I<http://charles.karney.info/misc/secret.html> Original implementation
+of Shamir's secret sharing algorithm, on which C<shamir-split.pl> and
+C<shamir-combine.pl> are based. These new versions replace the integer
+modulo a prime fields with Galois fields implemented with
+Math::FastGF2.
+
 This module is part of the GnetRAID project. For project development
 page, see:
 
   https://sourceforge.net/projects/gnetraid/develop
+
+
 
 =head1 AUTHOR
 

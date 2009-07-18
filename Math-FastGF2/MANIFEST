@@ -7,5 +7,7 @@ FastGF2.xs
 Makefile.PL
 ppport.h
 benchmark-Math-FastGF2.pl
+shamir-split.pl
+shamir-combine.pl
 t/Math-FastGF2.t
 lib/Math/FastGF2.pm
