@@ -1,4 +1,4 @@
-# This Makefile is for the Math::FastGF2 extension to perl.
+# This Makefile is for the Math::fastgf2 extension to perl.
 #
 # It was generated automatically by MakeMaker version
 # 6.42 (Revision: 41145) from the contents of
@@ -10,15 +10,9 @@
 #
 #   MakeMaker Parameters:
 
-#     ABSTRACT_FROM => q[lib/Math/FastGF2.pm]
-#     AUTHOR => q[Declan Malone <idablack@sourceforge.net>]
-#     DEFINE => q[]
-#     INC => q[-I.]
-#     LIBS => [q[]]
-#     MYEXTLIB => q[clib/libfastgf2$(LIB_EXT)]
-#     NAME => q[Math::FastGF2]
-#     PREREQ_PM => {  }
-#     VERSION_FROM => q[lib/Math/FastGF2.pm]
+#     NAME => q[Math::fastgf2]
+#     SKIP => [q[all], q[static], q[static_lib], q[dynamic], q[dynamic_lib]]
+#     clean => { FILES=>q[libfastgf2$(LIB_EXT)] }
 
 # --- MakeMaker post_initialize section:
 
@@ -56,67 +50,68 @@ VENDORLIBEXP = /usr/share/perl5
 AR_STATIC_ARGS = cr
 DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
-NAME = Math::FastGF2
-NAME_SYM = Math_FastGF2
-VERSION = 0.01
+NAME = Math::fastgf2
+NAME_SYM = Math_fastgf2
+VERSION = 
 VERSION_MACRO = VERSION
-VERSION_SYM = 0_01
+VERSION_SYM = 
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 0.01
+XS_VERSION = 
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
-INST_ARCHLIB = blib/arch
-INST_SCRIPT = blib/script
-INST_BIN = blib/bin
-INST_LIB = blib/lib
-INST_MAN1DIR = blib/man1
-INST_MAN3DIR = blib/man3
+INST_ARCHLIB = ../blib/arch
+INST_SCRIPT = ../blib/script
+INST_BIN = ../blib/bin
+INST_LIB = ../blib/lib
+INST_MAN1DIR = ../blib/man1
+INST_MAN3DIR = ../blib/man3
 MAN1EXT = 1p
 MAN3EXT = 3pm
 INSTALLDIRS = site
-INSTALL_BASE = /home/dec
 DESTDIR = 
-PREFIX = $(INSTALL_BASE)
-INSTALLPRIVLIB = $(INSTALL_BASE)/lib/perl5
+PREFIX = /usr
+PERLPREFIX = $(PREFIX)
+SITEPREFIX = $(PREFIX)/local
+VENDORPREFIX = $(PREFIX)
+INSTALLPRIVLIB = $(PERLPREFIX)/share/perl/5.10
 DESTINSTALLPRIVLIB = $(DESTDIR)$(INSTALLPRIVLIB)
-INSTALLSITELIB = $(INSTALL_BASE)/lib/perl5
+INSTALLSITELIB = $(SITEPREFIX)/share/perl/5.10.0
 DESTINSTALLSITELIB = $(DESTDIR)$(INSTALLSITELIB)
-INSTALLVENDORLIB = $(INSTALL_BASE)/lib/perl5
+INSTALLVENDORLIB = $(VENDORPREFIX)/share/perl5
 DESTINSTALLVENDORLIB = $(DESTDIR)$(INSTALLVENDORLIB)
-INSTALLARCHLIB = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
+INSTALLARCHLIB = $(PERLPREFIX)/lib/perl/5.10
 DESTINSTALLARCHLIB = $(DESTDIR)$(INSTALLARCHLIB)
-INSTALLSITEARCH = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
+INSTALLSITEARCH = $(SITEPREFIX)/lib/perl/5.10.0
 DESTINSTALLSITEARCH = $(DESTDIR)$(INSTALLSITEARCH)
-INSTALLVENDORARCH = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
+INSTALLVENDORARCH = $(VENDORPREFIX)/lib/perl5
 DESTINSTALLVENDORARCH = $(DESTDIR)$(INSTALLVENDORARCH)
-INSTALLBIN = $(INSTALL_BASE)/bin
+INSTALLBIN = $(PERLPREFIX)/bin
 DESTINSTALLBIN = $(DESTDIR)$(INSTALLBIN)
-INSTALLSITEBIN = $(INSTALL_BASE)/bin
+INSTALLSITEBIN = $(SITEPREFIX)/bin
 DESTINSTALLSITEBIN = $(DESTDIR)$(INSTALLSITEBIN)
-INSTALLVENDORBIN = $(INSTALL_BASE)/bin
+INSTALLVENDORBIN = $(VENDORPREFIX)/bin
 DESTINSTALLVENDORBIN = $(DESTDIR)$(INSTALLVENDORBIN)
-INSTALLSCRIPT = $(INSTALL_BASE)/bin
+INSTALLSCRIPT = $(PERLPREFIX)/bin
 DESTINSTALLSCRIPT = $(DESTDIR)$(INSTALLSCRIPT)
-INSTALLSITESCRIPT = $(INSTALL_BASE)/bin
+INSTALLSITESCRIPT = $(SITEPREFIX)/bin
 DESTINSTALLSITESCRIPT = $(DESTDIR)$(INSTALLSITESCRIPT)
-INSTALLVENDORSCRIPT = $(INSTALL_BASE)/bin
+INSTALLVENDORSCRIPT = $(VENDORPREFIX)/bin
 DESTINSTALLVENDORSCRIPT = $(DESTDIR)$(INSTALLVENDORSCRIPT)
-INSTALLMAN1DIR = $(INSTALL_BASE)/man/man1
+INSTALLMAN1DIR = $(PERLPREFIX)/share/man/man1
 DESTINSTALLMAN1DIR = $(DESTDIR)$(INSTALLMAN1DIR)
-INSTALLSITEMAN1DIR = $(INSTALL_BASE)/man/man1
+INSTALLSITEMAN1DIR = $(SITEPREFIX)/man/man1
 DESTINSTALLSITEMAN1DIR = $(DESTDIR)$(INSTALLSITEMAN1DIR)
-INSTALLVENDORMAN1DIR = $(INSTALL_BASE)/man/man1
+INSTALLVENDORMAN1DIR = $(VENDORPREFIX)/share/man/man1
 DESTINSTALLVENDORMAN1DIR = $(DESTDIR)$(INSTALLVENDORMAN1DIR)
-INSTALLMAN3DIR = $(INSTALL_BASE)/man/man3
+INSTALLMAN3DIR = $(PERLPREFIX)/share/man/man3
 DESTINSTALLMAN3DIR = $(DESTDIR)$(INSTALLMAN3DIR)
-INSTALLSITEMAN3DIR = $(INSTALL_BASE)/man/man3
+INSTALLSITEMAN3DIR = $(SITEPREFIX)/man/man3
 DESTINSTALLSITEMAN3DIR = $(DESTDIR)$(INSTALLSITEMAN3DIR)
-INSTALLVENDORMAN3DIR = $(INSTALL_BASE)/man/man3
+INSTALLVENDORMAN3DIR = $(VENDORPREFIX)/share/man/man3
 DESTINSTALLVENDORMAN3DIR = $(DESTDIR)$(INSTALLVENDORMAN3DIR)
 PERL_LIB = /usr/share/perl/5.10
 PERL_ARCHLIB = /usr/lib/perl/5.10
 LIBPERL_A = libperl.a
-MYEXTLIB = clib/libfastgf2$(LIB_EXT)
 FIRST_MAKEFILE = Makefile
 MAKEFILE_OLD = Makefile.old
 MAKE_APERL_FILE = Makefile.aperl
@@ -144,25 +139,23 @@ MM_REVISION = 41145
 # PARENT_NAME = NAME without BASEEXT and no trailing :: (eg Foo::Bar)
 # DLBASE  = Basename part of dynamic library. May be just equal BASEEXT.
 MAKE = make
-FULLEXT = Math/FastGF2
-BASEEXT = FastGF2
+FULLEXT = Math/fastgf2
+BASEEXT = fastgf2
 PARENT_NAME = Math
 DLBASE = $(BASEEXT)
-VERSION_FROM = lib/Math/FastGF2.pm
-INC = -I.
-DEFINE = 
+VERSION_FROM = 
 OBJECT = $(BASEEXT)$(OBJ_EXT)
 LDFROM = $(OBJECT)
 LINKTYPE = dynamic
 BOOTDEP = 
 
 # Handy lists of source code files:
-XS_FILES = FastGF2.xs
+XS_FILES = 
 C_FILES  = FastGF2.c
 O_FILES  = FastGF2.o
-H_FILES  = ppport.h
+H_FILES  = FastGF2.h
 MAN1PODS = 
-MAN3PODS = lib/Math/FastGF2.pm
+MAN3PODS = 
 
 # Where is the Config information that we are using/depend on
 CONFIGDEP = $(PERL_ARCHLIB)$(DFSEP)Config.pm $(PERL_INC)$(DFSEP)config.h
@@ -184,19 +177,9 @@ PERL_ARCHIVE       =
 PERL_ARCHIVE_AFTER = 
 
 
-TO_INST_PM = benchmark-Math-FastGF2.pl \
-	lib/Math/FastGF2.pm \
-	shamir-combine.pl \
-	shamir-split.pl
+TO_INST_PM = 
 
-PM_TO_BLIB = benchmark-Math-FastGF2.pl \
-	$(INST_LIB)/Math/benchmark-Math-FastGF2.pl \
-	shamir-split.pl \
-	$(INST_LIB)/Math/shamir-split.pl \
-	lib/Math/FastGF2.pm \
-	blib/lib/Math/FastGF2.pm \
-	shamir-combine.pl \
-	$(INST_LIB)/Math/shamir-combine.pl
+PM_TO_BLIB = 
 
 
 # --- MakeMaker platform_constants section:
@@ -212,7 +195,7 @@ AUTOSPLITFILE = $(ABSPERLRUN)  -e 'use AutoSplit;  autosplit($$ARGV[0], $$ARGV[1
 
 # --- MakeMaker tool_xsubpp section:
 
-XSUBPPDIR = /usr/share/perl/5.10/ExtUtils
+XSUBPPDIR = /home/share/perl/5.10.0/ExtUtils
 XSUBPP = $(XSUBPPDIR)$(DFSEP)xsubpp
 XSUBPPRUN = $(PERLRUN) $(XSUBPP)
 XSPROTOARG = 
@@ -255,24 +238,7 @@ makemakerdflt : all
 	$(NOECHO) $(NOOP)
 
 
-# --- MakeMaker dist section:
-TAR = tar
-TARFLAGS = cvf
-ZIP = zip
-ZIPFLAGS = -r
-COMPRESS = gzip --best
-SUFFIX = .gz
-SHAR = shar
-PREOP = $(NOECHO) $(NOOP)
-POSTOP = $(NOECHO) $(NOOP)
-TO_UNIX = $(NOECHO) $(NOOP)
-CI = ci -u
-RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
-DIST_CP = best
-DIST_DEFAULT = tardist
-DISTNAME = Math-FastGF2
-DISTVNAME = Math-FastGF2-0.01
-
+# --- MakeMaker dist section skipped.
 
 # --- MakeMaker macro section:
 
@@ -290,7 +256,7 @@ MPOLLUTE =
 
 # --- MakeMaker const_loadlibs section:
 
-# Math::FastGF2 might depend on some other libraries:
+# Math::fastgf2 might depend on some other libraries:
 # See ExtUtils::Liblist for details
 #
 
@@ -309,10 +275,7 @@ CCCMD = $(CC) -c $(PASTHRU_INC) $(INC) \
 PASTHRU = LIBPERL_A="$(LIBPERL_A)"\
 	LINKTYPE="$(LINKTYPE)"\
 	OPTIMIZE="$(OPTIMIZE)"\
-	PREFIX="$(PREFIX)"\
-	INSTALL_BASE="$(INSTALL_BASE)"\
-	PASTHRU_DEFINE="$(PASTHRU_DEFINE)"\
-	PASTHRU_INC="$(PASTHRU_INC)"
+	PREFIX="$(PREFIX)"
 
 
 # --- MakeMaker special_targets section:
@@ -363,23 +326,17 @@ PASTHRU = LIBPERL_A="$(LIBPERL_A)"\
 
 
 # --- MakeMaker top_targets section:
-all :: pure_all manifypods
-	$(NOECHO) $(NOOP)
 
+all :: static
 
-pure_all :: config pm_to_blib subdirs linkext
-	$(NOECHO) $(NOOP)
+pure_all :: static
 
-subdirs :: $(MYEXTLIB)
-	$(NOECHO) $(NOOP)
+static ::       libfastgf2$(LIB_EXT)
 
-config :: $(FIRST_MAKEFILE) blibdirs
-	$(NOECHO) $(NOOP)
+libfastgf2$(LIB_EXT): $(O_FILES)
+	$(AR) cr libfastgf2$(LIB_EXT) $(O_FILES)
+	$(RANLIB) libfastgf2$(LIB_EXT)
 
-$(O_FILES): $(H_FILES)
-
-help :
-	perldoc ExtUtils::MakeMaker
 
 
 # --- MakeMaker blibdirs section:
@@ -441,11 +398,7 @@ linkext :: $(LINKTYPE)
 # --- MakeMaker dlsyms section:
 
 
-# --- MakeMaker dynamic section:
-
-dynamic :: $(FIRST_MAKEFILE) $(INST_DYNAMIC) $(INST_BOOT)
-	$(NOECHO) $(NOOP)
-
+# --- MakeMaker dynamic section skipped.
 
 # --- MakeMaker dynamic_bs section:
 BOOTSTRAP = $(BASEEXT).bs
@@ -467,40 +420,11 @@ $(INST_BOOT) : $(BOOTSTRAP) $(INST_ARCHAUTODIR)$(DFSEP).exists
 	$(CHMOD) $(PERM_RW) $@
 
 
-# --- MakeMaker dynamic_lib section:
+# --- MakeMaker dynamic_lib section skipped.
 
-# This section creates the dynamically loadable $(INST_DYNAMIC)
-# from $(OBJECT) and possibly $(MYEXTLIB).
-ARMAYBE = :
-OTHERLDFLAGS = 
-INST_DYNAMIC_DEP = 
-INST_DYNAMIC_FIX = 
+# --- MakeMaker static section skipped.
 
-$(INST_DYNAMIC): $(OBJECT) $(MYEXTLIB) $(BOOTSTRAP) $(INST_ARCHAUTODIR)$(DFSEP).exists $(EXPORT_LIST) $(PERL_ARCHIVE) $(PERL_ARCHIVE_AFTER) $(INST_DYNAMIC_DEP)
-	$(RM_F) $@
-	$(LD)  $(LDDLFLAGS) $(LDFROM) $(OTHERLDFLAGS) -o $@ $(MYEXTLIB)	\
-	  $(PERL_ARCHIVE) $(LDLOADLIBS) $(PERL_ARCHIVE_AFTER) $(EXPORT_LIST)	\
-	  $(INST_DYNAMIC_FIX)
-	$(CHMOD) $(PERM_RWX) $@
-
-
-# --- MakeMaker static section:
-
-## $(INST_PM) has been moved to the all: target.
-## It remains here for awhile to allow for old usage: "make static"
-static :: $(FIRST_MAKEFILE) $(INST_STATIC)
-	$(NOECHO) $(NOOP)
-
-
-# --- MakeMaker static_lib section:
-
-$(INST_STATIC) : $(OBJECT) $(MYEXTLIB) $(INST_ARCHAUTODIR)$(DFSEP).exists
-	$(RM_RF) $@
-	$(CP) $(MYEXTLIB) $@
-	$(FULL_AR) $(AR_STATIC_ARGS) $@ $(OBJECT) && $(RANLIB) $@
-	$(CHMOD) $(PERM_RWX) $@
-	$(NOECHO) $(ECHO) "$(EXTRALIBS)" > $(INST_ARCHAUTODIR)/extralibs.ld
-
+# --- MakeMaker static_lib section skipped.
 
 # --- MakeMaker manifypods section:
 
@@ -508,10 +432,8 @@ POD2MAN_EXE = $(PERLRUN) "-MExtUtils::Command::MM" -e pod2man "--"
 POD2MAN = $(POD2MAN_EXE)
 
 
-manifypods : pure_all  \
-	lib/Math/FastGF2.pm
-	$(NOECHO) $(POD2MAN) --section=$(MAN3EXT) --perm_rw=$(PERM_RW) \
-	  lib/Math/FastGF2.pm $(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT) 
+manifypods : pure_all 
+	$(NOECHO) $(NOOP)
 
 
 
@@ -524,20 +446,15 @@ manifypods : pure_all  \
 
 # --- MakeMaker subdirs section:
 
-# The default clean, realclean and test targets in this Makefile
-# have automatically been given entries for each subdir.
-
-
-subdirs ::
-	$(NOECHO) cd clib && $(MAKE) $(USEMAKEFILE) $(FIRST_MAKEFILE) all $(PASTHRU)
-
+# none
 
 # --- MakeMaker clean_subdirs section:
 clean_subdirs :
-	$(ABSPERLRUN)  -e 'chdir '\''clib'\'';  system '\''$(MAKE) clean'\'' if -f '\''$(FIRST_MAKEFILE)'\'';' --
+	$(NOECHO) $(NOOP)
 
 
 # --- MakeMaker clean section:
+# FILES, libfastgf2$(LIB_EXT)
 
 # Delete temporary files but do not touch installed files. We don't delete
 # the Makefile here so a later make realclean still has a makefile to use.
@@ -554,20 +471,19 @@ clean :: clean_subdirs
 	  $(INST_ARCHAUTODIR)/extralibs.ld blibdirs.ts \
 	  core.[0-9][0-9][0-9][0-9][0-9] *perl.core \
 	  core.*perl.*.? $(MAKE_APERL_FILE) \
-	  $(BASEEXT).def perl \
+	  perl $(BASEEXT).def \
 	  core.[0-9][0-9][0-9] mon.out \
-	  lib$(BASEEXT).def perl.exe \
-	  perlmain.c so_locations \
-	  FastGF2.c $(BASEEXT).exp 
+	  lib$(BASEEXT).def perlmain.c \
+	  perl.exe so_locations \
+	  $(BASEEXT).exp 
 	- $(RM_RF) \
-	  blib 
+	  libfastgf2$(LIB_EXT) blib 
 	- $(MV) $(FIRST_MAKEFILE) $(MAKEFILE_OLD) $(DEV_NULL)
 
 
 # --- MakeMaker realclean_subdirs section:
 realclean_subdirs :
-	- $(ABSPERLRUN)  -e 'chdir '\''clib'\'';  system '\''$(MAKE) $(USEMAKEFILE) $(MAKEFILE_OLD) realclean'\'' if -f '\''$(MAKEFILE_OLD)'\'';' --
-	- $(ABSPERLRUN)  -e 'chdir '\''clib'\'';  system '\''$(MAKE) $(USEMAKEFILE) $(FIRST_MAKEFILE) realclean'\'' if -f '\''$(FIRST_MAKEFILE)'\'';' --
+	$(NOECHO) $(NOOP)
 
 
 # --- MakeMaker realclean section:
@@ -584,12 +500,11 @@ realclean purge ::  clean realclean_subdirs
 metafile : create_distdir
 	$(NOECHO) $(ECHO) Generating META.yml
 	$(NOECHO) $(ECHO) '--- #YAML:1.0' > META_new.yml
-	$(NOECHO) $(ECHO) 'name:                Math-FastGF2' >> META_new.yml
-	$(NOECHO) $(ECHO) 'version:             0.01' >> META_new.yml
-	$(NOECHO) $(ECHO) 'abstract:            Perl extension for fast Galois Field arithmetic' >> META_new.yml
+	$(NOECHO) $(ECHO) 'name:                Math-fastgf2' >> META_new.yml
+	$(NOECHO) $(ECHO) 'version:             ' >> META_new.yml
+	$(NOECHO) $(ECHO) 'abstract:            ~' >> META_new.yml
 	$(NOECHO) $(ECHO) 'license:             ~' >> META_new.yml
-	$(NOECHO) $(ECHO) 'author:              ' >> META_new.yml
-	$(NOECHO) $(ECHO) '    - Declan Malone <idablack@sourceforge.net>' >> META_new.yml
+	$(NOECHO) $(ECHO) 'author:              ~' >> META_new.yml
 	$(NOECHO) $(ECHO) 'generated_by:        ExtUtils::MakeMaker version 6.42' >> META_new.yml
 	$(NOECHO) $(ECHO) 'distribution_type:   module' >> META_new.yml
 	$(NOECHO) $(ECHO) 'requires:     ' >> META_new.yml
@@ -604,87 +519,15 @@ signature :
 	cpansign -s
 
 
-# --- MakeMaker dist_basics section:
-distclean :: realclean distcheck
-	$(NOECHO) $(NOOP)
+# --- MakeMaker dist_basics section skipped.
 
-distcheck :
-	$(PERLRUN) "-MExtUtils::Manifest=fullcheck" -e fullcheck
+# --- MakeMaker dist_core section skipped.
 
-skipcheck :
-	$(PERLRUN) "-MExtUtils::Manifest=skipcheck" -e skipcheck
+# --- MakeMaker distdir section skipped.
 
-manifest :
-	$(PERLRUN) "-MExtUtils::Manifest=mkmanifest" -e mkmanifest
+# --- MakeMaker dist_test section skipped.
 
-veryclean : realclean
-	$(RM_F) *~ */*~ *.orig */*.orig *.bak */*.bak *.old */*.old 
-
-
-
-# --- MakeMaker dist_core section:
-
-dist : $(DIST_DEFAULT) $(FIRST_MAKEFILE)
-	$(NOECHO) $(ABSPERLRUN) -l -e 'print '\''Warning: Makefile possibly out of date with $(VERSION_FROM)'\''' \
-	  -e '    if -e '\''$(VERSION_FROM)'\'' and -M '\''$(VERSION_FROM)'\'' < -M '\''$(FIRST_MAKEFILE)'\'';' --
-
-tardist : $(DISTVNAME).tar$(SUFFIX)
-	$(NOECHO) $(NOOP)
-
-uutardist : $(DISTVNAME).tar$(SUFFIX)
-	uuencode $(DISTVNAME).tar$(SUFFIX) $(DISTVNAME).tar$(SUFFIX) > $(DISTVNAME).tar$(SUFFIX)_uu
-
-$(DISTVNAME).tar$(SUFFIX) : distdir
-	$(PREOP)
-	$(TO_UNIX)
-	$(TAR) $(TARFLAGS) $(DISTVNAME).tar $(DISTVNAME)
-	$(RM_RF) $(DISTVNAME)
-	$(COMPRESS) $(DISTVNAME).tar
-	$(POSTOP)
-
-zipdist : $(DISTVNAME).zip
-	$(NOECHO) $(NOOP)
-
-$(DISTVNAME).zip : distdir
-	$(PREOP)
-	$(ZIP) $(ZIPFLAGS) $(DISTVNAME).zip $(DISTVNAME)
-	$(RM_RF) $(DISTVNAME)
-	$(POSTOP)
-
-shdist : distdir
-	$(PREOP)
-	$(SHAR) $(DISTVNAME) > $(DISTVNAME).shar
-	$(RM_RF) $(DISTVNAME)
-	$(POSTOP)
-
-
-# --- MakeMaker distdir section:
-create_distdir :
-	$(RM_RF) $(DISTVNAME)
-	$(PERLRUN) "-MExtUtils::Manifest=manicopy,maniread" \
-		-e "manicopy(maniread(),'$(DISTVNAME)', '$(DIST_CP)');"
-
-distdir : create_distdir distmeta 
-	$(NOECHO) $(NOOP)
-
-
-
-# --- MakeMaker dist_test section:
-disttest : distdir
-	cd $(DISTVNAME) && $(ABSPERLRUN) Makefile.PL "INSTALL_BASE=/home/dec"
-	cd $(DISTVNAME) && $(MAKE) $(PASTHRU)
-	cd $(DISTVNAME) && $(MAKE) test $(PASTHRU)
-
-
-
-# --- MakeMaker dist_ci section:
-
-ci :
-	$(PERLRUN) "-MExtUtils::Manifest=maniread" \
-	  -e "@all = keys %{ maniread() };" \
-	  -e "print(qq{Executing $(CI) @all\n}); system(qq{$(CI) @all});" \
-	  -e "print(qq{Executing $(RCS_LABEL) ...\n}); system(qq{$(RCS_LABEL) @all});"
-
+# --- MakeMaker dist_ci section skipped.
 
 # --- MakeMaker distmeta section:
 distmeta : create_distdir metafile
@@ -702,93 +545,7 @@ distsignature : create_distdir
 
 
 
-# --- MakeMaker install section:
-
-install :: pure_install doc_install
-	$(NOECHO) $(NOOP)
-
-install_perl :: pure_perl_install doc_perl_install
-	$(NOECHO) $(NOOP)
-
-install_site :: pure_site_install doc_site_install
-	$(NOECHO) $(NOOP)
-
-install_vendor :: pure_vendor_install doc_vendor_install
-	$(NOECHO) $(NOOP)
-
-pure_install :: pure_$(INSTALLDIRS)_install
-	$(NOECHO) $(NOOP)
-
-doc_install :: doc_$(INSTALLDIRS)_install
-	$(NOECHO) $(NOOP)
-
-pure__install : pure_site_install
-	$(NOECHO) $(ECHO) INSTALLDIRS not defined, defaulting to INSTALLDIRS=site
-
-doc__install : doc_site_install
-	$(NOECHO) $(ECHO) INSTALLDIRS not defined, defaulting to INSTALLDIRS=site
-
-pure_perl_install :: all
-	$(NOECHO) umask 022; $(MOD_INSTALL) \
-		$(INST_LIB) $(DESTINSTALLPRIVLIB) \
-		$(INST_ARCHLIB) $(DESTINSTALLARCHLIB) \
-		$(INST_BIN) $(DESTINSTALLBIN) \
-		$(INST_SCRIPT) $(DESTINSTALLSCRIPT) \
-		$(INST_MAN1DIR) $(DESTINSTALLMAN1DIR) \
-		$(INST_MAN3DIR) $(DESTINSTALLMAN3DIR)
-	$(NOECHO) $(WARN_IF_OLD_PACKLIST) \
-		$(SITEARCHEXP)/auto/$(FULLEXT)
-
-
-pure_site_install :: all
-	$(NOECHO) umask 02; $(MOD_INSTALL) \
-		read $(SITEARCHEXP)/auto/$(FULLEXT)/.packlist \
-		write $(DESTINSTALLSITEARCH)/auto/$(FULLEXT)/.packlist \
-		$(INST_LIB) $(DESTINSTALLSITELIB) \
-		$(INST_ARCHLIB) $(DESTINSTALLSITEARCH) \
-		$(INST_BIN) $(DESTINSTALLSITEBIN) \
-		$(INST_SCRIPT) $(DESTINSTALLSITESCRIPT) \
-		$(INST_MAN1DIR) $(DESTINSTALLSITEMAN1DIR) \
-		$(INST_MAN3DIR) $(DESTINSTALLSITEMAN3DIR)
-	$(NOECHO) $(WARN_IF_OLD_PACKLIST) \
-		$(PERL_ARCHLIB)/auto/$(FULLEXT)
-
-pure_vendor_install :: all
-	$(NOECHO) umask 022; $(MOD_INSTALL) \
-		$(INST_LIB) $(DESTINSTALLVENDORLIB) \
-		$(INST_ARCHLIB) $(DESTINSTALLVENDORARCH) \
-		$(INST_BIN) $(DESTINSTALLVENDORBIN) \
-		$(INST_SCRIPT) $(DESTINSTALLVENDORSCRIPT) \
-		$(INST_MAN1DIR) $(DESTINSTALLVENDORMAN1DIR) \
-		$(INST_MAN3DIR) $(DESTINSTALLVENDORMAN3DIR)
-
-doc_perl_install :: all
-
-doc_site_install :: all
-	$(NOECHO) $(ECHO) Appending installation info to $(DESTINSTALLSITEARCH)/perllocal.pod
-	-$(NOECHO) umask 02; $(MKPATH) $(DESTINSTALLSITEARCH)
-	-$(NOECHO) umask 02; $(DOC_INSTALL) \
-		"Module" "$(NAME)" \
-		"installed into" "$(INSTALLSITELIB)" \
-		LINKTYPE "$(LINKTYPE)" \
-		VERSION "$(VERSION)" \
-		EXE_FILES "$(EXE_FILES)" \
-		>> $(DESTINSTALLSITEARCH)/perllocal.pod
-
-doc_vendor_install :: all
-
-
-uninstall :: uninstall_from_$(INSTALLDIRS)dirs
-	$(NOECHO) $(NOOP)
-
-uninstall_from_perldirs ::
-
-uninstall_from_sitedirs ::
-	$(NOECHO) $(UNINSTALL) $(SITEARCHEXP)/auto/$(FULLEXT)/.packlist
-
-uninstall_from_vendordirs ::
-
-
+# --- MakeMaker install section skipped.
 
 # --- MakeMaker force section:
 # Phony target to force checking subdirectories.
@@ -843,8 +600,6 @@ PERL_HDRS = \
 
 $(OBJECT) : $(PERL_HDRS)
 
-FastGF2.c : $(XSUBPPDEPS)
-
 
 # --- MakeMaker makefile section:
 
@@ -868,19 +623,8 @@ $(FIRST_MAKEFILE) : Makefile.PL $(CONFIGDEP)
 # --- MakeMaker staticmake section:
 
 # --- MakeMaker makeaperl section ---
-MAP_TARGET    = perl
+MAP_TARGET    = ../perl
 FULLPERL      = /usr/bin/perl
-
-$(MAP_TARGET) :: static $(MAKE_APERL_FILE)
-	$(MAKE) $(USEMAKEFILE) $(MAKE_APERL_FILE) $@
-
-$(MAKE_APERL_FILE) : $(FIRST_MAKEFILE) pm_to_blib
-	$(NOECHO) $(ECHO) Writing \"$(MAKE_APERL_FILE)\" for this $(MAP_TARGET)
-	$(NOECHO) $(PERLRUNINST) \
-		Makefile.PL DIR=clib \
-		MAKEFILE=$(MAKE_APERL_FILE) LINKTYPE=static \
-		MAKEAPERL=1 NORECURS=1 CCCDLFLAGS= \
-		INSTALL_BASE=/home/dec
 
 
 # --- MakeMaker test section:
@@ -888,7 +632,7 @@ $(MAKE_APERL_FILE) : $(FIRST_MAKEFILE) pm_to_blib
 TEST_VERBOSE=0
 TEST_TYPE=test_$(LINKTYPE)
 TEST_FILE = test.pl
-TEST_FILES = t/*.t
+TEST_FILES = 
 TESTDB_SW = -d
 
 testdb :: testdb_$(LINKTYPE)
@@ -898,12 +642,9 @@ test :: $(TEST_TYPE) subdirs-test
 subdirs-test ::
 	$(NOECHO) $(NOOP)
 
-subdirs-test ::
-	$(NOECHO) cd clib && $(MAKE) test $(PASTHRU)
-
+	$(NOECHO) $(ECHO) 'No tests defined for $(NAME) extension.'
 
 test_dynamic :: pure_all
-	PERL_DL_NONLAZY=1 $(FULLPERLRUN) "-MExtUtils::Command::MM" "-e" "test_harness($(TEST_VERBOSE), '$(INST_LIB)', '$(INST_ARCHLIB)')" $(TEST_FILES)
 
 testdb_dynamic :: pure_all
 	PERL_DL_NONLAZY=1 $(FULLPERLRUN) $(TESTDB_SW) "-I$(INST_LIB)" "-I$(INST_ARCHLIB)" $(TEST_FILE)
@@ -911,7 +652,6 @@ testdb_dynamic :: pure_all
 test_ : test_dynamic
 
 test_static :: pure_all $(MAP_TARGET)
-	PERL_DL_NONLAZY=1 ./$(MAP_TARGET) "-MExtUtils::Command::MM" "-e" "test_harness($(TEST_VERBOSE), '$(INST_LIB)', '$(INST_ARCHLIB)')" $(TEST_FILES)
 
 testdb_static :: pure_all $(MAP_TARGET)
 	PERL_DL_NONLAZY=1 ./$(MAP_TARGET) $(TESTDB_SW) "-I$(INST_LIB)" "-I$(INST_ARCHLIB)" $(TEST_FILE)
@@ -921,10 +661,10 @@ testdb_static :: pure_all $(MAP_TARGET)
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0,01,0,0">' > $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0,0,0,0">' > $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <TITLE>$(DISTNAME)</TITLE>' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '    <ABSTRACT>Perl extension for fast Galois Field arithmetic</ABSTRACT>' >> $(DISTNAME).ppd
-	$(NOECHO) $(ECHO) '    <AUTHOR>Declan Malone &lt;idablack@sourceforge.net&gt;</AUTHOR>' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '    <ABSTRACT></ABSTRACT>' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '    <AUTHOR></AUTHOR>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <OS NAME="$(OSNAME)" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <ARCHITECTURE NAME="i486-linux-gnu-thread-multi-5.1" />' >> $(DISTNAME).ppd
@@ -936,11 +676,6 @@ ppd :
 # --- MakeMaker pm_to_blib section:
 
 pm_to_blib : $(TO_INST_PM)
-	$(NOECHO) $(ABSPERLRUN) -MExtUtils::Install -e 'pm_to_blib({@ARGV}, '\''$(INST_LIB)/auto'\'', '\''$(PM_FILTER)'\'')' -- \
-	  benchmark-Math-FastGF2.pl $(INST_LIB)/Math/benchmark-Math-FastGF2.pl \
-	  shamir-split.pl $(INST_LIB)/Math/shamir-split.pl \
-	  lib/Math/FastGF2.pm blib/lib/Math/FastGF2.pm \
-	  shamir-combine.pl $(INST_LIB)/Math/shamir-combine.pl 
 	$(NOECHO) $(TOUCH) pm_to_blib
 
 
@@ -950,13 +685,10 @@ pm_to_blib : $(TO_INST_PM)
 # ABSPERL => q[$(PERL)]
 # ABSPERLRUN => q[$(ABSPERL)]
 # ABSPERLRUNINST => q[$(ABSPERLRUN) "-I$(INST_ARCHLIB)" "-I$(INST_LIB)"]
-# ABSTRACT => q[Perl extension for fast Galois Field arithmetic]
-# ABSTRACT_FROM => q[lib/Math/FastGF2.pm]
 # AR => q[ar]
-# ARGS => { NAME=>q[Math::FastGF2], AUTHOR=>q[Declan Malone <idablack@sourceforge.net>], LIBS=>[q[]], INC=>q[-I.], DEFINE=>q[], MYEXTLIB=>q[clib/libfastgf2$(LIB_EXT)], INSTALL_BASE=>q[/home/dec], VERSION_FROM=>q[lib/Math/FastGF2.pm], ABSTRACT_FROM=>q[lib/Math/FastGF2.pm], PREREQ_PM=>{  } }
+# ARGS => { NAME=>q[Math::fastgf2], SKIP=>[q[all], q[static], q[static_lib], q[dynamic], q[dynamic_lib]], clean=>{ FILES=>q[libfastgf2$(LIB_EXT)] } }
 # AR_STATIC_ARGS => q[cr]
-# AUTHOR => q[Declan Malone <idablack@sourceforge.net>]
-# BASEEXT => q[FastGF2]
+# BASEEXT => q[fastgf2]
 # BOOTDEP => q[]
 # C => [q[FastGF2.c]]
 # CC => q[cc]
@@ -964,14 +696,12 @@ pm_to_blib : $(TO_INST_PM)
 # CCDLFLAGS => q[-Wl,-E]
 # CCFLAGS => q[-D_REENTRANT -D_GNU_SOURCE -DDEBIAN -fno-strict-aliasing -pipe -I/usr/local/include -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64]
 # CFLAGS => q[ CCFLAGS = -D_REENTRANT -D_GNU_SOURCE -DDEBIAN -fno-strict-aliasing -pipe -I/usr/local/include -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 OPTIMIZE = -O2 -g PERLTYPE =  MPOLLUTE =  ]
-# CHILDREN => { PACK002=>PACK002=HASH(...) }
 # CHMOD => q[chmod]
 # CI => q[ci -u]
 # COMPRESS => q[gzip --best]
 # CONFIG => [q[ar], q[cc], q[cccdlflags], q[ccdlflags], q[dlext], q[dlsrc], q[exe_ext], q[full_ar], q[ld], q[lddlflags], q[ldflags], q[libc], q[lib_ext], q[obj_ext], q[osname], q[osvers], q[ranlib], q[sitelibexp], q[sitearchexp], q[so], q[vendorarchexp], q[vendorlibexp]]
 # CONST_CCCMD => q[CCCMD = $(CC) -c $(PASTHRU_INC) $(INC) \ 	$(CCFLAGS) $(OPTIMIZE) \ 	$(PERLTYPE) $(MPOLLUTE) $(DEFINE_VERSION) \ 	$(XS_DEFINE_VERSION)]
 # CP => q[cp]
-# DEFINE => q[]
 # DEFINE_VERSION => q[-D$(VERSION_MACRO)=\"$(VERSION)\"]
 # DESTDIR => q[]
 # DESTINSTALLARCHLIB => q[$(DESTDIR)$(INSTALLARCHLIB)]
@@ -994,10 +724,10 @@ pm_to_blib : $(TO_INST_PM)
 # DESTINSTALLVENDORSCRIPT => q[$(DESTDIR)$(INSTALLVENDORSCRIPT)]
 # DEV_NULL => q[> /dev/null 2>&1]
 # DFSEP => q[$(DIRFILESEP)]
-# DIR => [q[clib]]
+# DIR => []
 # DIRFILESEP => q[/]
-# DISTNAME => q[Math-FastGF2]
-# DISTVNAME => q[Math-FastGF2-0.01]
+# DISTNAME => q[Math-fastgf2]
+# DISTVNAME => q[Math-fastgf2-]
 # DIST_CP => q[best]
 # DIST_DEFAULT => q[tardist]
 # DLBASE => q[$(BASEEXT)]
@@ -1011,46 +741,44 @@ pm_to_blib : $(TO_INST_PM)
 # EXPORT_LIST => q[]
 # FIRST_MAKEFILE => q[Makefile]
 # FIXIN => q[$(PERLRUN) "-MExtUtils::MY" -e "MY->fixin(shift)"]
-# FULLEXT => q[Math/FastGF2]
+# FULLEXT => q[Math/fastgf2]
 # FULLPERL => q[/usr/bin/perl]
 # FULLPERLRUN => q[$(FULLPERL)]
 # FULLPERLRUNINST => q[$(FULLPERLRUN) "-I$(INST_ARCHLIB)" "-I$(INST_LIB)"]
 # FULL_AR => q[/usr/bin/ar]
-# H => [q[ppport.h]]
+# H => [q[FastGF2.h]]
 # HAS_LINK_CODE => q[1]
-# INC => q[-I.]
-# INSTALLARCHLIB => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
-# INSTALLBIN => q[$(INSTALL_BASE)/bin]
+# INSTALLARCHLIB => q[$(PERLPREFIX)/lib/perl/5.10]
+# INSTALLBIN => q[$(PERLPREFIX)/bin]
 # INSTALLDIRS => q[site]
-# INSTALLMAN1DIR => q[$(INSTALL_BASE)/man/man1]
-# INSTALLMAN3DIR => q[$(INSTALL_BASE)/man/man3]
-# INSTALLPRIVLIB => q[$(INSTALL_BASE)/lib/perl5]
-# INSTALLSCRIPT => q[$(INSTALL_BASE)/bin]
-# INSTALLSITEARCH => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
-# INSTALLSITEBIN => q[$(INSTALL_BASE)/bin]
-# INSTALLSITELIB => q[$(INSTALL_BASE)/lib/perl5]
-# INSTALLSITEMAN1DIR => q[$(INSTALL_BASE)/man/man1]
-# INSTALLSITEMAN3DIR => q[$(INSTALL_BASE)/man/man3]
-# INSTALLSITESCRIPT => q[$(INSTALL_BASE)/bin]
-# INSTALLVENDORARCH => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
-# INSTALLVENDORBIN => q[$(INSTALL_BASE)/bin]
-# INSTALLVENDORLIB => q[$(INSTALL_BASE)/lib/perl5]
-# INSTALLVENDORMAN1DIR => q[$(INSTALL_BASE)/man/man1]
-# INSTALLVENDORMAN3DIR => q[$(INSTALL_BASE)/man/man3]
-# INSTALLVENDORSCRIPT => q[$(INSTALL_BASE)/bin]
-# INSTALL_BASE => q[/home/dec]
+# INSTALLMAN1DIR => q[$(PERLPREFIX)/share/man/man1]
+# INSTALLMAN3DIR => q[$(PERLPREFIX)/share/man/man3]
+# INSTALLPRIVLIB => q[$(PERLPREFIX)/share/perl/5.10]
+# INSTALLSCRIPT => q[$(PERLPREFIX)/bin]
+# INSTALLSITEARCH => q[$(SITEPREFIX)/lib/perl/5.10.0]
+# INSTALLSITEBIN => q[$(SITEPREFIX)/bin]
+# INSTALLSITELIB => q[$(SITEPREFIX)/share/perl/5.10.0]
+# INSTALLSITEMAN1DIR => q[$(SITEPREFIX)/man/man1]
+# INSTALLSITEMAN3DIR => q[$(SITEPREFIX)/man/man3]
+# INSTALLSITESCRIPT => q[$(SITEPREFIX)/bin]
+# INSTALLVENDORARCH => q[$(VENDORPREFIX)/lib/perl5]
+# INSTALLVENDORBIN => q[$(VENDORPREFIX)/bin]
+# INSTALLVENDORLIB => q[$(VENDORPREFIX)/share/perl5]
+# INSTALLVENDORMAN1DIR => q[$(VENDORPREFIX)/share/man/man1]
+# INSTALLVENDORMAN3DIR => q[$(VENDORPREFIX)/share/man/man3]
+# INSTALLVENDORSCRIPT => q[$(VENDORPREFIX)/bin]
 # INST_ARCHAUTODIR => q[$(INST_ARCHLIB)/auto/$(FULLEXT)]
-# INST_ARCHLIB => q[blib/arch]
+# INST_ARCHLIB => q[../blib/arch]
 # INST_ARCHLIBDIR => q[$(INST_ARCHLIB)/Math]
 # INST_AUTODIR => q[$(INST_LIB)/auto/$(FULLEXT)]
-# INST_BIN => q[blib/bin]
+# INST_BIN => q[../blib/bin]
 # INST_BOOT => q[$(INST_ARCHAUTODIR)/$(BASEEXT).bs]
 # INST_DYNAMIC => q[$(INST_ARCHAUTODIR)/$(DLBASE).$(DLEXT)]
-# INST_LIB => q[blib/lib]
+# INST_LIB => q[../blib/lib]
 # INST_LIBDIR => q[$(INST_LIB)/Math]
-# INST_MAN1DIR => q[blib/man1]
-# INST_MAN3DIR => q[blib/man3]
-# INST_SCRIPT => q[blib/script]
+# INST_MAN1DIR => q[../blib/man1]
+# INST_MAN3DIR => q[../blib/man3]
+# INST_SCRIPT => q[../blib/script]
 # INST_STATIC => q[$(INST_ARCHAUTODIR)/$(BASEEXT)$(LIB_EXT)]
 # LD => q[cc]
 # LDDLFLAGS => q[-shared -O2 -g -L/usr/local/lib]
@@ -1072,17 +800,16 @@ pm_to_blib : $(TO_INST_PM)
 # MAN1EXT => q[1p]
 # MAN1PODS => {  }
 # MAN3EXT => q[3pm]
-# MAN3PODS => { lib/Math/FastGF2.pm=>q[$(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT)] }
-# MAP_TARGET => q[perl]
+# MAN3PODS => {  }
+# MAP_TARGET => q[../perl]
 # MKPATH => q[$(ABSPERLRUN) "-MExtUtils::Command" -e mkpath]
 # MM_REVISION => q[41145]
 # MM_Unix_VERSION => q[6.42]
 # MM_VERSION => q[6.42]
 # MOD_INSTALL => q[$(ABSPERLRUN) -MExtUtils::Install -e 'install({@ARGV}, '\''$(VERBINST)'\'', 0, '\''$(UNINST)'\'');' --]
 # MV => q[mv]
-# MYEXTLIB => q[clib/libfastgf2$(LIB_EXT)]
-# NAME => q[Math::FastGF2]
-# NAME_SYM => q[Math_FastGF2]
+# NAME => q[Math::fastgf2]
+# NAME_SYM => q[Math_fastgf2]
 # NEEDS_LINKING => q[1]
 # NOECHO => q[@]
 # NOOP => q[$(SHELL) -c true]
@@ -1092,10 +819,11 @@ pm_to_blib : $(TO_INST_PM)
 # OSNAME => q[linux]
 # OSVERS => q[2.6.24-16-server]
 # O_FILES => [q[FastGF2.o]]
+# PARENT => PACK001=HASH(...)
 # PARENT_NAME => q[Math]
 # PERL => q[/usr/bin/perl]
 # PERLMAINCC => q[$(CC)]
-# PERLPREFIX => undef
+# PERLPREFIX => q[$(PREFIX)]
 # PERLRUN => q[$(PERL)]
 # PERLRUNINST => q[$(PERLRUN) "-I$(INST_ARCHLIB)" "-I$(INST_LIB)"]
 # PERLTYPE => q[]
@@ -1110,11 +838,11 @@ pm_to_blib : $(TO_INST_PM)
 # PERM_RW => q[644]
 # PERM_RWX => q[755]
 # PL_FILES => {  }
-# PM => { benchmark-Math-FastGF2.pl=>q[$(INST_LIB)/Math/benchmark-Math-FastGF2.pl], shamir-split.pl=>q[$(INST_LIB)/Math/shamir-split.pl], lib/Math/FastGF2.pm=>q[blib/lib/Math/FastGF2.pm], shamir-combine.pl=>q[$(INST_LIB)/Math/shamir-combine.pl] }
-# PMLIBDIRS => [q[lib]]
+# PM => {  }
+# PMLIBDIRS => []
 # PMLIBPARENTDIRS => [q[lib]]
 # POSTOP => q[$(NOECHO) $(NOOP)]
-# PREFIX => q[$(INSTALL_BASE)]
+# PREFIX => q[/usr]
 # PREOP => q[$(NOECHO) $(NOOP)]
 # PREREQ_PM => {  }
 # RANLIB => q[:]
@@ -1125,8 +853,8 @@ pm_to_blib : $(TO_INST_PM)
 # SHELL => q[/bin/sh]
 # SITEARCHEXP => q[/usr/local/lib/perl/5.10.0]
 # SITELIBEXP => q[/usr/local/share/perl/5.10.0]
-# SITEPREFIX => undef
-# SKIPHASH => {  }
+# SITEPREFIX => q[$(PREFIX)/local]
+# SKIPHASH => { dist_test=>q[1], distdir=>q[1], dist_basics=>q[1], install=>q[1], dist_core=>q[1], dynamic=>q[1], dist=>q[1], dynamic_lib=>q[1], static=>q[1], all=>q[1], static_lib=>q[1], dist_ci=>q[1] }
 # SO => q[so]
 # SUFFIX => q[.gz]
 # TAR => q[tar]
@@ -1140,25 +868,24 @@ pm_to_blib : $(TO_INST_PM)
 # USEMAKEFILE => q[-f]
 # VENDORARCHEXP => q[/usr/lib/perl5]
 # VENDORLIBEXP => q[/usr/share/perl5]
-# VENDORPREFIX => undef
+# VENDORPREFIX => q[$(PREFIX)]
 # VERBINST => q[0]
-# VERSION => q[0.01]
-# VERSION_FROM => q[lib/Math/FastGF2.pm]
+# VERSION => q[]
+# VERSION_FROM => q[]
 # VERSION_MACRO => q[VERSION]
-# VERSION_SYM => q[0_01]
+# VERSION_SYM => q[]
 # WARN_IF_OLD_PACKLIST => q[$(ABSPERLRUN) "-MExtUtils::Command::MM" -e warn_if_old_packlist]
-# XS => { FastGF2.xs=>q[FastGF2.c] }
+# XS => {  }
 # XSPROTOARG => q[]
 # XS_DEFINE_VERSION => q[-D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"]
-# XS_VERSION => q[0.01]
+# XS_VERSION => q[]
 # XS_VERSION_MACRO => q[XS_VERSION]
 # ZIP => q[zip]
 # ZIPFLAGS => q[-r]
 # _MAX_EXEC_LEN => q[4096]
+# clean => { FILES=>q[libfastgf2$(LIB_EXT)] }
 
 # --- MakeMaker postamble section:
-$(MYEXTLIB): clib/Makefile
-	cd clib && $(MAKE) $(PASSTHRU)
 
 
 # End.

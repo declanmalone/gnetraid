@@ -426,15 +426,13 @@ it under the terms of the the "GNU General Public License" ("GPL").
 The C code at the core of this Perl module can additionally be
 redistributed and/or modified under the terms of the "GNU Library
 General Public License" ("LGPL"). For the purpose of that license, the
-"library" is defined as the unmodified C code section of this module's
-.xs file, plus whatever other glue is necessary to produce a linkable
-library from the C code. That is, if you want to use the LGPL and link
-your C code against the library, you must restrict your modifications
-to only those required to get the C code from the .xs file to compile
-to a linkable form; any further editing over and above that will void
-the LGPL part of this license, and the software (and, by extension,
-any modifications you make to it) will revert to being licensed by the
-full version of the GPL.
+"library" is defined as the unmodified C code in the clib/ directory
+of this distribution. You are permitted to change the typedefs and
+function prototypes to match the word sizes on your machine, but any
+further modification (such as removing the static modifier for
+non-exported function or data structure names) are not permitted under
+the LGPL, so the library will revert to being covered by the full
+version of the GPL.
 
 Please refer to the files "GNU_GPL.txt" and "GNU_LGPL.txt" in this
 distribution for details.
