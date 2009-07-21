@@ -24,11 +24,13 @@
 use Math::FastGF2 ":ops";
 use strict;
 
+my $random_source="/dev/random";
+
 # random num in [0, 2 ** l)
 sub randq {
     my $w=shift; $w >>= 3;
     my @num;
-    my $temp = `dd if=/dev/urandom bs=1 count=$w 2> /dev/null`;
+    my $temp = `dd if=$random_source bs=1 count=$w 2> /dev/null`;
     if ($w == 1) {
 	return  scalar unpack('C',$temp);
     } elsif ($w == 2) {
@@ -64,14 +66,9 @@ sub thresh {
     my ($w, $b, $k, $n) = @_;
     my $i;
     my @coeffs = ();
-    # high coeff (!=0) goes first
+    # high coeff goes first
     for ($i = 1; $i < $k; $i++) {
 	push(@coeffs, randq($w));
-    }
-    if ($k > 1) {
-	while ($coeffs[0] == 0) {
-	    $coeffs[0]=randq($w);
-	}
     }
     # const coeff goes last
     push(@coeffs, $b);
@@ -82,7 +79,7 @@ sub thresh {
     return @res;
 }
 
-my $usage = "usage: echo KEY | $0 W K N
+my $usage = "usage: echo KEY | $0 [-u] W K N
 where
     W = width of subkeys (8, 16 or 32 bits)
     K = quorum
@@ -92,7 +89,33 @@ where
 output is N lines.  Store each line separately together with a copy of
 the shamir-combine.pl script.  Restore with any K of the lines fed to
 shamir-combine.pl.
+
+The width parameter specifies that the input should be broken up into
+words of 8, 16 or 32 bits, and Shamir's algorithm applied to each word
+independently. If W=16 or W=32 is chosen and the input is not a
+multiple of 16 or 32 bits, respectively, then the message will be null
+padded up to the appropriate length. Any null padding will be removed
+by the shamir-combine.pl script. This may mean that an attacker has an
+easier job of decrypting the final word (ie, 2 or 4 bytes) of the
+message, so if the is a concern, ensure that the message to be
+encrypted is a multiple of 16 or 32 bits as appropriate when using
+these subkey sizes.
+
+By default the program reads (theoretically) high-quality random
+numbers from /dev/random. The -u option tells the program to use
+/dev/urandom instead. Use of this option may decrease the security of
+the program slightly, but it means that the program will never block
+while waiting for sufficient bits of entropy to be collected by
+/dev/random. See random(4) for details. This option is intended
+primarily for testing, or for bulk operations where splitting many
+keys quickly is more important than high security.
+
 ";
+
+if (exists($ARGV[0]) and $ARGV[0] eq "-u") {
+  shift @ARGV;
+  $random_source="/dev/urandom";
+}
 
 die $usage if $#ARGV != 2;
 
