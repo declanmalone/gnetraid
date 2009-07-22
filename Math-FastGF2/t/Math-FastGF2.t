@@ -193,4 +193,4 @@ ok(gf2_info(16) == 0x2b,   "poly for u16 != {1002b}");
 ok(gf2_info(32) == 0x8d,   "poly for u32 != {10000008d}");
 
 # Also check on the table space used by the library
-ok(gf2_info(0) == 19712,   "table space != 19.25 Kbytes");
+ok(gf2_info(0) == 19968,   "table space != 19.5 Kbytes");
