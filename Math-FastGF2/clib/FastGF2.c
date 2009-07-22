@@ -179,87 +179,6 @@ static const gf2_u8 fast_gf2_exp[] = {
   36, 108, 180, 199, 82, 246, 1, 0,
 };
 
-static gf2_u16 gf2_fast_u16_mul (gf2_u16 a, gf2_u16 b);
-static gf2_u32 gf2_fast_u32_mul (gf2_u32 a, gf2_u32 b);
-
-static gf2_u16 gf2_long_mod_inverse_u16 (gf2_u16 x);
-static gf2_u32 gf2_long_mod_inverse_u32 (gf2_u32 x);
-
-static gf2_u16 gf2_long_mod_power_u16 (gf2_u16 x, gf2_u16 y);
-static gf2_u32 gf2_long_mod_power_u32 (gf2_u32 x, gf2_u32 y);
-
-unsigned long gf2_mul (int width, unsigned long a, unsigned long b) {
-  /* keep 8-bit log/exp tables handy */
-  static const gf2_s16 *log_table=fast_gf2_log;
-  static const gf2_u8  *exp_table=fast_gf2_exp+512;
-
-  switch (width) {
-  case 8:
-    return exp_table[log_table[a] + log_table[b]];
-  case 16:
-    return gf2_fast_u16_mul(a,b);
-  case 32:
-    return gf2_fast_u32_mul(a,b);
-  default:
-    fprintf (stderr, "gf2_mul: width %d not one of (8,16,32)\n",width);
-    return 0;
-  }
-}
-
-unsigned long gf2_inv (int width, unsigned long a) {
-  /* keep 8-bit log/exp tables handy */
-  static const gf2_s16 *log_table=fast_gf2_log;
-  static const gf2_u8  *exp_table=fast_gf2_exp+512;
-
-  switch (width) {
-  case 8:
-    return exp_table[255-log_table[a]];
-  case 16:
-    return gf2_long_mod_inverse_u16(a);
-  case 32:
-    return gf2_long_mod_inverse_u32(a);
-  default:
-    fprintf (stderr, "gf2_inv: width %d not one of (8,16,32)\n",width);
-    return 0;
-  }
-}
-
-unsigned long gf2_div (int width, unsigned long a, unsigned long b) {
-  /* keep 8-bit log/exp tables handy */
-  static const gf2_s16 *log_table=fast_gf2_log;
-  static const gf2_u8  *exp_table=fast_gf2_exp+512;
-
-  switch (width) {
-  case 8:
-    return exp_table[255 + log_table[a] - log_table[b]];
-  case 16:
-    return gf2_fast_u16_mul(a, gf2_long_mod_inverse_u16(b));
-  case 32:
-    return gf2_fast_u32_mul(a, gf2_long_mod_inverse_u32(b));
-  default:
-    fprintf (stderr, "gf2_div: width %d not one of (8,16,32)\n",width);
-    return 0;
-  }
-}
-
-unsigned long gf2_pow (int width, unsigned long a, unsigned long b) {
-  /* keep 8-bit log/exp tables handy */
-  static const gf2_s16 *log_table=fast_gf2_log;
-  static const gf2_u8  *exp_table=fast_gf2_exp+512;
-
-  switch (width) {
-  case 8:
-    return exp_table[(log_table[ (gf2_u8) a ] *  (gf2_u8) b) % 255];
-  case 16:
-    return gf2_long_mod_power_u16(a, b);
-  case 32:
-    return gf2_long_mod_power_u32(a, b);
-  default:
-    fprintf (stderr, "gf2_pow: width %d not one of (8,16,32)\n",width);
-    return 0;
-  }
-}
-
 static const gf2_u16 fast_gf2_lmul[] = {
   0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0,
@@ -1360,6 +1279,87 @@ static const gf2_u32 fast_gf2_shift_u32[] = {
   30936, 30805, 31170, 31055, 31468, 31329, 31734, 31611, 
 };
 
+static gf2_u16 gf2_fast_u16_mul (gf2_u16 a, gf2_u16 b);
+static gf2_u32 gf2_fast_u32_mul (gf2_u32 a, gf2_u32 b);
+
+static gf2_u16 gf2_long_mod_inverse_u16 (gf2_u16 x);
+static gf2_u32 gf2_long_mod_inverse_u32 (gf2_u32 x);
+
+static gf2_u16 gf2_long_mod_power_u16 (gf2_u16 x, gf2_u16 y);
+static gf2_u32 gf2_long_mod_power_u32 (gf2_u32 x, gf2_u32 y);
+
+unsigned long gf2_mul (int width, unsigned long a, unsigned long b) {
+  /* keep 8-bit log/exp tables handy */
+  static const gf2_s16 *log_table=fast_gf2_log;
+  static const gf2_u8  *exp_table=fast_gf2_exp+512;
+
+  switch (width) {
+  case 8:
+    return exp_table[log_table[a] + log_table[b]];
+  case 16:
+    return gf2_fast_u16_mul(a,b);
+  case 32:
+    return gf2_fast_u32_mul(a,b);
+  default:
+    fprintf (stderr, "gf2_mul: width %d not one of (8,16,32)\n",width);
+    return 0;
+  }
+}
+
+unsigned long gf2_inv (int width, unsigned long a) {
+  /* keep 8-bit log/exp tables handy */
+  static const gf2_s16 *log_table=fast_gf2_log;
+  static const gf2_u8  *exp_table=fast_gf2_exp+512;
+
+  switch (width) {
+  case 8:
+    return exp_table[255-log_table[a]];
+  case 16:
+    return gf2_long_mod_inverse_u16(a);
+  case 32:
+    return gf2_long_mod_inverse_u32(a);
+  default:
+    fprintf (stderr, "gf2_inv: width %d not one of (8,16,32)\n",width);
+    return 0;
+  }
+}
+
+unsigned long gf2_div (int width, unsigned long a, unsigned long b) {
+  /* keep 8-bit log/exp tables handy */
+  static const gf2_s16 *log_table=fast_gf2_log;
+  static const gf2_u8  *exp_table=fast_gf2_exp+512;
+
+  switch (width) {
+  case 8:
+    return exp_table[255 + log_table[a] - log_table[b]];
+  case 16:
+    return gf2_fast_u16_mul(a, gf2_long_mod_inverse_u16(b));
+  case 32:
+    return gf2_fast_u32_mul(a, gf2_long_mod_inverse_u32(b));
+  default:
+    fprintf (stderr, "gf2_div: width %d not one of (8,16,32)\n",width);
+    return 0;
+  }
+}
+
+unsigned long gf2_pow (int width, unsigned long a, unsigned long b) {
+  /* keep 8-bit log/exp tables handy */
+  static const gf2_s16 *log_table=fast_gf2_log;
+  static const gf2_u8  *exp_table=fast_gf2_exp+512;
+
+  switch (width) {
+  case 8:
+    return exp_table[(log_table[ (gf2_u8) a ] *  (gf2_u8) b) % 255];
+  case 16:
+    return gf2_long_mod_power_u16(a, b);
+  case 32:
+    return gf2_long_mod_power_u32(a, b);
+  default:
+    fprintf (stderr, "gf2_pow: width %d not one of (8,16,32)\n",width);
+    return 0;
+  }
+}
+
 /* Multiplication */
 
 static gf2_u16 gf2_fast_u16_mul (gf2_u16 a, gf2_u16 b) {
@@ -1543,7 +1543,7 @@ unsigned long gf2_info(int bits) {
   default:
     return sizeof(size_of_byte) + sizeof(fast_gf2_log) +
       sizeof(fast_gf2_exp) + sizeof(fast_gf2_lmul) +
-      sizeof(fast_gf2_lmul) + sizeof(fast_gf2_shift_u16) +
+      sizeof(fast_gf2_rmul) + sizeof(fast_gf2_shift_u16) +
       sizeof(fast_gf2_shift_u32);
   }
 }
