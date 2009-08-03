@@ -22,6 +22,7 @@ XSLoader::load('Math::FastGF2', $VERSION);
 
 
 1;
+
 __END__
 
 =head1 NAME
@@ -383,10 +384,10 @@ hardware architecture have been borne out in my testing.
 
 I<http://www.cs.utk.edu/~plank/plank/papers/CS-07-593/>
 
-James S. Planck's C/C++ implementation of optimised Galois Field
+James S. Plank's C/C++ implementation of optimised Galois Field
 calculations. Although I haven't explored the code in great detail, I
 have used it as a source of benchmarks. In fact, my benchmarking code
-is modelled on this code. Planck's code is much more fully-featured
+is modelled on this code. Plank's code is much more fully-featured
 than mine, so if that is what you want, I would recommend using it
 instead. If, on the other hand, you want something that's simple,
 doesn't use much memory and is usable from Perl, I recommend this
@@ -421,7 +422,7 @@ Declan Malone, E<lt>idablack@sourceforge.netE<gt>
 Copyright (C) 2009 by Declan Malone
 
 This package is free software; you can redistribute it and/or modify
-it under the terms of the the "GNU General Public License" ("GPL").
+it under the terms of the "GNU General Public License" ("GPL").
 
 The C code at the core of this Perl module can additionally be
 redistributed and/or modified under the terms of the "GNU Library
