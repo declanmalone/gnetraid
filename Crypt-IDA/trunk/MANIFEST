@@ -1,0 +1,7 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/Crypt-IDA.t
+lib/Crypt/IDA.pm
+lib/Crypt/IDA/ShareFile.pm
