@@ -6,12 +6,16 @@ GNU_LGPL.txt
 FastGF2.xs
 Makefile.PL
 ppport.h
+perlsubs.c
 benchmark-Math-FastGF2.pl
 shamir-split.pl
 shamir-combine.pl
 t/Math-FastGF2.t
+t/Matrix.t
+t/multest.pl
 lib/Math/FastGF2.pm
 lib/Math/FastGF2/Matrix.pm
 clib/FastGF2.c
 clib/FastGF2.h
 clib/Makefile.PL
+clib/Matrix.c
