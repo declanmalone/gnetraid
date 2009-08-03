@@ -14,8 +14,8 @@ pure_all :: static
 
 static ::       libfastgf2$(LIB_EXT)
 
-libfastgf2$(LIB_EXT): $(O_FILES)
-	$(AR) cr libfastgf2$(LIB_EXT) $(O_FILES)
+libfastgf2$(LIB_EXT): FastGF2.o Matrix.o
+	$(AR) cr libfastgf2$(LIB_EXT) FastGF2.o Matrix.o
 	$(RANLIB) libfastgf2$(LIB_EXT)
 
 ';

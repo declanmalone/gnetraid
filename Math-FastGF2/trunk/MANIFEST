@@ -11,6 +11,7 @@ shamir-split.pl
 shamir-combine.pl
 t/Math-FastGF2.t
 lib/Math/FastGF2.pm
+lib/Math/FastGF2/Matrix.pm
 clib/FastGF2.c
 clib/FastGF2.h
 clib/Makefile.PL

@@ -6,7 +6,7 @@
 #
 #       ANY CHANGES MADE HERE WILL BE LOST!
 #
-#   MakeMaker ARGV: ()
+#   MakeMaker ARGV: (q[INSTALL_BASE=/home/dec])
 #
 #   MakeMaker Parameters:
 
@@ -151,8 +151,10 @@ BOOTDEP =
 
 # Handy lists of source code files:
 XS_FILES = 
-C_FILES  = FastGF2.c
-O_FILES  = FastGF2.o
+C_FILES  = FastGF2.c \
+	Matrix.c
+O_FILES  = FastGF2.o \
+	Matrix.o
 H_FILES  = FastGF2.h
 MAN1PODS = 
 MAN3PODS = 
@@ -333,8 +335,8 @@ pure_all :: static
 
 static ::       libfastgf2$(LIB_EXT)
 
-libfastgf2$(LIB_EXT): $(O_FILES)
-	$(AR) cr libfastgf2$(LIB_EXT) $(O_FILES)
+libfastgf2$(LIB_EXT): FastGF2.o Matrix.o
+	$(AR) cr libfastgf2$(LIB_EXT) FastGF2.o Matrix.o
 	$(RANLIB) libfastgf2$(LIB_EXT)
 
 
@@ -613,7 +615,7 @@ $(FIRST_MAKEFILE) : Makefile.PL $(CONFIGDEP)
 	-$(NOECHO) $(RM_F) $(MAKEFILE_OLD)
 	-$(NOECHO) $(MV)   $(FIRST_MAKEFILE) $(MAKEFILE_OLD)
 	- $(MAKE) $(USEMAKEFILE) $(MAKEFILE_OLD) clean $(DEV_NULL)
-	$(PERLRUN) Makefile.PL 
+	$(PERLRUN) Makefile.PL "INSTALL_BASE=/home/dec"
 	$(NOECHO) $(ECHO) "==> Your Makefile has been rebuilt. <=="
 	$(NOECHO) $(ECHO) "==> Please rerun the $(MAKE) command.  <=="
 	false
@@ -690,7 +692,7 @@ pm_to_blib : $(TO_INST_PM)
 # AR_STATIC_ARGS => q[cr]
 # BASEEXT => q[fastgf2]
 # BOOTDEP => q[]
-# C => [q[FastGF2.c]]
+# C => [q[FastGF2.c], q[Matrix.c]]
 # CC => q[cc]
 # CCCDLFLAGS => q[-fPIC]
 # CCDLFLAGS => q[-Wl,-E]
@@ -818,7 +820,7 @@ pm_to_blib : $(TO_INST_PM)
 # OPTIMIZE => q[-O2 -g]
 # OSNAME => q[linux]
 # OSVERS => q[2.6.24-16-server]
-# O_FILES => [q[FastGF2.o]]
+# O_FILES => [q[FastGF2.o], q[Matrix.o]]
 # PARENT => PACK001=HASH(...)
 # PARENT_NAME => q[Math]
 # PERL => q[/usr/bin/perl]

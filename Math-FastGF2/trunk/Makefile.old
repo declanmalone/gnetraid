@@ -6,7 +6,7 @@
 #
 #       ANY CHANGES MADE HERE WILL BE LOST!
 #
-#   MakeMaker ARGV: ()
+#   MakeMaker ARGV: (q[INSTALL_BASE=/home/dec])
 #
 #   MakeMaker Parameters:
 
@@ -74,46 +74,44 @@ INST_MAN3DIR = blib/man3
 MAN1EXT = 1p
 MAN3EXT = 3pm
 INSTALLDIRS = site
+INSTALL_BASE = /home/dec
 DESTDIR = 
-PREFIX = /usr
-PERLPREFIX = $(PREFIX)
-SITEPREFIX = $(PREFIX)/local
-VENDORPREFIX = $(PREFIX)
-INSTALLPRIVLIB = $(PERLPREFIX)/share/perl/5.10
+PREFIX = $(INSTALL_BASE)
+INSTALLPRIVLIB = $(INSTALL_BASE)/lib/perl5
 DESTINSTALLPRIVLIB = $(DESTDIR)$(INSTALLPRIVLIB)
-INSTALLSITELIB = $(SITEPREFIX)/share/perl/5.10.0
+INSTALLSITELIB = $(INSTALL_BASE)/lib/perl5
 DESTINSTALLSITELIB = $(DESTDIR)$(INSTALLSITELIB)
-INSTALLVENDORLIB = $(VENDORPREFIX)/share/perl5
+INSTALLVENDORLIB = $(INSTALL_BASE)/lib/perl5
 DESTINSTALLVENDORLIB = $(DESTDIR)$(INSTALLVENDORLIB)
-INSTALLARCHLIB = $(PERLPREFIX)/lib/perl/5.10
+INSTALLARCHLIB = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
 DESTINSTALLARCHLIB = $(DESTDIR)$(INSTALLARCHLIB)
-INSTALLSITEARCH = $(SITEPREFIX)/lib/perl/5.10.0
+INSTALLSITEARCH = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
 DESTINSTALLSITEARCH = $(DESTDIR)$(INSTALLSITEARCH)
-INSTALLVENDORARCH = $(VENDORPREFIX)/lib/perl5
+INSTALLVENDORARCH = $(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi
 DESTINSTALLVENDORARCH = $(DESTDIR)$(INSTALLVENDORARCH)
-INSTALLBIN = $(PERLPREFIX)/bin
+INSTALLBIN = $(INSTALL_BASE)/bin
 DESTINSTALLBIN = $(DESTDIR)$(INSTALLBIN)
-INSTALLSITEBIN = $(SITEPREFIX)/bin
+INSTALLSITEBIN = $(INSTALL_BASE)/bin
 DESTINSTALLSITEBIN = $(DESTDIR)$(INSTALLSITEBIN)
-INSTALLVENDORBIN = $(VENDORPREFIX)/bin
+INSTALLVENDORBIN = $(INSTALL_BASE)/bin
 DESTINSTALLVENDORBIN = $(DESTDIR)$(INSTALLVENDORBIN)
-INSTALLSCRIPT = $(PERLPREFIX)/bin
+INSTALLSCRIPT = $(INSTALL_BASE)/bin
 DESTINSTALLSCRIPT = $(DESTDIR)$(INSTALLSCRIPT)
-INSTALLSITESCRIPT = $(SITEPREFIX)/bin
+INSTALLSITESCRIPT = $(INSTALL_BASE)/bin
 DESTINSTALLSITESCRIPT = $(DESTDIR)$(INSTALLSITESCRIPT)
-INSTALLVENDORSCRIPT = $(VENDORPREFIX)/bin
+INSTALLVENDORSCRIPT = $(INSTALL_BASE)/bin
 DESTINSTALLVENDORSCRIPT = $(DESTDIR)$(INSTALLVENDORSCRIPT)
-INSTALLMAN1DIR = $(PERLPREFIX)/share/man/man1
+INSTALLMAN1DIR = $(INSTALL_BASE)/man/man1
 DESTINSTALLMAN1DIR = $(DESTDIR)$(INSTALLMAN1DIR)
-INSTALLSITEMAN1DIR = $(SITEPREFIX)/man/man1
+INSTALLSITEMAN1DIR = $(INSTALL_BASE)/man/man1
 DESTINSTALLSITEMAN1DIR = $(DESTDIR)$(INSTALLSITEMAN1DIR)
-INSTALLVENDORMAN1DIR = $(VENDORPREFIX)/share/man/man1
+INSTALLVENDORMAN1DIR = $(INSTALL_BASE)/man/man1
 DESTINSTALLVENDORMAN1DIR = $(DESTDIR)$(INSTALLVENDORMAN1DIR)
-INSTALLMAN3DIR = $(PERLPREFIX)/share/man/man3
+INSTALLMAN3DIR = $(INSTALL_BASE)/man/man3
 DESTINSTALLMAN3DIR = $(DESTDIR)$(INSTALLMAN3DIR)
-INSTALLSITEMAN3DIR = $(SITEPREFIX)/man/man3
+INSTALLSITEMAN3DIR = $(INSTALL_BASE)/man/man3
 DESTINSTALLSITEMAN3DIR = $(DESTDIR)$(INSTALLSITEMAN3DIR)
-INSTALLVENDORMAN3DIR = $(VENDORPREFIX)/share/man/man3
+INSTALLVENDORMAN3DIR = $(INSTALL_BASE)/man/man3
 DESTINSTALLVENDORMAN3DIR = $(DESTDIR)$(INSTALLVENDORMAN3DIR)
 PERL_LIB = /usr/share/perl/5.10
 PERL_ARCHLIB = /usr/lib/perl/5.10
@@ -160,11 +158,14 @@ BOOTDEP =
 
 # Handy lists of source code files:
 XS_FILES = FastGF2.xs
-C_FILES  = FastGF2.c
-O_FILES  = FastGF2.o
+C_FILES  = FastGF2.c \
+	perlsubs.c
+O_FILES  = FastGF2.o \
+	perlsubs.o
 H_FILES  = ppport.h
 MAN1PODS = 
-MAN3PODS = lib/Math/FastGF2.pm
+MAN3PODS = lib/Math/FastGF2.pm \
+	lib/Math/FastGF2/Matrix.pm
 
 # Where is the Config information that we are using/depend on
 CONFIGDEP = $(PERL_ARCHLIB)$(DFSEP)Config.pm $(PERL_INC)$(DFSEP)config.h
@@ -188,6 +189,7 @@ PERL_ARCHIVE_AFTER =
 
 TO_INST_PM = benchmark-Math-FastGF2.pl \
 	lib/Math/FastGF2.pm \
+	lib/Math/FastGF2/Matrix.pm \
 	shamir-combine.pl \
 	shamir-split.pl
 
@@ -197,6 +199,8 @@ PM_TO_BLIB = benchmark-Math-FastGF2.pl \
 	$(INST_LIB)/Math/shamir-split.pl \
 	lib/Math/FastGF2.pm \
 	blib/lib/Math/FastGF2.pm \
+	lib/Math/FastGF2/Matrix.pm \
+	blib/lib/Math/FastGF2/Matrix.pm \
 	shamir-combine.pl \
 	$(INST_LIB)/Math/shamir-combine.pl
 
@@ -312,6 +316,7 @@ PASTHRU = LIBPERL_A="$(LIBPERL_A)"\
 	LINKTYPE="$(LINKTYPE)"\
 	OPTIMIZE="$(OPTIMIZE)"\
 	PREFIX="$(PREFIX)"\
+	INSTALL_BASE="$(INSTALL_BASE)"\
 	PASTHRU_DEFINE="$(PASTHRU_DEFINE)"\
 	PASTHRU_INC="$(PASTHRU_INC)"
 
@@ -510,9 +515,11 @@ POD2MAN = $(POD2MAN_EXE)
 
 
 manifypods : pure_all  \
-	lib/Math/FastGF2.pm
+	lib/Math/FastGF2.pm \
+	lib/Math/FastGF2/Matrix.pm
 	$(NOECHO) $(POD2MAN) --section=$(MAN3EXT) --perm_rw=$(PERM_RW) \
-	  lib/Math/FastGF2.pm $(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT) 
+	  lib/Math/FastGF2.pm $(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT) \
+	  lib/Math/FastGF2/Matrix.pm $(INST_MAN3DIR)/Math::FastGF2::Matrix.$(MAN3EXT) 
 
 
 
@@ -672,7 +679,7 @@ distdir : create_distdir distmeta
 
 # --- MakeMaker dist_test section:
 disttest : distdir
-	cd $(DISTVNAME) && $(ABSPERLRUN) Makefile.PL 
+	cd $(DISTVNAME) && $(ABSPERLRUN) Makefile.PL "INSTALL_BASE=/home/dec"
 	cd $(DISTVNAME) && $(MAKE) $(PASTHRU)
 	cd $(DISTVNAME) && $(MAKE) test $(PASTHRU)
 
@@ -859,7 +866,7 @@ $(FIRST_MAKEFILE) : Makefile.PL $(CONFIGDEP)
 	-$(NOECHO) $(RM_F) $(MAKEFILE_OLD)
 	-$(NOECHO) $(MV)   $(FIRST_MAKEFILE) $(MAKEFILE_OLD)
 	- $(MAKE) $(USEMAKEFILE) $(MAKEFILE_OLD) clean $(DEV_NULL)
-	$(PERLRUN) Makefile.PL 
+	$(PERLRUN) Makefile.PL "INSTALL_BASE=/home/dec"
 	$(NOECHO) $(ECHO) "==> Your Makefile has been rebuilt. <=="
 	$(NOECHO) $(ECHO) "==> Please rerun the $(MAKE) command.  <=="
 	false
@@ -880,7 +887,8 @@ $(MAKE_APERL_FILE) : $(FIRST_MAKEFILE) pm_to_blib
 	$(NOECHO) $(PERLRUNINST) \
 		Makefile.PL DIR=clib \
 		MAKEFILE=$(MAKE_APERL_FILE) LINKTYPE=static \
-		MAKEAPERL=1 NORECURS=1 CCCDLFLAGS=
+		MAKEAPERL=1 NORECURS=1 CCCDLFLAGS= \
+		INSTALL_BASE=/home/dec
 
 
 # --- MakeMaker test section:
@@ -940,6 +948,7 @@ pm_to_blib : $(TO_INST_PM)
 	  benchmark-Math-FastGF2.pl $(INST_LIB)/Math/benchmark-Math-FastGF2.pl \
 	  shamir-split.pl $(INST_LIB)/Math/shamir-split.pl \
 	  lib/Math/FastGF2.pm blib/lib/Math/FastGF2.pm \
+	  lib/Math/FastGF2/Matrix.pm blib/lib/Math/FastGF2/Matrix.pm \
 	  shamir-combine.pl $(INST_LIB)/Math/shamir-combine.pl 
 	$(NOECHO) $(TOUCH) pm_to_blib
 
@@ -953,12 +962,12 @@ pm_to_blib : $(TO_INST_PM)
 # ABSTRACT => q[Perl extension for fast Galois Field arithmetic]
 # ABSTRACT_FROM => q[lib/Math/FastGF2.pm]
 # AR => q[ar]
-# ARGS => { NAME=>q[Math::FastGF2], AUTHOR=>q[Declan Malone <idablack@sourceforge.net>], LIBS=>[q[]], INC=>q[-I.], DEFINE=>q[], MYEXTLIB=>q[clib/libfastgf2$(LIB_EXT)], VERSION_FROM=>q[lib/Math/FastGF2.pm], ABSTRACT_FROM=>q[lib/Math/FastGF2.pm], PREREQ_PM=>{  } }
+# ARGS => { NAME=>q[Math::FastGF2], AUTHOR=>q[Declan Malone <idablack@sourceforge.net>], LIBS=>[q[]], INC=>q[-I.], DEFINE=>q[], MYEXTLIB=>q[clib/libfastgf2$(LIB_EXT)], INSTALL_BASE=>q[/home/dec], VERSION_FROM=>q[lib/Math/FastGF2.pm], ABSTRACT_FROM=>q[lib/Math/FastGF2.pm], PREREQ_PM=>{  } }
 # AR_STATIC_ARGS => q[cr]
 # AUTHOR => q[Declan Malone <idablack@sourceforge.net>]
 # BASEEXT => q[FastGF2]
 # BOOTDEP => q[]
-# C => [q[FastGF2.c]]
+# C => [q[FastGF2.c], q[perlsubs.c]]
 # CC => q[cc]
 # CCCDLFLAGS => q[-fPIC]
 # CCDLFLAGS => q[-Wl,-E]
@@ -1019,25 +1028,26 @@ pm_to_blib : $(TO_INST_PM)
 # H => [q[ppport.h]]
 # HAS_LINK_CODE => q[1]
 # INC => q[-I.]
-# INSTALLARCHLIB => q[$(PERLPREFIX)/lib/perl/5.10]
-# INSTALLBIN => q[$(PERLPREFIX)/bin]
+# INSTALLARCHLIB => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
+# INSTALLBIN => q[$(INSTALL_BASE)/bin]
 # INSTALLDIRS => q[site]
-# INSTALLMAN1DIR => q[$(PERLPREFIX)/share/man/man1]
-# INSTALLMAN3DIR => q[$(PERLPREFIX)/share/man/man3]
-# INSTALLPRIVLIB => q[$(PERLPREFIX)/share/perl/5.10]
-# INSTALLSCRIPT => q[$(PERLPREFIX)/bin]
-# INSTALLSITEARCH => q[$(SITEPREFIX)/lib/perl/5.10.0]
-# INSTALLSITEBIN => q[$(SITEPREFIX)/bin]
-# INSTALLSITELIB => q[$(SITEPREFIX)/share/perl/5.10.0]
-# INSTALLSITEMAN1DIR => q[$(SITEPREFIX)/man/man1]
-# INSTALLSITEMAN3DIR => q[$(SITEPREFIX)/man/man3]
-# INSTALLSITESCRIPT => q[$(SITEPREFIX)/bin]
-# INSTALLVENDORARCH => q[$(VENDORPREFIX)/lib/perl5]
-# INSTALLVENDORBIN => q[$(VENDORPREFIX)/bin]
-# INSTALLVENDORLIB => q[$(VENDORPREFIX)/share/perl5]
-# INSTALLVENDORMAN1DIR => q[$(VENDORPREFIX)/share/man/man1]
-# INSTALLVENDORMAN3DIR => q[$(VENDORPREFIX)/share/man/man3]
-# INSTALLVENDORSCRIPT => q[$(VENDORPREFIX)/bin]
+# INSTALLMAN1DIR => q[$(INSTALL_BASE)/man/man1]
+# INSTALLMAN3DIR => q[$(INSTALL_BASE)/man/man3]
+# INSTALLPRIVLIB => q[$(INSTALL_BASE)/lib/perl5]
+# INSTALLSCRIPT => q[$(INSTALL_BASE)/bin]
+# INSTALLSITEARCH => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
+# INSTALLSITEBIN => q[$(INSTALL_BASE)/bin]
+# INSTALLSITELIB => q[$(INSTALL_BASE)/lib/perl5]
+# INSTALLSITEMAN1DIR => q[$(INSTALL_BASE)/man/man1]
+# INSTALLSITEMAN3DIR => q[$(INSTALL_BASE)/man/man3]
+# INSTALLSITESCRIPT => q[$(INSTALL_BASE)/bin]
+# INSTALLVENDORARCH => q[$(INSTALL_BASE)/lib/perl5/i486-linux-gnu-thread-multi]
+# INSTALLVENDORBIN => q[$(INSTALL_BASE)/bin]
+# INSTALLVENDORLIB => q[$(INSTALL_BASE)/lib/perl5]
+# INSTALLVENDORMAN1DIR => q[$(INSTALL_BASE)/man/man1]
+# INSTALLVENDORMAN3DIR => q[$(INSTALL_BASE)/man/man3]
+# INSTALLVENDORSCRIPT => q[$(INSTALL_BASE)/bin]
+# INSTALL_BASE => q[/home/dec]
 # INST_ARCHAUTODIR => q[$(INST_ARCHLIB)/auto/$(FULLEXT)]
 # INST_ARCHLIB => q[blib/arch]
 # INST_ARCHLIBDIR => q[$(INST_ARCHLIB)/Math]
@@ -1071,7 +1081,7 @@ pm_to_blib : $(TO_INST_PM)
 # MAN1EXT => q[1p]
 # MAN1PODS => {  }
 # MAN3EXT => q[3pm]
-# MAN3PODS => { lib/Math/FastGF2.pm=>q[$(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT)] }
+# MAN3PODS => { lib/Math/FastGF2.pm=>q[$(INST_MAN3DIR)/Math::FastGF2.$(MAN3EXT)], lib/Math/FastGF2/Matrix.pm=>q[$(INST_MAN3DIR)/Math::FastGF2::Matrix.$(MAN3EXT)] }
 # MAP_TARGET => q[perl]
 # MKPATH => q[$(ABSPERLRUN) "-MExtUtils::Command" -e mkpath]
 # MM_REVISION => q[41145]
@@ -1090,11 +1100,11 @@ pm_to_blib : $(TO_INST_PM)
 # OPTIMIZE => q[-O2 -g]
 # OSNAME => q[linux]
 # OSVERS => q[2.6.24-16-server]
-# O_FILES => [q[FastGF2.o]]
+# O_FILES => [q[FastGF2.o], q[perlsubs.o]]
 # PARENT_NAME => q[Math]
 # PERL => q[/usr/bin/perl]
 # PERLMAINCC => q[$(CC)]
-# PERLPREFIX => q[$(PREFIX)]
+# PERLPREFIX => undef
 # PERLRUN => q[$(PERL)]
 # PERLRUNINST => q[$(PERLRUN) "-I$(INST_ARCHLIB)" "-I$(INST_LIB)"]
 # PERLTYPE => q[]
@@ -1109,11 +1119,11 @@ pm_to_blib : $(TO_INST_PM)
 # PERM_RW => q[644]
 # PERM_RWX => q[755]
 # PL_FILES => {  }
-# PM => { benchmark-Math-FastGF2.pl=>q[$(INST_LIB)/Math/benchmark-Math-FastGF2.pl], shamir-split.pl=>q[$(INST_LIB)/Math/shamir-split.pl], lib/Math/FastGF2.pm=>q[blib/lib/Math/FastGF2.pm], shamir-combine.pl=>q[$(INST_LIB)/Math/shamir-combine.pl] }
+# PM => { benchmark-Math-FastGF2.pl=>q[$(INST_LIB)/Math/benchmark-Math-FastGF2.pl], shamir-split.pl=>q[$(INST_LIB)/Math/shamir-split.pl], lib/Math/FastGF2.pm=>q[blib/lib/Math/FastGF2.pm], lib/Math/FastGF2/Matrix.pm=>q[blib/lib/Math/FastGF2/Matrix.pm], shamir-combine.pl=>q[$(INST_LIB)/Math/shamir-combine.pl] }
 # PMLIBDIRS => [q[lib]]
 # PMLIBPARENTDIRS => [q[lib]]
 # POSTOP => q[$(NOECHO) $(NOOP)]
-# PREFIX => q[/usr]
+# PREFIX => q[$(INSTALL_BASE)]
 # PREOP => q[$(NOECHO) $(NOOP)]
 # PREREQ_PM => {  }
 # RANLIB => q[:]
@@ -1124,7 +1134,7 @@ pm_to_blib : $(TO_INST_PM)
 # SHELL => q[/bin/sh]
 # SITEARCHEXP => q[/usr/local/lib/perl/5.10.0]
 # SITELIBEXP => q[/usr/local/share/perl/5.10.0]
-# SITEPREFIX => q[$(PREFIX)/local]
+# SITEPREFIX => undef
 # SKIPHASH => {  }
 # SO => q[so]
 # SUFFIX => q[.gz]
@@ -1139,7 +1149,7 @@ pm_to_blib : $(TO_INST_PM)
 # USEMAKEFILE => q[-f]
 # VENDORARCHEXP => q[/usr/lib/perl5]
 # VENDORLIBEXP => q[/usr/share/perl5]
-# VENDORPREFIX => q[$(PREFIX)]
+# VENDORPREFIX => undef
 # VERBINST => q[0]
 # VERSION => q[0.01]
 # VERSION_FROM => q[lib/Math/FastGF2.pm]
