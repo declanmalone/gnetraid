@@ -7,12 +7,14 @@ use Carp;
 
 use Crypt::IDA;
 
+use Fcntl qw(:DEFAULT :seek);
+
 require Exporter;
 
 our @ISA = qw(Exporter);
-our %EXPORT_TAGS = ( 'all' => [ qw( sf_calculate_chunk_sizes
-				    sf_split sf_combine) ] );
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
+our %EXPORT_TAGS = ( 'DEFAULT' => [ qw( sf_calculate_chunk_sizes
+					sf_split sf_combine) ] );
+our @EXPORT_OK = ( @{ $EXPORT_TAGS{'DEFAULT'} } );
 our @EXPORT = qw( );
 
 our $VERSION = '0.01';
@@ -21,7 +23,14 @@ our $classname="Crypt::IDA::ShareFile";
 # I could eliminate the use of closures below, but it makes for a
 # convenient wrapper for handling byte order issues, and also for
 # implementing the "dry run" parameter to sf_write_ida_header later.
-our $mk_file_istream = sub {
+sub sf_mk_file_istream {
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
+  }
   my ($filename,$default_bytes_per_read)=@_;
   my ($fh,$eof)=(undef,0);
 
@@ -84,10 +93,9 @@ our $mk_file_istream = sub {
 
        # hex() can only handle values up to 32 bits, but perl scalars
        # can handle up to 64 bits (they're upgraded to floats
-       # internally after 32 bits, though, so there may be possible
-       # precision errors). I'm disabling this since I don't think
-       # it's acceptable. The only upshot for the rest of the program
-       # is that file size is now limited to 4Gb - 1 byte.
+       # internally after 32 bits, though). I'm disabling this since I
+       # don't think it's acceptable. The only upshot for the rest of
+       # the program is that file size is now limited to 4Gb - 1 byte.
        my $val=0;
 #       while ($bytes_to_read > 4) {
 #	 $val=unpack "N", (substr $buf,0,4,"");
@@ -114,7 +122,7 @@ our $mk_file_istream = sub {
   return $methods;
 }
 
-our $mk_file_ostream = sub {
+sub sf_mk_file_ostream {
   my ($filename,$default_bytes_per_write)=@_;
   my ($fh,$eof)=(undef,0);
 
@@ -186,44 +194,38 @@ our $mk_file_ostream = sub {
 #
 # header version 1
 #
-# bytes   name          value
-# 2       magic         marker for "Share File" format; "SF" = {5346}
-# 1       version       file format version = 1
-# 1       options       options bits (see below)
-# 1-2     k,quorum      quorum k-value (set both names on read)
-# 1-2     s,security    security level s-value (set both names on read)
-# var     chunk_start   absolute offset of chunk in file
-# var     chunk_next    absolute offset of next chunk in file
-# var     transform     transform matrix row
+# bytes  name           value
+# 2      magic          marker for "Share File" format; "SF" = {5346}
+# 1      version        file format version = 1
+# 1      options        options bits (see below)
+# 1-2    k,quorum       quorum k-value (set both names on read)
+# 1-2    s,security     security level s-value (width in bytes)
+# var    chunk_start    absolute offset of chunk in file
+# var    chunk_next     absolute offset of next chunk in file
+# var    transform      transform matrix row
 #
 # The options bits are as follows:
 #
-# Bit     name          Settings
-# 0       opt_large_k   Large (2-byte) k value?
-# 1 	  opt_large_s   Large (2-byte) s value?
-# 2 	  opt_final     Final chunk in file? (1=full file/final chunk)
-# 3 	  opt_transform Is transform data included?
+# Bit    name           Settings
+# 0      opt_large_k    Large (2-byte) k value?
+# 1 	 opt_large_s    Large (2-byte) s value?
+# 2 	 opt_final      Final chunk in file? (1=full file/final chunk)
+# 3 	 opt_transform  Is transform data included?
 #
-# Note that the chunk_next field is 1 greater than the actual offset of
-# the chunk end. In other words, the chunk ranges from the byte
+# Note that the chunk_next field is 1 greater than the actual offset
+# of the chunk end. In other words, the chunk ranges from the byte
 # starting at chunk_start up to, but not including the byte at
-# chunk_next. I made this decision fairly late on to handle the case
-# where we've been asked to split a zero-length file, which we can
-# represent with the condition chunk_start == chunk_next. In
-# retrospect, had I considered this corner case earlier I would have
-# called the variables chunk_start and chunk_next instead. I will
-# probably end up making this change in naming later on, but only
-# after I've got the code working.
+# chunk_next. That's why it's called chunk_next rather than chunk_end.
 #
 # More on this: it might seem that it's ok to refuse to split a
 # zero-length file, but if we're using this for backups, it's not a
 # good idea to fail just because we don't like zero-length
 # files. Also, splitting a zero-length file might be useful in some
 # cases, since we might be interested in just creating and storing a
-# transform matrix for later use, or maybe generating test cases for a
-# matrix inverse routine.
+# transform matrix for later use, or maybe generating test cases or
+# debugging a matrix inverse routine.
 
-our  $sf_read_ida_header = sub {
+sub sf_read_ida_header {
   my $istream=shift;		  # assume istream is at start of file
   my $header_info={};   	  # values will be returned in this hash
 
@@ -236,7 +238,7 @@ our  $sf_read_ida_header = sub {
   # undefined. We store any read values in the returned hash, so it's
   # up to the caller to take them out and pass them back to us when
   # reading the next header in the batch.
-  my ($k,$s,$start,$end,$hdr)=@_;
+  my ($k,$s,$start,$next,$hdr)=@_;
 
   my $header_length=0;		  # we also send this back in hash
 
@@ -380,10 +382,10 @@ our  $sf_read_ida_header = sub {
     # splitting/combining zero-length files.
     $header_info->{chunk_next}=0;
   }
-  if (defined($end) and $end != $header_info->{chunk_next}) {
+  if (defined($next) and $next != $header_info->{chunk_next}) {
     return header_error("Inconsistent chunk_next values read from streams\n");
   } else {
-    $end=$header_info->{chunk_next};
+    $next=$header_info->{chunk_next};
   }
   delete $header_info->{offset_width}; # caller doesn't need or want this
 
@@ -418,7 +420,14 @@ our  $sf_read_ida_header = sub {
 
 # When writing the header, we return number of header bytes written or
 # zero in the event of some error.
-our $sf_write_ida_header = sub {
+sub sf_write_ida_header {
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
+  }
   my %header_info=(
 		   dry_run => 0,
 		   @_
@@ -539,6 +548,18 @@ sub sf_calculate_chunk_sizes {
   my ($self,$class);
   my %o;
 
+  # despite the routine name, we'll calculate several different values
+  # relating to each chunk:
+  #  chunk_start
+  #  chunk_next
+  #  chunk_size   (chunk_next - chunk_start)
+  #  file_size    (including header)
+  #  final        (is the last chunk in the file?)
+  #  padding      (how many bytes of padding are needed? final chunk only)
+  #
+  # We store these in a hash, and return a list of references to
+  # hashes, one for each chunk.
+
   if ($_[0] eq $classname or ref($_[0]) eq $classname) {
     $self=shift;
     $class=ref($self);
@@ -550,7 +571,8 @@ sub sf_calculate_chunk_sizes {
       width => undef,
       filename => undef,
       # misc options
-      header_version => 1,
+      version => 1,		# header version
+      save_transform => 1,	# whether to store transform in header
       # pick one method of calculating chunk size. The file is not
       # broken into chunks unless one of these is defined.
       n_chunks => undef,
@@ -558,12 +580,170 @@ sub sf_calculate_chunk_sizes {
       out_chunk_size => undef,
       out_file_size => undef,
       @_,
+      dry_run => 1,		# for call to sf_write_ida_header
      );
+  my @chunks=();
+  my ($hs,$cb,$cn,$cs,$nc);
 
-  
+  # Copy options into local variables
+  my ($k, $w, $filename, $version, $save_transform,
+      $n_chunks, $in_chunk_size, $out_chunk_size, $out_file_size) =
+    map {
+      exists($o{$_}) ? $o{$_} : undef
+    } qw(quorum width filename version
+	 n_chunks in_chunk_size out_chunk_size out_file_size);
 
+  # Check some input values (more checks later)
+  unless ($w == 1 or $w == 2 or $w == 4) {
+    carp "Invalid width value";
+    return undef;
+  }
+  if ($k < 1 or $k >= 256 ** $w) {
+    carp "quorum value out of range";
+    return undef;
+  }
+  # leave version check until call to sf_write_ida_header
+
+  # In all cases, we'll try to make all non-final chunks align to
+  # $quorum x $width bytes. Whichever method is used, we need to know
+  # what the total file size with/without padding will be.
+  my $file_size=-s $filename;
+  unless (defined($file_size)) {
+    return undef;
+  }
+  my $padded_file_size=$file_size;
+  while ($padded_file_size % ($k * $w)) {
+    ++$padded_file_size;	# not very efficient, but it is easy
+  }
+
+  # We'll pass %o onto sf_write_ida_header later, so we need a dummy
+  # value for transform if "save_transform" is set.
+  if (defined($save_transform) and $save_transform) {
+    $o{"transform"} = " " x ($k * $w);
+  } else {
+    $o{"transform"} = undef;
+  }
+
+  # Check that no more than one chunking method is set
+  my $defined_methods=0;
+  ++$defined_methods if (defined($n_chunks));
+  ++$defined_methods if (defined($in_chunk_size));
+  ++$defined_methods if (defined($out_chunk_size));
+  ++$defined_methods if (defined($out_file_size));
+
+  if ($defined_methods > 1) {
+    carp "please select at most one method of calculating chunk sizes";
+    return undef;
+  } elsif ($file_size == 0 or $defined_methods == 0) {
+    # we can also handle the special case where $file_size == 0 here
+    unless ($file_size) {
+      carp "warning: zero-sized file $filename; will use single chunk";
+    }
+    ($cb,$cn,$cs)=(0,$padded_file_size,$padded_file_size);
+    $o{"chunk_start"} = $cb;
+    $o{"chunk_next"}  = $cn;
+    $hs=sf_write_ida_header(%o);
+    unless (defined ($hs) and $hs > 0) {
+      carp "Something wrong with header parameters.";
+      return undef;
+    }
+    return ( {
+	      "chunk_start" => $cb,
+	      "chunk_next"  => $cn,
+	      "chunk_size"  => $cs,
+	      "file_size"   => $hs + $cs,
+	      "final"       => 1,
+	      "padding"     => $padded_file_size - $file_size,
+	     } );
+  }
+
+  # on to the various multi-chunk methods ...
+  if (defined($n_chunks)) {
+
+    unless ($n_chunks > 0) {
+      carp "Number of chunks must be greater than zero!";
+      return undef;
+    }
+    my $max_n_chunks=$padded_file_size / ($k * $w);
+    if ( $n_chunks > $max_n_chunks) {
+      carp "File is too small for n_chunks=$n_chunks; using " .
+	"$max_n_chunks instead";
+      $n_chunks=$max_n_chunks;
+    }
+
+    # creating chunks of exactly the same size may not be possible
+    # since we have to round to matrix column size. Rounding down
+    # means we'll end up with a larger chunk at the end, while
+    # rounding up means we might produce some zero-sized chunks at the
+    # end. The former option is most likely the Right Thing. Even
+    # though it might be nice to make the first chunk bigger, it's
+    # easier to code if we let the last chunk take up any excess. To
+    # do this we can round the chunk size up to the nearest multiple
+    # of $n_chunks first, then round down to the nearest column
+    # size. We should end up with a non-zero value since we've imposed
+    # a limit on the maximum size of $n_chunks above.
+    $cs  = int(($padded_file_size + $n_chunks - 1) / $n_chunks);
+    $cs -= $cs % ($k * $w);
+    die "Got chunk size of zero with file_size $padded_file_size, " .
+      "n_chunks=$n_chunks (this shouldn't happen)\n" unless $cs;
+    ($cb,$cn)=(0,$cs);
+    for my $i (0 .. $n_chunks - 1) {
+      $o{"chunk_start"} = $cb;
+      $o{"chunk_next"}  = $cn;
+      $hs=sf_write_ida_header(%o);
+      unless (defined ($hs) and $hs > 0) {
+	carp "Something wrong with header parameters for chunk $i.";
+	return undef;
+      }
+      push @chunks, {
+		     "chunk_start" => $cb,
+		     "chunk_next"  => $cn,
+		     "chunk_size"  => $cs,
+		     "file_size"   => $hs + $cs,
+		     "final"       => 1,
+		     "padding"     => 0,
+		    };
+      $cb += $cs;
+      $cn += $cs;
+    }
+    # Now fix up the details of the final chunk ...
+    $chunks[$n_chunks - 1]->{"chunk_next"} = $padded_file_size;
+    $chunks[$n_chunks - 1]->{"chunk_size"} = $padded_file_size - $cb;
+    $chunks[$n_chunks - 1]->{"final"}      = 1;
+    $chunks[$n_chunks - 1]->{"padding"}    = $padded_file_size - $file_size;
+
+    die "last chunk starts beyond eof (this shouldn't happen)\n" if
+      $cb >= $padded_file_size;
+
+    # ... and return the array
+    return @chunks;
+
+  } elsif (defined($in_chunk_size)) {
+
+    # this can actually be rolled into the above n_chunks method
+
+    carp "not implemented yet\n";
+    return undef;
+
+  } elsif (defined($out_chunk_size)) {
+
+    # this can actually be rolled into the above n_chunks method
+
+    carp "not implemented yet\n";
+    return undef;
+
+  } elsif (defined($out_chunk_size)) {
+
+    carp "not implemented yet\n";
+    return undef;
+
+  } else {
+    die "problem deciding chunking method (shouldn't get here)\n";
+  }
 
 }
+
+
 
 sub sf_split {
 
@@ -581,15 +761,15 @@ sub sf_split {
       quorum => undef,
       width => undef,
       filename => undef,
-      # supply either a list of key parameters or a matrix
+      # supply a key, a matrix or neither
       key => undef,
       matrix => undef,
       # misc options
-      header_version => 1,
+      version => 1,		# header version
       rand => "/dev/urandom",
       bufsize => 4096,
-      # pick one method of calculating chunk size. The file is not
-      # broken into chunks unless one of these is defined.
+      # pick at most one chunking method. The file is not broken into
+      # chunks unless one of these is defined.
       n_chunks => undef,
       in_chunk_size => undef,
       out_chunk_size => undef,
@@ -634,7 +814,7 @@ sub sf_split {
   my ($chunk,$chunk_start,$chunk_next)=(0,0,$chunk_size);
 
   SPLIT: {
-      my $istream=mk_file_istream("/tmp/32kb.pak",$order/8);
+      my $istream=sf_mk_file_istream("/tmp/32kb.pak",$order/8);
 
       die "Failed to open istream\n" unless $istream;
 
@@ -646,7 +826,7 @@ sub sf_split {
 	my $ostreams=[];
 	for my $i (0..$n-1) {
 	  my $ostream=
-	    mk_file_ostream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",
+	    sf_mk_file_ostream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",
 			    $order/8);
 	  die "Failed to create ostream\n" unless $ostream;
 	  push @$ostreams, $ostream;
@@ -655,7 +835,7 @@ sub sf_split {
 	rabin_ida_split(
           {
 	   chunk_start => $chunk_start, chunk_next => $chunk_next,
-	   header_version => 1,
+	   version => 1,
 	   k=>$k, n=>$n, order=>$order, istream=>$istream,
 	   sharestreams=>$ostreams,
 	  } );
@@ -680,43 +860,211 @@ sub sf_split {
 
 sub sf_combine {
 
-    my @chunklist=(0..$chunk);
+  my ($chunk,$order,$n);;
 
-    my $ostream=mk_file_ostream("/tmp/rabin-c-recombine.txt",$order/8);
-    die "Failed to create ostream\n" unless $ostream;
+  my @chunklist=(0..$chunk);
 
-    # we can shuffle the list if we want, but for simple testing, we
-    # might as well process them in order.
+  my $ostream=sf_mk_file_ostream("/tmp/rabin-c-recombine.txt",$order/8);
+  die "Failed to create ostream\n" unless $ostream;
 
-#    fisher_yates_shuffle(\@chunklist);
+  # we can shuffle the list if we want, but for simple testing, we
+  # might as well process them in order.
 
-    for my $chunk (@chunklist) {
+  #    fisher_yates_shuffle(\@chunklist);
 
-      my $istreams=[];
-      for my $i (0..$n-1) {
-	my $istream=
-	  mk_file_istream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",$order/8);
-	die "Failed to read istream\n" unless $istream;
-	push @$istreams, $istream;
-      }
+  for my $chunk (@chunklist) {
 
-      print "Attempting to recombine chunk $chunk of file\n";
-
-      # pick k of the n input streams to use
-      #fisher_yates_shuffle($istreams,$k);
-
-      for my $stream (@$istreams) {
-	print "Using share: ", $stream->{FILENAME}->(), "\n";
-      }
-
-      rabin_ida_recombine($istreams,$ostream);
-
-      # close all files in this batch
-      foreach my $istream (@$istreams) {
-	$istream->{CLOSE}->();
-      }
-
+    my $istreams=[];
+    for my $i (0..$n-1) {
+      my $istream=
+	sf_mk_file_istream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",$order/8);
+      die "Failed to read istream\n" unless $istream;
+      push @$istreams, $istream;
     }
+
+    print "Attempting to recombine chunk $chunk of file\n";
+
+    # pick k of the n input streams to use
+    #fisher_yates_shuffle($istreams,$k);
+
+    for my $stream (@$istreams) {
+      print "Using share: ", $stream->{FILENAME}->(), "\n";
+    }
+
+    rabin_ida_recombine($istreams,$ostream);
+
+    # close all files in this batch
+    foreach my $istream (@$istreams) {
+      $istream->{CLOSE}->();
+    }
+
   }
 }
 
+1;
+
+__END__
+
+=head1 NAME
+
+Crypt::IDA::ShareFile - Archive file format for Crypt::IDA module
+
+=head1 SYNOPSIS
+
+  use Crypt::IDA::ShareFile ":DEFAULT";
+
+=head1 DESCRIPTION
+
+This module implements a file format for creating, storing and
+distributing shares created with Crypt::IDA. Created files contain
+share data and (by default) the corresponding transform matrix row
+used to split the input file. This means that share files are
+stand-alone in the sense that they may recombined later without
+needing any other stored key or the involvement of the original
+issuer.
+
+In addition to creating a number of shares, the module can also handle
+breaking the input file into several chunks before processing, in a
+similar way to multi-volume PKZIP, ARJ or RAR archives. Each of the
+chunks may be split into shares using a different transform matrix.
+Individual groups of chunks may be re-assembled independently, as they
+are collected and the quorum satisfied, or all shares of all chunks
+may be combined at once.
+
+=head2 EXPORT
+
+No methods are exported by default. All methods may be called by
+prefixing the method names with the module name, eg:
+
+ $foo=Crypt::IDA::ShareFile::sf_split(...)
+
+Alternatively, routines can be exported by adding ":DEFAULT" to the
+"use" line, in which case the routine names do not need to be prefixed
+with the module name, ie:
+
+  use Crypt::IDA::ShareFile ":DEFAULT";
+ 
+  $foo=Crypt::IDA::ShareFile::sf_split(...)
+  # ...
+
+Some extra ancillary routines can also be exported with the ":extras"
+(just the extras) or ":all" (":extras" plus ":DEFAULT") parameters to
+the use line. See the section L<ANCILLARY ROUTINES> for details.
+
+=head1 SPLIT OPERATION
+
+The template for a call to C<sf_split>, showing all default values,
+is as follows:
+
+
+The function returns ...
+
+=head1 COMBINE OPERATION
+
+The template for a call to C<sf_combine> is as follows:
+
+The return value is ...
+
+=head1 ANCILLARY ROUTINES
+
+The extra routines are exported by using the ":extras" or ":all"
+parameter with the initial "use" module line. The extra routines are
+as follows:
+
+
+=head1 KEY MANAGEMENT
+
+
+=head2 Adding extra shares at a later time
+
+
+=head2 In the event of lost or stolen shares
+
+
+=head1 TECHNICAL DETAILS
+
+=head2 File Format
+
+Each share file consists of a header and some share data. For the
+current version of the file format (version 1), the header format is
+as follows:
+
+  Bytes   Name           Value
+  2       magic          marker for "Share File" format; "SF" = {5346}
+  1       version        file format version = 1
+  1       options        options bits (see below)
+  1-2     k,quorum       quorum k-value (set both names on read)
+  1-2     s,security     security level (ie, field width, in bytes)
+  var     chunk_start    absolute offset of chunk in file
+  var     chunk_next     absolute offset of next chunk in file
+  var     transform      transform matrix row (optional)
+
+All values stored in the header file (and the share data) are stored
+in network (big-endian) byte order.
+
+The options bits are as follows:
+
+  Bit     name           Settings
+  0       opt_large_k    Large (2-byte) k value?
+  1 	  opt_large_s    Large (2-byte) s value?
+  2 	  opt_final      Final chunk in file? (1=full file/final chunk)
+  3 	  opt_transform  Is transform data included?
+
+All file offsets are stored in a variable-width format. They are
+stored as the concatenation of two values:
+
+=over
+
+=item * the number of bytes required to store the offset, and
+
+=item * the actual file offset.
+
+=back
+
+So, for example, the offset "0" would be represented as the single
+byte "0". An offset of 0x0321 would be represented as the hex bytes
+"02", "03", "31".
+
+Note that the chunk_next field is 1 greater than the actual offset of
+the chunk end. In other words, each chunk ranges from the byte starting
+at chunk_start up to, but not including the byte at chunk_next. That's
+why it's called chunk_next rather than chunk_end.
+
+=head1 LIMITATIONS
+
+The current implementation is limited to handling input files less
+than 4Gb in size. This is merely a limitation of the current header
+handling code, and this restriction may by removed in a later version.
+
+=head1 SEE ALSO
+
+See the documentation for L<Crypt::IDA> for more details of the
+underlying algorithm for creating and combining shares.
+
+=head1 FUTURE VERSIONS
+
+It is possible that the following changes/additions will be made in
+future versions:
+
+=head1 AUTHOR
+
+Declan Malone, idablack@sourceforge.net
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2009 by Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of version 2 (or, at your discretion, any later
+version) of the "GNU General Public License" ("GPL").
+
+Please refer to the file "GNU_GPL.txt" in this distribution for
+details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut
