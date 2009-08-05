@@ -1372,10 +1372,10 @@ from the input.
 
 Since the "key" parameter may not be returned in all cases, the
 preferred method for detecting failure of the routine is to check
-whether the C<$bytes> parameter returns undef, as in the following:
+whether the C<$mat> parameter returns undef, as in the following:
 
  ($key,$mat,$bytes) = ida_split ( ... );
- unless (defined ($bytes)) {
+ unless (defined ($mat)) {
   # handle ida_split failure
   # ...
  }

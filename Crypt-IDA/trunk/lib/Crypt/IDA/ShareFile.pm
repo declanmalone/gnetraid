@@ -910,6 +910,8 @@ sub sf_split {
   for my $i (@$chunklist) {
 
     my $chunk=$chunks[$i];
+    my $sharefiles=();		# we return a list of files in each
+                                # chunk at the end of the routine.
 
     # Unpack chunk details into local variables. Not all these
     # variables are needed, but we might as well unpack them anyway.
@@ -941,8 +943,8 @@ sub sf_split {
     $o{"final"}      = $final;
     my $emptiers=[];
     for my $j (@$sharelist) {
-      my $sharestream = sf_mk_file_ostream(
-        sf_sprintf_filename($filespec, $filename, $i, $j), $w);
+      my $sharename   = sf_sprintf_filename($filespec, $filename, $i, $j);
+      my $sharestream = sf_mk_file_ostream($sharename, $w);
       unless (defined($sharestream)) {
 	carp "Failed to create share file (chunk $i, share $j): $!";
 	return undef;
@@ -958,6 +960,7 @@ sub sf_split {
       }
       my $emptier=empty_to_fh($sharestream->{"FH"}->(),$hs);
       push @$emptiers, $emptier;
+      push @sharefiles, $sharename;
     }
 
     # Now that we've written the headers and set up the fill and empty
@@ -973,7 +976,7 @@ sub sf_split {
       carp "detected failure in ida_split; quitting";
       return undef;
     }
-    push @results, [$key,$mat,$bytes];
+    push @results, [$key,$mat,$bytes, @sharefiles];
 
     # Perl should handle closing file handles for us once they go out
     # of scope and they're destroyed.
@@ -986,45 +989,199 @@ sub sf_split {
 
 sub sf_combine {
 
-  my ($chunk,$order,$n);;
+  # Combining files is complicated by two issues:
+  #
+  # * Given a list of files, we don't know anything about which files
+  #   are supposed to belong to which chunk, so we would need to read
+  #   through the file headers to determine the chunk_start,
+  #   chunk_next values and use these to group the files.
+  # * The file format allows for omission of the transform data, so we
+  #   have to support having a key or transform matrix passed to us
+  #   for each chunk.
+  #
+  # The simplest solution to the first problem is to place
+  # responsibilty for identifying which files go together to form a
+  # complete chunk on the user. This should not be too onerous a task,
+  # since the sf_split routine allows the caller to store the share
+  # number and chunk number in each output filename. It also returns
+  # the names of the sharefiles for each chunk.
+  #
+  # That still leaves the problem of passing in a key or transform
+  # matrix and a row list (to associate each share with a particular
+  # row of the transform matrix). The problem isn't so much with being
+  # able to support this method of operation (since ida_combine
+  # already supports it), but with coming up with a calling convention
+  # which won't be overly complex.
+  #
+  # Note that the this issue of the key/transform matrix being stored
+  # outside the file highlights a potential problem with the file
+  # format. Namely, if the transform data isn't stored in the file,
+  # there's nothing within the file itself to indicate which row of
+  # the transform matrix the share corresponds to. The filename itself
+  # should provide this data, but if the contents of the file are
+  # transmitted and the filename gets lost or changed, then there's a
+  # possibility that the person combining the files will have
+  # problems. There are two solutions to this: either the split
+  # routine incorporates a share number within the header, or it's up
+  # to the central issuing authority (Dealer) to, eg, store a hash of
+  # each share and the associated row number for that share in the
+  # same database it uses to store the key/transform matrix. Partly
+  # because there are solutions, but mostly because I don't think that
+  # the centrally-stored key/transform matrix idea is a very good one,
+  # I don't feel inclined to change the current file format to include
+  # row numbers in the header. At least not for the time being.
+  #
+  # Getting back to the issue at hand, namely the calling convention,
+  # it seems that the best solution would be keep the parameters here
+  # as close as possible to the ones accepted by ida_combine. The two
+  # differences are:
+  #
+  # * instead of fillers and an emptier, we handle infiles and an
+  #   outfile
+  #
+  # * since we might need to handle multiple chunks, but ida_combine
+  #   only operates on a single set of shares, we should either accept
+  #   an array of parameters (one for each chunk) or only operate on
+  #   one chunk at a time. I'll go with the latter option since it
+  #   doesn't place much extra work (if any) on the calling program
+  #   and it probably makes it less error-prone since the user doesn't
+  #   have to remember to pass an array rather than a list of options.
+  #   Having finer granularity might help the caller with regards to
+  #   handling return values and error returns, too.
+  #
+  # That said, on with the code ...
 
-  my @chunklist=(0..$chunk);
-
-  my $ostream=sf_mk_file_ostream("/tmp/rabin-c-recombine.txt",$order/8);
-  die "Failed to create ostream\n" unless $ostream;
-
-  # we can shuffle the list if we want, but for simple testing, we
-  # might as well process them in order.
-
-  #    fisher_yates_shuffle(\@chunklist);
-
-  for my $chunk (@chunklist) {
-
-    my $istreams=[];
-    for my $i (0..$n-1) {
-      my $istream=
-	sf_mk_file_istream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",$order/8);
-      die "Failed to read istream\n" unless $istream;
-      push @$istreams, $istream;
-    }
-
-    print "Attempting to recombine chunk $chunk of file\n";
-
-    # pick k of the n input streams to use
-    #fisher_yates_shuffle($istreams,$k);
-
-    for my $stream (@$istreams) {
-      print "Using share: ", $stream->{FILENAME}->(), "\n";
-    }
-
-    rabin_ida_recombine($istreams,$ostream);
-
-    # close all files in this batch
-    foreach my $istream (@$istreams) {
-      $istream->{CLOSE}->();
-    }
-
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
   }
+  my %o=
+    (
+     quorum => undef,
+     shares => undef,   # only needed if key supplied
+     width => undef,
+     # supply either a list of key parameters and a list of keys or a
+     # pre-inverted matrix generated from those key details
+     key => undef,
+     matrix => undef,
+     sharelist => undef,
+     # source, sinks
+     infiles => undef,
+     outfile => undef,
+     # misc options
+     bufsize => 4096,
+     bytes => 0,
+     @_,
+     # byte order flags
+     inorder => 2,
+     outorder => 2,
+    );
+
+  # move all options into local variables
+  my ($k,$n,$w,$key,$mat,$sharelist,$infiles,$outfile,
+      $bufsize,$inorder,$outorder,$bytes_to_read) =
+	map {
+	  exists($o{$_}) ? $o{$_} : undef;
+	} qw(quorum shares width key matrix sharelist infiles
+	     outfile  bufsize inorder outorder bytes);
+
+  # Information about k, security level ($w), transform rows and chunk
+  # range should be stored in each share header, so we don't need to
+  # have them passed to us explicitly
+
+  my ($k,$sec_level,$width,$filesize,$order)=((undef) x 5);
+  my @matrix=();
+
+  # Read in headers from each istream
+  my $shares=0;
+  my $header_info;
+  my $header_size=undef;
+  my ($chunk_start,$chunk_next);
+  foreach my $istream (@$istreams) {
+
+    $header_info=read_ida_header($istream,$k,$sec_level,$chunk_start,
+				 $chunk_next,$header_size);
+
+    if ($header_info->{error}) {
+      die $header_info->{error_message};
+    }
+
+    # These values must be consistent across all shares
+    $k           = $header_info->{k};
+    $sec_level   = $header_info->{s};
+    $header_size = $header_info->{header_size};
+    $chunk_start = $header_info->{chunk_start};
+    $chunk_next  = $header_info->{chunk_next};
+
+    unless ($header_info->{opt_transform}) {
+      die "Share file contains no transform data. Can't proceed\n";
+    }
+
+    if (++$shares <= $k) {
+      push @matrix, $header_info->{transform};
+    } else {
+      warn "Redundant share detected\n";
+      last;
+    }
+  }
+
+  $header_size=$header_info->{header_length};
+
+  $order=$header_info->{security} * 8;
+
+  # Now that the header has been read in and all the streams agree on
+  # k, sec_level we proceed to build the inverse matrix using
+  # Gauss-Jordan elimination
+  gauss_jordan_invert($order,\@matrix,$k);
+
+  # At this point, we should have an inverse matrix in @matrix...  We
+  # should be able to read in one word from each stream to generate a
+  # new input column. Multiplying inverse x column will give us k
+  # output words.
+
+  my $n=$k;
+  my $emptier=empty_to_fh($ostream->{"FH"}->(),$chunk_start);
+  my @fillers=();
+  foreach my $istream (@$istreams) {
+    push @fillers, fill_from_fh($istream->{FH}->(), $k * ($order >>3),
+				$header_size);
+  }
+  my $mat=
+    Math::FastGF2::Matrix->new(
+			       rows => $k,
+			       cols => $k,
+			       width => $order >> 3,
+			       org => "rowwise",
+			      );
+  my @vals=();
+  map { push @vals, @$_ } @matrix;
+  $mat->setvals(0,0, \@vals);
+
+  my $bytes=$chunk_next - $chunk_start;
+  if ($bytes % ($k * ($order >> 3))) {
+    $bytes += (($k * ($order >> 3)) - $bytes % ($k * ($order >> 3)));
+  }
+  ida_combine( quorum => $k, width => $order >> 3,
+	       matrix => $mat,
+	       # source, sinks
+	       fillers => \@fillers, emptier => $emptier,
+	       # byte order flags
+	       inorder => 2, outorder => 2,
+	       # new arg: bufsize
+	       bufsize => 8192,
+	       bytes => $bytes,
+	     );
+
+  if ($header_info->{opt_final}) {
+    my $of=$ostream->{FILENAME}->();
+    print "Truncating output file '$of' to $header_info->{chunk_next} bytes\n";
+    truncate $of, $header_info->{chunk_next};
+  }
+
+
 }
 
 1;
