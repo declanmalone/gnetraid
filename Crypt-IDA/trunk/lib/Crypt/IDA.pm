@@ -897,7 +897,7 @@ sub ida_combine {
      @_,
     );
 
-  # move all options into local variables
+  # copy all options into local variables
   my ($k,$n,$w,$key,$mat,$sharelist,$fillers,$emptier,
       $bufsize,$inorder,$outorder,$bytes_to_read) =
 	map {
@@ -1028,16 +1028,12 @@ sub ida_combine {
     carp "failed to allocate input/output buffer matrices";
     return undef;
   }
-  my $rc=ida_process_streams($mat,
+  return ida_process_streams($mat,
 			     $in, $fillers,
 			     $out, [$emptier],
 			     $bytes_to_read,
 			     $inorder, $outorder);
-  if (defined ($rc)) {
-    return ($key,$mat,$rc);
-  } else {
-    return undef;
-  }
+
 }
 
 

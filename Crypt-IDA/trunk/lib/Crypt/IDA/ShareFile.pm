@@ -22,7 +22,7 @@ our $classname="Crypt::IDA::ShareFile";
 
 # I could eliminate the use of closures below, but it makes for a
 # convenient wrapper for handling byte order issues, and also for
-# implementing the "dry run" parameter to sf_write_ida_header later.
+# implementing the "dry run" option to sf_write_ida_header later.
 sub sf_mk_file_istream {
   my ($self,$class);
   if ($_[0] eq $classname or ref($_[0]) eq $classname) {
@@ -35,8 +35,9 @@ sub sf_mk_file_istream {
   my ($fh,$eof)=(undef,0);
 
   # basic checking of args
-  if (!defined($filename) or !defined($default_bytes_per_read) or
-      $default_bytes_per_read <= 0 or $default_bytes_per_read > 8 or
+  $default_bytes_per_read=1 unless defined($default_bytes_per_read);
+  if (!defined($filename) or
+      $default_bytes_per_read <= 0 or $default_bytes_per_read > 4 or
       int($default_bytes_per_read) != $default_bytes_per_read) {
     return undef;
   }
@@ -132,7 +133,7 @@ sub sf_mk_file_ostream {
     return undef;
   }
 
-  # try opening the file; use sysopen to match better with later sysreads
+  # try opening the file; use sysopen to match later sysreads
   return undef unless sysopen $fh,$filename,O_CREAT|O_TRUNC|O_WRONLY;
 
   my $methods=
@@ -208,7 +209,7 @@ sub sf_mk_file_ostream {
 #
 # Bit    name           Settings
 # 0      opt_large_k    Large (2-byte) k value?
-# 1 	 opt_large_s    Large (2-byte) s value?
+# 1 	 opt_large_w    Large (2-byte) s value?
 # 2 	 opt_final      Final chunk in file? (1=full file/final chunk)
 # 3 	 opt_transform  Is transform data included?
 #
@@ -297,7 +298,7 @@ sub sf_read_ida_header {
   # read options field and split out into separate names for each bit
   return $header_info unless read_some(1,"options","dec");
   $header_info->{opt_large_k}   = ($header_info->{options} & 1);
-  $header_info->{opt_large_s}   = ($header_info->{options} & 2) >> 1;
+  $header_info->{opt_large_w}   = ($header_info->{options} & 2) >> 1;
   $header_info->{opt_final}     = ($header_info->{options} & 4) >> 2;
   $header_info->{opt_transform} = ($header_info->{options} & 8) >> 3;
 
@@ -312,12 +313,12 @@ sub sf_read_ida_header {
 
   # read s (regular or large variety) and check for consistency
   return $header_info unless
-    read_some($header_info->{opt_large_s} ? 2 : 1 ,"s","dec");
-  if (defined($s) and $s != $header_info->{s}) {
+    read_some($header_info->{opt_large_w} ? 2 : 1 ,"s","dec");
+  if (defined($s) and $s != $header_info->{w}) {
     return 
       header_error("Inconsistent security values read from streams\n");
   } else {
-    $header_info->{security} = $header_info->{s};
+    $header_info->{security} = $header_info->{w};
   }
 
   # File offsets can be of variable width, so we precede each offset
@@ -343,7 +344,7 @@ sub sf_read_ida_header {
   }
 
   # now read in chunk_start and check that that it is a multiple of k * s
-  my $colsize=$header_info->{k} * $header_info->{s};
+  my $colsize=$header_info->{k} * $header_info->{w};
   if ($offset_width) {
     return $header_info unless 
       read_some($offset_width ,"chunk_start","dec");
@@ -400,7 +401,7 @@ sub sf_read_ida_header {
   if ($header_info->{opt_transform}) {
     my $matrix_row=[];
     for my $i (1 .. $header_info->{k}) {
-      return $header_info unless read_some($header_info->{s},"element");
+      return $header_info unless read_some($header_info->{w},"element");
       push @$matrix_row, $header_info->{element};
     }
     delete $header_info->{element};
@@ -471,7 +472,7 @@ sub sf_write_ida_header {
   $header_size += 1;
 
   # Set up and write options byte
-  my ($opt_large_k,$opt_large_s,$opt_transform);
+  my ($opt_large_k,$opt_large_w,$opt_transform);
 
   if ($k < 256) {
     $opt_large_k=0;
@@ -482,9 +483,9 @@ sub sf_write_ida_header {
   }
 
   if ($s < 256) {
-    $opt_large_s=0;
+    $opt_large_w=0;
   } elsif ($s < 65536) {
-    $opt_large_s=1;
+    $opt_large_w=1;
   } else {
     return 0;
   }
@@ -493,7 +494,7 @@ sub sf_write_ida_header {
 
   $ostream->{WRITE}->((
 		       ($opt_large_k)        |
-		       ($opt_large_s)   << 1 |
+		       ($opt_large_w)   << 1 |
 		       ($opt_final)     << 2 |
 		       ($opt_transform) << 3),
 		      1);
@@ -503,8 +504,8 @@ sub sf_write_ida_header {
   $ostream->{WRITE}->($k, $opt_large_k + 1);
   $header_size += $opt_large_k + 1;
 
-  $ostream->{WRITE}->($s, $opt_large_s + 1);
-  $header_size += $opt_large_s + 1;
+  $ostream->{WRITE}->($s, $opt_large_w + 1);
+  $header_size += $opt_large_w + 1;
 
   # chunk_start, chunk_next
   my ($width,$topval);
@@ -652,7 +653,7 @@ sub sf_calculate_chunk_sizes {
     $o{"chunk_next"}  = $cn;
     $hs=sf_write_ida_header(%o);
     unless (defined ($hs) and $hs > 0) {
-      carp "Something wrong with header parameters.";
+      carp "Something wrong with header options.";
       return undef;
     }
     return ( {
@@ -700,7 +701,7 @@ sub sf_calculate_chunk_sizes {
       $o{"chunk_next"}  = $cn;
       $hs=sf_write_ida_header(%o);
       unless (defined ($hs) and $hs > 0) {
-	carp "Something wrong with header parameters for chunk $i.";
+	carp "Something wrong with header options for chunk $i.";
 	return undef;
       }
       push @chunks, {
@@ -808,8 +809,8 @@ sub sf_split {
       filespec => undef,	# default value set later on
       @_,
       # The file format uses network (big-endian) byte order, so store
-      # this info after all the parameters have been read in (so the
-      # user can't accidentally override them).
+      # this info after all the user-supplied options have been read
+      # in
       inorder => 2,
       outorder => 2,
      );
@@ -837,7 +838,7 @@ sub sf_split {
   # all the details for each chunk.
   @chunks=sf_calculate_chunk_sizes(%o);
   unless (defined($chunks[0])) {
-    carp "Problem calculating chunk sizes from given parameters";
+    carp "Problem calculating chunk sizes from given options";
     return undef;
   }
 
@@ -910,7 +911,7 @@ sub sf_split {
   for my $i (@$chunklist) {
 
     my $chunk=$chunks[$i];
-    my $sharefiles=();		# we return a list of files in each
+    my @sharefiles=();		# we return a list of files in each
                                 # chunk at the end of the routine.
 
     # Unpack chunk details into local variables. Not all these
@@ -1032,7 +1033,7 @@ sub sf_combine {
   # row numbers in the header. At least not for the time being.
   #
   # Getting back to the issue at hand, namely the calling convention,
-  # it seems that the best solution would be keep the parameters here
+  # it seems that the best solution would be keep the options here
   # as close as possible to the ones accepted by ida_combine. The two
   # differences are:
   #
@@ -1041,7 +1042,7 @@ sub sf_combine {
   #
   # * since we might need to handle multiple chunks, but ida_combine
   #   only operates on a single set of shares, we should either accept
-  #   an array of parameters (one for each chunk) or only operate on
+  #   an array of options (one for each chunk) or only operate on
   #   one chunk at a time. I'll go with the latter option since it
   #   doesn't place much extra work (if any) on the calling program
   #   and it probably makes it less error-prone since the user doesn't
@@ -1060,127 +1061,166 @@ sub sf_combine {
   }
   my %o=
     (
+     # Options for source, sinks. These are the only required options.
+     infiles => undef,		# [ $file1, $file2, ... ]
+     outfile => undef,		# "filename"
+     # If specified, the following must agree with the values stored
+     # in the sharefiles. There's normally no need to set these.
      quorum => undef,
-     shares => undef,   # only needed if key supplied
      width => undef,
-     # supply either a list of key parameters and a list of keys or a
-     # pre-inverted matrix generated from those key details
+     # If matrix is set, it must be a pre-inverted matrix, and it will
+     # override any values read in from the file (along with emitting
+     # a warning if both are found).  Alternatively, if a key is
+     # supplied, the 'shares' and 'sharelist' options must also be
+     # given. A 'key' will also override any values stored in the file
+     # and also emit a warning if both are found.
      key => undef,
      matrix => undef,
-     sharelist => undef,
-     # source, sinks
-     infiles => undef,
-     outfile => undef,
+     shares => undef,		# only needed if key supplied
+     sharelist => undef,	# only needed if key supplied
      # misc options
      bufsize => 4096,
-     bytes => 0,
      @_,
-     # byte order flags
+     # byte order options (can't be overriden)
      inorder => 2,
      outorder => 2,
+     # no point in accepting a user-supplied value of $bytes, since we
+     # determine this from the share headers
+     bytes => undef,
     );
 
-  # move all options into local variables
-  my ($k,$n,$w,$key,$mat,$sharelist,$infiles,$outfile,
-      $bufsize,$inorder,$outorder,$bytes_to_read) =
+  # copy all options into local variables
+  my ($k,$n,$w,$key,$mat,$shares,$sharelist,$infiles,$outfile,
+      $bufsize,$inorder,$outorder,$bytes) =
 	map {
 	  exists($o{$_}) ? $o{$_} : undef;
-	} qw(quorum shares width key matrix sharelist infiles
-	     outfile  bufsize inorder outorder bytes);
+	} qw(quorum shares width key matrix shares sharelist
+	     infiles outfile  bufsize inorder outorder bytes);
+  my $fillers=[];
 
-  # Information about k, security level ($w), transform rows and chunk
-  # range should be stored in each share header, so we don't need to
-  # have them passed to us explicitly
+  # Check options
+  if (defined($key) and defined($mat)) {
+    carp "Conflicting key/matrix options given.";
+    return undef;
+  }
+  if (defined($key) and !(defined($shares) and defined($sharelist))) {
+    carp "key option also requires shares and sharelist options.";
+    return undef;
+  }
+  if (defined($k) and scalar(@$infiles) < $k) {
+    carp "For given quorum value $k, I need (at least) $k infiles";
+    return undef;
+  }
 
-  my ($k,$sec_level,$width,$filesize,$order)=((undef) x 5);
+  # We won't build the transform matrix until later (or not at all if
+  # we're supplied with a matrix or key option). We'll store the
+  # values returned from sf_read_ida_header in a regular array and
+  # then convert them into a Math::FastGF2::Matrix object when we come
+  # to calculating the inverse matrix.
   my @matrix=();
 
-  # Read in headers from each istream
-  my $shares=0;
-  my $header_info;
-  my $header_size=undef;
-  my ($chunk_start,$chunk_next);
-  foreach my $istream (@$istreams) {
+  # Read in headers from each infile and create a new filler for each
+  my ($nshares, $header_info, $header_size)=(0,undef,undef);
+  my ($chunk_start,$chunk_next)=(undef,undef);
+  foreach my $infile (@$infiles) {
 
-    $header_info=read_ida_header($istream,$k,$sec_level,$chunk_start,
+    my $istream=sf_mk_file_istream($infile,1);
+    unless (defined($istream)) {
+      carp "Problem opening input file $infile: $!";
+      return undef;
+    }
+
+    # It's fine for some of these values to be undefined the first
+    # time around. However if they were specified as options and
+    # the first header read in doesn't match, or if shares have
+    # inconsistent values then read_ida_header will detect this.
+    $header_info=read_ida_header($istream,$k,$w,$chunk_start,
 				 $chunk_next,$header_size);
 
     if ($header_info->{error}) {
-      die $header_info->{error_message};
+      carp $header_info->{error_message};
+      return undef;
     }
 
-    # These values must be consistent across all shares
+    # Store values to check for consistency across all shares
     $k           = $header_info->{k};
-    $sec_level   = $header_info->{s};
+    $w           = $header_info->{w};
     $header_size = $header_info->{header_size};
     $chunk_start = $header_info->{chunk_start};
     $chunk_next  = $header_info->{chunk_next};
 
-    unless ($header_info->{opt_transform}) {
-      die "Share file contains no transform data. Can't proceed\n";
-    }
-
-    if (++$shares <= $k) {
-      push @matrix, $header_info->{transform};
+    if (++$nshares <= $k) {
+      if ($header_info->{opt_transform}) {
+	if (defined($mat)) {
+	  carp "Ignoring file transform data (overriden by matrix option)";
+	} elsif (defined($key)) {
+	  carp "Ignoring file transform data (overriden by key option)";
+	} else {
+	  push @matrix, $header_info->{transform};
+	}
+      } else {
+	unless (defined ($mat) or defined($key)) {
+	  carp "Share file contains no transform data and no " .
+	    "key/matrix options were supplied.";
+	  return undef;
+	}
+      }
     } else {
-      warn "Redundant share detected\n";
+      carp "Redundant share(s) detected and ignored";
       last;
     }
+
+    push @$fillers, fill_from_file($infile,$k * $w, $header_size);
   }
-
-  $header_size=$header_info->{header_length};
-
-  $order=$header_info->{security} * 8;
 
   # Now that the header has been read in and all the streams agree on
-  # k, sec_level we proceed to build the inverse matrix using
-  # Gauss-Jordan elimination
-  gauss_jordan_invert($order,\@matrix,$k);
-
-  # At this point, we should have an inverse matrix in @matrix...  We
-  # should be able to read in one word from each stream to generate a
-  # new input column. Multiplying inverse x column will give us k
-  # output words.
-
-  my $n=$k;
-  my $emptier=empty_to_fh($ostream->{"FH"}->(),$chunk_start);
-  my @fillers=();
-  foreach my $istream (@$istreams) {
-    push @fillers, fill_from_fh($istream->{FH}->(), $k * ($order >>3),
-				$header_size);
+  # $k and $w, we proceed to build the inverse matrix unless we've
+  # been supplied with a key or (pre-inverted) matrix.
+  unless (defined($key) or defined($mat)) {
+    $mat=Math::FastGF2::Matrix->new(
+				    rows  => $k,
+				    cols  => $k,
+				    width => $w,
+				    org   => "rowwise",
+				   );
+    my @vals=();
+    map { push @vals, @$_ } @matrix;
+    $mat->setvals(0,0, \@vals, $inorder);
+    $mat=$mat->invert();
   }
-  my $mat=
-    Math::FastGF2::Matrix->new(
-			       rows => $k,
-			       cols => $k,
-			       width => $order >> 3,
-			       org => "rowwise",
-			      );
-  my @vals=();
-  map { push @vals, @$_ } @matrix;
-  $mat->setvals(0,0, \@vals);
 
-  my $bytes=$chunk_next - $chunk_start;
-  if ($bytes % ($k * ($order >> 3))) {
-    $bytes += (($k * ($order >> 3)) - $bytes % ($k * ($order >> 3)));
+  $bytes=$chunk_next - $chunk_start;
+  if ($bytes % ($k * $w)) {
+    unless ($header_info->{"opt_final"}) {
+      carp "Invalid: non-final share is not a multiple of quorum x width";
+      return undef;
+    }
+    $bytes += (($k * $w) - $bytes % ($k * $w));
   }
-  ida_combine( quorum => $k, width => $order >> 3,
-	       matrix => $mat,
-	       # source, sinks
-	       fillers => \@fillers, emptier => $emptier,
-	       # byte order flags
-	       inorder => 2, outorder => 2,
-	       # new arg: bufsize
-	       bufsize => 8192,
-	       bytes => $bytes,
-	     );
+
+  # we leave creating/opening the output file until relatively late
+  # since we need to know what offset to seek to in it, and we only
+  # know that when we've examined the sharefile headers
+  my $emptier=empty_to_file($outfile,undef,$chunk_start);
+
+  # Need to update %o before calling ida_combine
+  $o{"emptier"} = $emptier;	# leave error-checking to ida_combine
+  $o{"fillers"} = $fillers;
+  $o{"matrix"}  = $mat     unless (defined($key));
+  $o{"quorum"}  = $k;
+  $o{"width"}   = $w;
+  $o{"bytes"}   = $bytes;
+
+  my $output_bytes=ida_combine(%o);
+
+  return undef unless defined($output_bytes);
 
   if ($header_info->{opt_final}) {
-    my $of=$ostream->{FILENAME}->();
-    print "Truncating output file '$of' to $header_info->{chunk_next} bytes\n";
-    truncate $of, $header_info->{chunk_next};
+    warn "Truncating output file to $header_info->{chunk_next} bytes\n";
+    truncate $outfile, $header_info->{chunk_next};
   }
 
+  return $output_bytes;
 
 }
 
@@ -1289,7 +1329,7 @@ The options bits are as follows:
 
   Bit     name           Settings
   0       opt_large_k    Large (2-byte) k value?
-  1 	  opt_large_s    Large (2-byte) s value?
+  1 	  opt_large_w    Large (2-byte) w value?
   2 	  opt_final      Final chunk in file? (1=full file/final chunk)
   3 	  opt_transform  Is transform data included?
 
