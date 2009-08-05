@@ -767,7 +767,7 @@ sub ida_split {
 
   if (defined($sharelist)) {
     my $new_sharelist=[];	# list without dups, invalid rows
-    my @saw_row=((0) x $k);	# initialisation prevents warnings
+    my @saw_row=((0) x $n);	# initialisation prevents warnings
     for my $row (@$sharelist) {
       if ($saw_row[$row]) {
 	carp "Duplicate share number $row in sharelist; ignoring";

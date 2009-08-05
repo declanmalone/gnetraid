@@ -429,6 +429,14 @@ sub sf_write_ida_header {
     $self=$classname;
   }
   my %header_info=(
+		   ostream => undef,
+		   version => undef,
+		   quorum => undef,
+		   width => undef,
+		   chunk_start => undef,
+		   chunk_next => undef,
+		   transform => undef,
+		   final => undef,
 		   dry_run => 0,
 		   @_
 		  );
@@ -440,7 +448,7 @@ sub sf_write_ida_header {
     map {
       exists($header_info{$_}) ? $header_info{$_} : undef
     } qw(ostream version quorum width chunk_start chunk_next transform
-	 opt_final dry_run);
+	 final dry_run);
 
   return 0 unless defined($version) and $version == 1;
   return 0 unless defined($k) and defined($s) and
@@ -751,11 +759,11 @@ sub sf_sprintf_filename {
   } else {
     $self=$classname;
   }
-  my ($format,$filename,$share,$chunk)=@_;
+  my ($format,$filename,$chunk,$share)=@_;
 
   $format=~s/\%f/$filename/;
-  $format=~s/\%s/$share/;
   $format=~s/\%c/$chunk/;
+  $format=~s/\%s/$share/;
 
   return $format;
 }
@@ -772,9 +780,13 @@ sub sf_split {
     $self=$classname;
   }
   %o=(
+      # We'll be passing this hash on directly to ida_split later on
+      # so option names here will overlap with the option names needed
+      # by that routine. The same applies to option names in
+      # sf_write_ida_header.
       shares => undef,
       quorum => undef,
-      width => undef,
+      width => 1,
       filename => undef,
       # supply a key, a matrix or neither
       key => undef,
@@ -790,14 +802,19 @@ sub sf_split {
       out_chunk_size => undef,
       out_file_size => undef,
       # allow creation of a subset of shares, chunks
-      sharelist => undef,
-      chunklist => undef,
+      sharelist => undef,	# [ $row1, $row2, ... ]
+      chunklist => undef,	# [ $chunk1, $chunk2, ... ]
       # specify pattern to use for share filenames
-      filespec => undef,
+      filespec => undef,	# default value set later on
       @_,
+      # The file format uses network (big-endian) byte order, so store
+      # this info after all the parameters have been read in (so the
+      # user can't accidentally override them).
+      inorder => 2,
+      outorder => 2,
      );
 
-  my @chunks;
+  my (@chunks, @results);
 
   # Copy options into local variables
   my ($n, $k, $w, $filename,
@@ -816,30 +833,154 @@ sub sf_split {
       n_chunks in_chunk_size out_chunk_size out_file_size
       sharelist chunklist filespec);
 
-
+  # Pass all options to sf_calculate_chunk_sizes and let it figure out
+  # all the details for each chunk.
   @chunks=sf_calculate_chunk_sizes(%o);
   unless (defined($chunks[0])) {
     carp "Problem calculating chunk sizes from given parameters";
     return undef;
   }
 
-  for my $chunk (@chunks) {
-    for my $i (0..$n-1) {
-      my $sharefile=
-	sf_mk_file_ostream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",
-			   $w);
-      die "Failed to create ostream\n" unless $ostream;
-      push @$ostreams, $ostream;
+  # Now that we know how many chunks there are, we can check that the
+  # filespec mentions "%c" for the chunk number. The "%s" specifier is
+  # also always required. Also, we can set up different default
+  # filespecs for single-chunk and multi-chunk splits.
+  if (defined($filespec)) {
+    unless ($filespec =~ /\%s/) {
+      carp "filespec must include \%s for share number";
+      return undef;
+    }
+    unless (scalar (@chunks) == 1 or $filespec =~ /\%c/) {
+      carp "filespec must include \%c for multi-chunk splits";
+      return undef;
+    }
+  } else {
+    $filespec=(scalar (@chunks) == 1) ? '%f-%s' : '%f-%c-%s';
+  }
+
+  # check the sharelist and chunklist arrays to weed out dups and
+  # invalid share/chunk numbers. If we weren't passed a value for one
+  # or the other, then we'll default to processing all shares/all
+  # chunks.
+  if (defined($sharelist)) {
+    my $new_sharelist=[];	# list without dups, invalid values
+    my @saw_val=((0) x $n);	# initialisation prevents warnings
+    for my $i (@$sharelist) {
+      if ($saw_val[$i]) {
+	carp "Duplicate share number $i in sharelist; ignoring";
+      } elsif ($i < 0 or $i >= $n) {
+	carp "Share number $i out of range in sharelist; ignoring.";
+      } else {
+	++$saw_val[$i];
+	push @$new_sharelist, $i;
+      }
+    }
+    $sharelist=$new_sharelist;
+    unless (scalar(@$sharelist) > 0) {
+      carp "sharelist does not contain any valid share numbers; aborting";
+      return undef;
+    }
+  } else {
+    $sharelist=[ 0 .. $n - 1 ];
+  }
+
+  if (defined($chunklist)) {
+    my $new_chunklist=[];	# list without dups, invalid values
+    my @saw_val=((0) x scalar(@chunks));
+    for my $i (@$chunklist) {
+      if ($saw_val[$i]) {
+	carp "Duplicate chunk number $i in chunklist; ignoring";
+      } elsif ($i < 0 or $i >= scalar(@chunks)) {
+	carp "Chunk number $i out of range in chunklist; ignoring.";
+      } else {
+	++$saw_val[$i];
+	push @$new_chunklist, $i;
+      }
+    }
+    $chunklist=$new_chunklist;
+    unless (scalar(@$chunklist) > 0) {
+      carp "chunklist does not contain any valid chunk numbers; aborting";
+      return undef;
+    }
+  } else {
+    $chunklist=[ 0 .. scalar(@chunks) - 1 ];
+  }
+
+  # Now loop through each chunk that we've been asked to create
+  for my $i (@$chunklist) {
+
+    my $chunk=$chunks[$i];
+
+    # Unpack chunk details into local variables. Not all these
+    # variables are needed, but we might as well unpack them anyway.
+    my ($chunk_start,$chunk_next,$chunk_size,$file_size,
+	$final,$padding) =
+	  map { $chunk->{$_} }
+	    qw (
+		chunk_start chunk_next chunk_size file_size
+		final padding
+	       );
+
+    # We should only really need to open the input file once,
+    # regardless of how many chunks/shares we're creating. But since
+    # we're using Crypt::IDA's file reader, and it allows us to seek
+    # to the start of the chunk when we create the callback, it's
+    # easier to (re-)open and seek once per chunk.
+    my $filler=fill_from_file($filename, $k * $w, $chunk_start);
+    unless (defined($filler)) {
+      carp "Failed to open input file: $!";
+      return undef;
     }
 
+    # For opening output files, we're responsible for writing the file
+    # header, so we first make one of our ostreams, write the header,
+    # then create a new empty_to_fh handler which will seek past the
+    # header.
+    $o{"chunk_start"}= $chunk_start;  # same values for all shares
+    $o{"chunk_next"} = $chunk_next;   # in this chunk
+    $o{"final"}      = $final;
+    my $emptiers=[];
+    for my $j (@$sharelist) {
+      my $sharestream = sf_mk_file_ostream(
+        sf_sprintf_filename($filespec, $filename, $i, $j), $w);
+      unless (defined($sharestream)) {
+	carp "Failed to create share file (chunk $i, share $j): $!";
+	return undef;
+      }
+      my $hs=sf_write_ida_header(%o, ostream => $sharestream);
+      unless (defined ($hs) and $hs > 0) {
+	carp "Problem writing header for share (chunk $i, share $j)";
+	return undef;
+      }
+      unless ($hs + $chunk_size == $file_size) {
+	carp "file size mismatch ($i,$j) (this shouldn't happen)";
+	return undef;
+      }
+      my $emptier=empty_to_fh($sharestream->{"FH"}->(),$hs);
+      push @$emptiers, $emptier;
+    }
+
+    # Now that we've written the headers and set up the fill and empty
+    # handlers, we only need to add details of the filler and
+    # emptiers, then pass the entire options array on to ida_split to
+    # create all shares for this chunk.
+    $o{"filler"}   = $filler;
+    $o{"emptiers"} = $emptiers;
     my ($key,$mat,$bytes)=ida_split(%o);
 
-    # close all files in this batch
-    foreach my $ostream (@$ostreams) {
-      $ostream->{CLOSE}->();
+    # check for success, then save the results
+    unless (defined($mat)) {
+      carp "detected failure in ida_split; quitting";
+      return undef;
     }
+    push @results, [$key,$mat,$bytes];
+
+    # Perl should handle closing file handles for us once they go out
+    # of scope and they're destroyed.
 
   }
+
+  return @results;
 
 }
 
