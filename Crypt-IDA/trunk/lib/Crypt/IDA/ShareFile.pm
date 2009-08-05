@@ -743,7 +743,22 @@ sub sf_calculate_chunk_sizes {
 
 }
 
+sub sf_sprintf_filename {
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
+  }
+  my ($format,$filename,$share,$chunk)=@_;
 
+  $format=~s/\%f/$filename/;
+  $format=~s/\%s/$share/;
+  $format=~s/\%c/$chunk/;
+
+  return $format;
+}
 
 sub sf_split {
 
@@ -782,79 +797,49 @@ sub sf_split {
       @_,
      );
 
+  my @chunks;
 
-  #my ($k,$n,$order)=(3,8,16);
+  # Copy options into local variables
+  my ($n, $k, $w, $filename,
+      $key, $matrix, $version,
+      $save_transform,
+      $rand, $bufsize,
+      $n_chunks, $in_chunk_size, $out_chunk_size, $out_file_size,
+      $sharelist, $chunklist,$filespec
+     ) =
+    map {
+      exists($o{$_}) ? $o{$_} : undef
+    } qw(
+      shares quorum width filename
+      key matrix version
+      rand bufsize
+      n_chunks in_chunk_size out_chunk_size out_file_size
+      sharelist chunklist filespec);
 
-  # symmetric test cases
-  my ($k,$n,$order)=(8,8,8);
-  #my ($k,$n,$order)=(8,8,16);
-  #my ($k,$n,$order)=(8,8,128);
 
-  # larger test cases
-  #my ($k,$n,$order)=(8,16,16);
-  #my ($k,$n,$order)=(8,16,128);
-
-  my $chunk_size=4096;
-
-  if ($chunk_size % ($k * $order /8)) {
-    print "Rounding down chunk size from $chunk_size to be a multiple of ",
-      ($k * $order /8), "\n";
-    $chunk_size-=($chunk_size % ($k * $order /8));
-    print "New Chunk size is $chunk_size\n";
+  @chunks=sf_calculate_chunk_sizes(%o);
+  unless (defined($chunks[0])) {
+    carp "Problem calculating chunk sizes from given parameters";
+    return undef;
   }
 
-  # As an alternative to specifying a chunk size, we could also
-  # calculate chunk size as a fraction of the input file size, or
-  # start with a target chunk size. If we use the latter, we have to
-  # take the length of the file header into account in the output
-  # share files. In all cases, we have to round the chunk size to a
-  # multiple of k * sec_level, ie the length in bytes of one column of
-  # the input matrix.
-
-  my ($chunk,$chunk_start,$chunk_next)=(0,0,$chunk_size);
-
-  SPLIT: {
-      my $istream=sf_mk_file_istream("/tmp/32kb.pak",$order/8);
-
-      die "Failed to open istream\n" unless $istream;
-
-      print "#k=$k; n=$n; order=$order\n";
-
-      my $filesize=-s $istream->{FILENAME}->();
-
-      while ($chunk_start < $filesize) {
-	my $ostreams=[];
-	for my $i (0..$n-1) {
-	  my $ostream=
-	    sf_mk_file_ostream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",
-			    $order/8);
-	  die "Failed to create ostream\n" unless $ostream;
-	  push @$ostreams, $ostream;
-	}
-
-	rabin_ida_split(
-          {
-	   chunk_start => $chunk_start, chunk_next => $chunk_next,
-	   version => 1,
-	   k=>$k, n=>$n, order=>$order, istream=>$istream,
-	   sharestreams=>$ostreams,
-	  } );
-
-	# close all files in this batch
-	foreach my $ostream (@$ostreams) {
-	  $ostream->{CLOSE}->();
-	}
-
-	# increment range counters for next chunk
-	++$chunk;
-	$chunk_start += $chunk_size;
-	$chunk_next  += $chunk_size;
-	$chunk_next=$filesize if $chunk_next > $filesize;
-      }
-
-      print "Created ", --$chunk, " chunks\n";
-
+  for my $chunk (@chunks) {
+    for my $i (0..$n-1) {
+      my $sharefile=
+	sf_mk_file_ostream("/tmp/rabin-c-chunk-$chunk-share-$i.txt",
+			   $w);
+      die "Failed to create ostream\n" unless $ostream;
+      push @$ostreams, $ostream;
     }
+
+    my ($key,$mat,$bytes)=ida_split(%o);
+
+    # close all files in this batch
+    foreach my $ostream (@$ostreams) {
+      $ostream->{CLOSE}->();
+    }
+
+  }
 
 }
 
