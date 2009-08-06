@@ -46,7 +46,10 @@ my $r=GetOptions ( "h|help"     => \$need_help,
 		   "F|out_file_size=i" => \$out_file_size
 		 );
 
-if ($need_help) {
+$infile=shift unless defined $infile;
+
+if ($need_help or !defined($quorum) or !defined($shares) or 
+    !defined($infile)) {
   print <<HELP;
 $0 : split file using Rabin's Information Dispersal Algorithm
 
@@ -89,8 +92,6 @@ Creates chunks/shares 1, 4, 5, 6, and 8.
 HELP
   exit 0;
 }
-
-$infile=shift unless defined $infile;
 
 sf_split( filename => $infile,
 	  quorum   => $quorum,

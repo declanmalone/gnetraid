@@ -799,13 +799,15 @@ sub ida_key_to_matrix {
     carp "Failed to create transform matrix";
     return undef;
   }
-  for my $row (0..scalar(@$sharelist) - 1) {
+  my $dest_row=0;
+  for my $row (@$sharelist) {
     for my $col (0 .. $k-1) {
       my $x   = $key->[$row];
       my $y   = $key->[$n+$col];
       my $sum = $x ^ $y;
-      $mat->setval($row, $col, gf2_inv($w << 3,$sum));
+      $mat->setval($dest_row, $col, gf2_inv($w << 3,$sum));
     }
+    ++$dest_row;
   }
   if (defined($invert) and $invert) {
     return $mat->invert;
@@ -940,12 +942,12 @@ sub ida_split {
     }
 
     # now generate matrix from key
-    $mat=ida_key_to_matrix( "quorum"     => $k,
-			    "shares"     => $n,
-			    "width"      => $w,
-			    "sharelist"  => $sharelist,
-			    "key"        => $key,
-			    "skipchecks" => 1);
+    $mat=ida_key_to_matrix( "quorum"      => $k,
+			    "shares"      => $n,
+			    "width"       => $w,
+			    "sharelist"   => $sharelist,
+			    "key"         => $key,
+			    "skipchecks?" => 0);
   }
 
   # create the buffer matrices and start the transform
@@ -1068,7 +1070,8 @@ sub ida_combine {
       carp "sharelist does not have k=$k elements";
       return undef;
     }
-    $mat=ida_key_to_matrix(%o, "skipchecks?" => 1, "invert?" => 1);
+    #warn "Creating and inverting matrix from key\n";
+    $mat=ida_key_to_matrix(%o, "skipchecks?" => 0, "invert?" => 1);
     unless (defined($mat)) {
       carp "Failed to invert transform matrix (this shouldn't happen)";
       return undef;
@@ -1088,6 +1091,11 @@ sub ida_combine {
     carp "failed to allocate input/output buffer matrices";
     return undef;
   }
+  my @vals=$mat->getvals(0,0,$k * $n);
+  #warn "matrix is [" . (join ", ", map
+  #			{sprintf("%02x",$_) } @vals) . "] (" .
+  #		  scalar(@vals) . " values)\n";
+
   return ida_process_streams($mat,
 			     $in, $fillers,
 			     $out, [$emptier],

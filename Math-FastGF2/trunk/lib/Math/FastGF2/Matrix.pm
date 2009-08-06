@@ -507,6 +507,8 @@ sub invert {
   my $self  = shift;
   my $class = ref($self);
 
+  #carp "Asked to invert matrix!";
+
   unless ($self->COLS == $self->ROWS) {
     carp "invert only works on square matrices";
     return undef;

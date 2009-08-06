@@ -176,7 +176,7 @@ sub sf_mk_file_ostream {
        my $buf="";
 
        if ($num >= 256 ** $bytes_to_write) {
-	 warn "ostream: Number too large. Discarded high bits.\n";
+	 carp "ostream: Number too large. Discarded high bits.";
 	 $num %= (256 ** ($bytes_to_write) - 1);
        }
 
@@ -243,9 +243,9 @@ sub sf_read_ida_header {
   # undefined. We store any read values in the returned hash, so it's
   # up to the caller to take them out and pass them back to us when
   # reading the next header in the batch.
-  my ($k,$s,$start,$next,$hdr)=@_;
+  my ($k,$w,$start,$next,$hdr)=@_;
 
-  my $header_length=0;		  # we also send this back in hash
+  my $header_size=0;		  # we also send this back in hash
 
   # error reporting
   $header_info->{header_error}=0;   # 0=no error, 1=failure
@@ -271,7 +271,7 @@ sub sf_read_ida_header {
 	}
       }
       $header_info->{$field}=$vec;
-      $header_length+=$bytes;
+      $header_size+=$bytes;
       return 1;			# read some? got some.
     } else {
       $header_info->{error}++;
@@ -317,8 +317,8 @@ sub sf_read_ida_header {
 
   # read s (regular or large variety) and check for consistency
   return $header_info unless
-    read_some($header_info->{opt_large_w} ? 2 : 1 ,"s","dec");
-  if (defined($s) and $s != $header_info->{w}) {
+    read_some($header_info->{opt_large_w} ? 2 : 1 ,"w","dec");
+  if (defined($w) and $w != $header_info->{w}) {
     return 
       header_error("Inconsistent security values read from streams\n");
   } else {
@@ -347,7 +347,7 @@ sub sf_read_ida_header {
     return header_error("File size must be less than 4Gb!\n");
   }
 
-  # now read in chunk_start and check that that it is a multiple of k * s
+  # now read in chunk_start and check that that it is a multiple of k * w
   my $colsize=$header_info->{k} * $header_info->{w};
   if ($offset_width) {
     return $header_info unless 
@@ -414,10 +414,10 @@ sub sf_read_ida_header {
 
   # Now that we've read in all the header bytes, check that header
   # size is consistent with expectations.
-  if (defined($hdr) and $hdr != $header_length) {
+  if (defined($hdr) and $hdr != $header_size) {
     return header_error("Inconsistent header sizes read from streams\n");
   } else {
-    $header_info->{header_length}=$header_length;
+    $header_info->{header_size}=$header_size;
   }
 
   return $header_info;
@@ -632,10 +632,10 @@ sub sf_calculate_chunk_sizes {
   # We'll pass %o onto sf_write_ida_header later, so we need a dummy
   # value for transform if "save_transform" is set.
   if (defined($save_transform) and $save_transform) {
-    warn "making dummy transform array\n";
+    #warn "making dummy transform array\n";
     $o{"transform"} = [ (0) x ($k * $w) ];
   } else {
-    warn "save_transform not defined\n";
+    #warn "save_transform not defined\n";
     $o{"transform"} = undef;
   }
 
@@ -662,7 +662,7 @@ sub sf_calculate_chunk_sizes {
       carp "Something wrong with header options.";
       return undef;
     }
-    warn "Single chunk\n";
+    #warn "Single chunk\n";
     return ( {
 	      "chunk_start" => $cb,
 	      "chunk_next"  => $cn,
@@ -709,7 +709,7 @@ sub sf_calculate_chunk_sizes {
 	carp "Something wrong with header options for chunk $i.";
 	return undef;
       }
-      warn "Chunk $cb-$cn, size $cs, fs=$hs + $cs, final=0\n";
+      #warn "Chunk $cb-$cn, size $cs, fs=$hs + $cs, final=0\n";
       push @chunks, {
 		     "chunk_start" => $cb,
 		     "chunk_next"  => $cn,
@@ -735,9 +735,9 @@ sub sf_calculate_chunk_sizes {
 		     "opt_final"   => 1,
 		     "padding"     => $padded_file_size - $file_size,
 		    };
-    warn "Last chunk: $cb-$padded_file_size, size ".
-      ($padded_file_size - $cb) . ", fs=$hs + $padded_file_size - $cb, ".
-	"final=1\n";
+    #warn "Last chunk: $cb-$padded_file_size, size ".
+    #  ($padded_file_size - $cb) . ", fs=$hs + $padded_file_size - $cb, ".
+    #	"final=1\n";
 
     die "last chunk starts beyond eof (this shouldn't happen)\n" if
       ($cb >= $padded_file_size);
@@ -937,18 +937,20 @@ sub sf_split {
       }
 
       # now generate matrix from key
-      $mat=ida_key_to_matrix( "quorum"     => $k,
-			      "shares"     => $n,
-			      "width"      => $w,
-			      "sharelist"  => $sharelist,
-			      "key"        => $key,
-			      "skipchecks" => 1);
+      $mat=ida_key_to_matrix( "quorum"      => $k,
+			      "shares"      => $n,
+			      "width"       => $w,
+			      "sharelist"   => $sharelist,
+			      "key"         => $key,
+			      "skipchecks?" => 0);
+      $o{"matrix"}=$mat;	# stash new matrix
+      $o{"key"}=undef;		# and undefine key (if any)
     }
 
     $o{"chunk_start"}= $chunk_start;  # same values for all shares
     $o{"chunk_next"} = $chunk_next;   # in this chunk
     $o{"opt_final"}  = $opt_final;
-    warn "Going to create chunk $chunk_start - $chunk_next (final $opt_final)\n";
+    #warn "Going to create chunk $chunk_start - $chunk_next (final $opt_final)\n";
     my $emptiers=[];
     for my $j (@$sharelist) {
       # For opening output files, we're responsible for writing the file
@@ -963,7 +965,7 @@ sub sf_split {
 	return undef;
       }
       my $hs=sf_write_ida_header(%o, ostream => $sharestream,
-				transform => [$mat->getvals($j,0,$k)]);
+				 transform => [$mat->getvals($j,0,$k)]);
       unless (defined ($hs) and $hs > 0) {
 	carp "Problem writing header for share (chunk $i, share $j)";
 	return undef;
@@ -1148,8 +1150,8 @@ sub sf_combine {
     # time around. However if they were specified as options and
     # the first header read in doesn't match, or if shares have
     # inconsistent values then read_ida_header will detect this.
-    $header_info=read_ida_header($istream,$k,$w,$chunk_start,
-				 $chunk_next,$header_size);
+    $header_info=sf_read_ida_header($istream,$k,$w,$chunk_start,
+				    $chunk_next,$header_size);
 
     if ($header_info->{error}) {
       carp $header_info->{error_message};
@@ -1184,6 +1186,7 @@ sub sf_combine {
       last;
     }
 
+    warn "Filler to skip $header_size bytes\n";
     push @$fillers, fill_from_file($infile,$k * $w, $header_size);
   }
 
@@ -1191,6 +1194,7 @@ sub sf_combine {
   # $k and $w, we proceed to build the inverse matrix unless we've
   # been supplied with a key or (pre-inverted) matrix.
   unless (defined($key) or defined($mat)) {
+    #warn "Trying to create combine matrix with k=$k, w=$w\n";
     $mat=Math::FastGF2::Matrix->new(
 				    rows  => $k,
 				    cols  => $k,
@@ -1199,8 +1203,16 @@ sub sf_combine {
 				   );
     my @vals=();
     map { push @vals, @$_ } @matrix;
+    #warn "matrix is [" . (join ", ", map
+    #			  {sprintf("%02x",$_) } @vals) . "] (" .
+    #     scalar(@vals) . " values)\n";
     $mat->setvals(0,0, \@vals, $inorder);
     $mat=$mat->invert();
+    @vals=$mat->getvals(0,0,$k * $k);
+    #warn "inverse is [" . (join ", ", map
+    #			  {sprintf("%02x",$_) } @vals) . "] (" .
+    #      scalar(@vals) . " values)\n";
+
   }
 
   $bytes=$chunk_next - $chunk_start;
@@ -1230,8 +1242,8 @@ sub sf_combine {
   return undef unless defined($output_bytes);
 
   if ($header_info->{opt_final}) {
-    warn "Truncating output file to $header_info->{chunk_next} bytes\n";
-    truncate $outfile, $header_info->{chunk_next};
+    warn "#Truncating output file to $header_info->{chunk_next} bytes\n";
+    #truncate $outfile, $header_info->{chunk_next};
   }
 
   return $output_bytes;
