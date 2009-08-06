@@ -1,7 +1,7 @@
 # -*- Perl -*-
 
 use Test::More tests => 2567;
-BEGIN { use_ok('Crypt::IDA', ':all') };
+BEGIN { use_ok('Crypt::IDA', ':default') };
 
 my $class="Crypt::IDA";
 

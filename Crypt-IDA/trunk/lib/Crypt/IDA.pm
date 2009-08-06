@@ -1,4 +1,3 @@
-# -*- Perl -*-
 package Crypt::IDA;
 
 use 5.008008;
@@ -10,19 +9,23 @@ use Fcntl qw(:DEFAULT :seek);
 use Math::FastGF2 qw(:ops);
 use Math::FastGF2::Matrix;
 
+use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION);
+
 require Exporter;
 
-my @export_DEFAULT = qw(fill_from_string fill_from_fh
-			fill_from_file empty_to_string
-			empty_to_fh empty_to_file
-			ida_split ida_combine);
-my @export_extras  = qw(ida_rng_init ida_fisher_yates_shuffle
-			ida_generate_key ida_check_key);
+our @export_default = qw(fill_from_string fill_from_fh
+			 fill_from_file empty_to_string
+			 empty_to_fh empty_to_file
+			 ida_split ida_combine);
+our @export_extras  = qw(ida_rng_init ida_fisher_yates_shuffle
+			 ida_generate_key ida_check_key
+			 ida_key_to_matrix ida_check_transform_opts
+			 ida_check_list);
 
 our @ISA = qw(Exporter);
-our %EXPORT_TAGS = ('DEFAULT' => [ @export_DEFAULT ],
-		    'extras'  => [ @export_extras  ],
-		    'all'     => [ @export_extras, @export_DEFAULT ] );
+our %EXPORT_TAGS = ( 'default' => [ @export_default ],
+		     'extras'  => [ @export_extras  ],
+		     'all'     => [ @export_extras, @export_default  ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw( );
 
@@ -667,6 +670,149 @@ sub ida_generate_key {
   return $key;
 };
 
+sub ida_check_list {
+
+  # Check a given listref to make sure it has no dups and that all
+  # values are within range. Returns the list less any deleted
+  # elements, as well as doing an in-place delete on the passed
+  # listref.
+
+  my ($list,$item,$min,$max)=@_;
+
+  my $new_list=[];	# list without dups, invalid values
+  my @saw_val=((0) x $max);
+  for my $i (@$list) {
+    if ($saw_val[$i]) {
+      carp "Duplicate $item number $i in ${item}list; ignoring";
+    } elsif ($i < $min or $i > $max) {
+      carp "$item number $i out of range in ${item}list; ignoring.";
+    } else {
+      ++$saw_val[$i];
+      push @$new_list, $i;
+    }
+  }
+  $list=$new_list;
+}
+
+sub ida_check_transform_opts {
+
+  # Return 0 for success, or 1 otherwise. Fixes sharelist if it had
+  # any duplicate or out-of-range vales
+
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
+  }
+  my %o= (
+	  "quorum"     => undef,
+	  "shares"     => undef,
+	  "width"      => undef,
+	  "sharelist"  => undef,
+	  "key"        => undef,
+	  "matrix"     => undef,
+	  @_);
+  my ($k,$n,$w,$sharelist,$key,$mat) =
+    map {
+      exists($o{$_}) ? $o{$_} : undef;
+    } qw(quorum shares width sharelist key matrix);
+
+
+  if (defined($key) and defined($mat)) {
+    carp "both key and matrix parameters supplied; use one only";
+    return 1;
+  }
+  if (defined($key)) {
+    unless (defined ($n) and defined ($sharelist)) {
+      carp "If a key is supplied, must specify shares and sharelist";
+      return 1;
+    }
+    unless (ref($key) and scalar(@$key) == $k + $n) {
+      carp "key must be a reference to a list of $k + $n elements";
+      return 1;
+    }
+  }
+  if (defined($mat)) {
+    if ( ref($mat) ne "Math::FastGF2::Matrix") {
+      carp "Matrix must be of type Math::FastGF2::Matrix";
+      return 1;
+    }
+    if ($mat->ORG ne "rowwise")  {
+      carp "supplied matrix must use 'rowwise' organisation";
+      return undef;
+    }
+    if (($mat->ROWS != $n or $mat->COLS != $k)) {
+      carp "supplied matrix must be $n rows x $k cols";
+      return 1;
+    }
+  }
+  if (defined($sharelist)) {
+    ida_check_list($sharelist,"share",0,$n-1);
+    unless (scalar(@$sharelist) > 0) {
+      carp "sharelist does not contain any valid share numbers; aborting";
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+sub ida_key_to_matrix {
+  my ($self,$class);
+  if ($_[0] eq $classname or ref($_[0]) eq $classname) {
+    $self=shift;
+    $class=ref($self);
+  } else {
+    $self=$classname;
+  }
+  my %o= (
+	  "quorum"      => undef,
+	  "shares"      => undef,
+	  "width"       => undef,
+	  "sharelist"   => undef,
+	  "key"         => undef,
+	  "invert?"     => 0,	# want us to invert the matrix?
+	  "skipchecks?" => 0,	# skip long checks on options?
+	  @_,
+	 );
+  my ($k,$n,$w,$sharelist,$key,$invert,$skipchecks) =
+    map {
+      exists($o{$_}) ? $o{$_} : undef;
+    } qw(quorum shares width sharelist key invert? skipchecks?);
+
+  # skip error checking if the caller tells us it's OK
+  unless (defined($skipchecks) and $skipchecks) {
+    if (ida_check_transform_opts(%o)) {
+      carp "Can't create matrix due to options problem";
+      return undef;
+    }
+  }
+
+  my $mat=Math::FastGF2::Matrix ->
+    new(rows => scalar(@$sharelist),
+	cols => $k,
+	width => $w,
+	org => "rowwise");
+  unless (defined($mat)) {
+    carp "Failed to create transform matrix";
+    return undef;
+  }
+  for my $row (0..scalar(@$sharelist) - 1) {
+    for my $col (0 .. $k-1) {
+      my $x   = $key->[$row];
+      my $y   = $key->[$n+$col];
+      my $sum = $x ^ $y;
+      $mat->setval($row, $col, gf2_inv($w << 3,$sum));
+    }
+  }
+  if (defined($invert) and $invert) {
+    return $mat->invert;
+  } else {
+    return $mat;
+  }
+}
 
 sub ida_split {
   my ($self, $class);
@@ -729,7 +875,7 @@ sub ida_split {
     return undef;
   }
   unless (defined($bufsize) and $bufsize > 0) {
-    carp "Bad bufsize";
+    carp "Bad bufsize ($bufsize)";
     return undef;
   }
   unless (defined($inorder) and $inorder >= 0 and $inorder <= 2) {
@@ -740,49 +886,21 @@ sub ida_split {
     carp "outorder != 0 (native), 1 (little-endian) or 2 (big-endian)";
     return undef;
   }
-  if (defined($key) and (!ref($key) or scalar(@$key) != $k + $n)) {
-    carp "key must be a reference to a list of $k + $n elements";
+  # Move some checks to ida_check_transform_opts
+  if (ida_check_transform_opts(%o)) {
+    carp "Can't proceed due to problem with transform options";
     return undef;
   }
-  if (defined($mat) and ref($mat) ne "Math::FastGF2::Matrix") {
-    carp "Matrix must be of type Math::FastGF2::Matrix";
-    return undef;
-  }
-#  if (defined($mat) and ($mat->ORG ne "rowwise")) {
-#    carp "supplied matrix must use 'rowwise' organisation";
-#    return undef;
-#  }
-  if (defined($mat) and ($mat->ROWS != $n or $mat->COLS != $k)) {
-    carp "supplied matrix must be $n rows x $k cols";
-    return undef;
-  }
-  if (defined($key) and defined($mat)) {
-    carp "both key and matrix parameters supplied; use one only";
-    return undef;
-  }
+
   if (defined($bytes_to_read) and $bytes_to_read < 0) {
     carp "bytes parameter must be 0 (read until eof) or greater";
     return undef;
   }
 
   if (defined($sharelist)) {
-    my $new_sharelist=[];	# list without dups, invalid rows
-    my @saw_row=((0) x $n);	# initialisation prevents warnings
-    for my $row (@$sharelist) {
-      if ($saw_row[$row]) {
-	carp "Duplicate share number $row in sharelist; ignoring";
-      } elsif ($row < 0 or $row >= $n) {
-	carp "Share number $row out of range in sharelist; ignoring.";
-      } else {
-	++$saw_row[$row];
-	push @$new_sharelist, $row;
-      }
-    }
-    $sharelist=$new_sharelist;
-    unless (scalar(@$sharelist) > 0) {
-      carp "sharelist does not contain any valid share numbers; aborting";
-      return undef;
-    }
+
+    # moved some checks to ida_check_transform_opts
+
     if (defined($mat)) {
       # copy only the listed rows into a new matrix
       my $m2=Math::FastGF2::Matrix->new(rows => scalar(@$sharelist),
@@ -822,22 +940,12 @@ sub ida_split {
     }
 
     # now generate matrix from key
-    $mat=Math::FastGF2::Matrix->new(rows => scalar(@$sharelist),
-				    cols => $k,
-				    width => $w,
-				    org => "rowwise");
-    unless (defined($mat)) {
-      carp "Failed to create transform matrix";
-      return undef;
-    }
-    for my $row (0..scalar(@$sharelist) - 1) {
-      for my $col (0 .. $k-1) {
-	my $x   = $key->[$row];
-	my $y   = $key->[$n+$col];
-	my $sum = $x ^ $y;
-	$mat->setval($row, $col, gf2_inv($w << 3,$sum));
-      }
-    }
+    $mat=ida_key_to_matrix( "quorum"     => $k,
+			    "shares"     => $n,
+			    "width"      => $w,
+			    "sharelist"  => $sharelist,
+			    "key"        => $key,
+			    "skipchecks" => 1);
   }
 
   # create the buffer matrices and start the transform
@@ -937,33 +1045,16 @@ sub ida_combine {
     return undef;
   }
   if (defined($key)) {
-    unless (defined ($n) and defined ($sharelist)) {
-      carp "If a key is supplied, must specify shares and sharelist";
-      return undef;
-    }
-    unless (ref($key) and scalar(@$key) == $k + $n) {
-      carp "key must be a reference to a list of $k + $n key parts";
-      return undef;
-    }
     if (ida_check_key($k,$n,$w,$key)) {
       carp "Invalid key supplied";
       return undef;
     }
+  } else {
+    $o{"shares"}=$k;		# needed for ida_check_transform_opts
+    $n=$k;
   }
-  if (defined($mat) and ref($mat) ne "Math::FastGF2::Matrix") {
-    carp "Matrix must be of type Math::FastGF2::Matrix";
-    return undef;
-  }
-#  if (defined($mat) and ($mat->ORG ne "rowwise")) {
-#    carp "supplied matrix must use 'rowwise' organisation";
-#    return undef;
-#  }
-  if (defined($mat) and ($mat->ROWS != $k or $mat->COLS != $k)) {
-    carp "supplied matrix must be $k rows x $k cols";
-    return undef;
-  }
-  if (defined($key) and defined($mat)) {
-    carp "both key and matrix paramaters supplied; use one only";
+  if (ida_check_transform_opts(%o)) {
+    carp "Can't continue due to problem with transform opts";
     return undef;
   }
   if (defined($bytes_to_read) and $bytes_to_read < 0) {
@@ -972,43 +1063,12 @@ sub ida_combine {
   }
 
   if (defined($key)) {
-    $mat=Math::FastGF2::Matrix->new(rows => $k,
-				    cols => $k,
-				    width => $w,
-				    org => "rowwise");
-    unless (defined($mat)) {
-      carp "Failed to create transform matrix";
+    ida_check_list($sharelist,"share",0,$k-1);
+    unless (scalar(@$sharelist) == $k) {
+      carp "sharelist does not have k=$k elements";
       return undef;
     }
-    my @saw_row=((0) x $k);
-    my $dest_row=0;
-    for my $row (@$sharelist) {
-      if ($saw_row[$row]) {
-	carp "Duplicate share number $row in sharelist; ignoring";
-	next;
-      }
-      if ($row < 0 or $row >= $n) {
-	carp "Share number $row out of range in sharelist; ignoring.";
-	next;
-      } else {
-	++$saw_row[$row];
-      }
-      for my $col (0 .. $k-1) {
-	my $x=$key->[$row];
-	my $y=$key->[$n+$col];
-	my $sum=$x ^ $y;
-	$mat->setval($dest_row,$col,gf2_inv($w << 3,$sum));
-      }
-      ++$dest_row;
-    }
-    unless ($dest_row + 1 == $k) {
-      carp "sharelist does not have k=$k elements (after de-dup)";
-      return undef;
-    }
-
-    # Since the matrix is in Cauchy form, we could actually replace
-    # the generic invert routine with a more efficient one here ...
-    $mat=$mat->invert();
+    $mat=ida_key_to_matrix(%o, "skipchecks?" => 1, "invert?" => 1);
     unless (defined($mat)) {
       carp "Failed to invert transform matrix (this shouldn't happen)";
       return undef;
