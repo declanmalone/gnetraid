@@ -252,6 +252,15 @@ sub ida_process_streams {
     carp "process_streams: bytes to read not a multiple of COLS * WIDTH";
     return undef;
   }
+  unless ($nfillers == 1 or $nfillers==$in->ROWS) {
+    carp "Fillers must be 1 or number of input rows";
+    return undef;
+  }
+  unless ($nemptiers == 1 or $nemptiers == $out->ROWS) {
+    carp "Emptiers must be 1 or number of output rows";
+    return undef;
+  }
+
 
   ($IFmin, $OFmax, $IR, $OW) = (0,0,0,0);
   if ($nfillers == 1) {
@@ -444,7 +453,7 @@ sub ida_process_streams {
       #warn "k is now $k\n";
       Math::FastGF2::Matrix::multiply_submatrix_c
 	  ($xform, $in, $out,
-	   0, 0, $rows,
+	   0, 0, $xform->ROWS,
 	   $start_in_col, $start_out_col, $k);
       $IFmin -= $want_in_size * $k;
       $OFmax += $want_out_size * $k;
@@ -719,7 +728,6 @@ sub ida_check_transform_opts {
       exists($o{$_}) ? $o{$_} : undef;
     } qw(quorum shares width sharelist key matrix);
 
-
   if (defined($key) and defined($mat)) {
     carp "both key and matrix parameters supplied; use one only";
     return 1;
@@ -933,7 +941,8 @@ sub ida_split {
 	return undef;
       }
     } else {
-      $rng=ida_rng_init($w,$rng);	# swap string for closure
+      # no key and no matrix, so generate random key
+      $rng=ida_rng_init($w,$rng);
       unless (defined($rng)) {
 	carp "Failed to initialise random number generator";
 	return undef;

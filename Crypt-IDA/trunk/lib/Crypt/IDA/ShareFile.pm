@@ -234,6 +234,8 @@ sub sf_read_ida_header {
   my $istream=shift;		  # assume istream is at start of file
   my $header_info={};   	  # values will be returned in this hash
 
+  warn "Reading header from istream " . ($istream->{FILENAME}->()) . "\n";
+
   # When calling this routine the caller can specify any
   # previously-read values for k, s, and so on and have us check the
   # values in the current header against these values for consistency.
@@ -410,6 +412,10 @@ sub sf_read_ida_header {
     }
     delete $header_info->{element};
     $header_info->{transform}=$matrix_row;
+    warn "Read transform row: [" . (join ", ", map
+    			  {sprintf("%02x",$_) } @{
+			    $header_info->{transform}
+			  }) . "]\n";
   }
 
   # Now that we've read in all the header bytes, check that header
@@ -852,8 +858,8 @@ sub sf_split {
   # chunks.
   if (defined($sharelist)) {
     ida_check_list($sharelist,"share",0,$n-1);
-    unless (scalar(@$sharelist) > 0) {
-      carp "sharelist does not contain any valid share numbers; aborting";
+    unless (scalar(@$sharelist) == $n) {
+      carp "sharelist does not contain n=$n share numbers; aborting";
       return undef;
     }
   } else {
@@ -943,6 +949,10 @@ sub sf_split {
 			      "sharelist"   => $sharelist,
 			      "key"         => $key,
 			      "skipchecks?" => 0);
+      unless (defined($mat)) {
+	carp "bad return value from ida_key_to_matrix";
+	return undef;
+      }
       $o{"matrix"}=$mat;	# stash new matrix
       $o{"key"}=undef;		# and undefine key (if any)
     }
@@ -970,7 +980,7 @@ sub sf_split {
 	carp "Problem writing header for share (chunk $i, share $j)";
 	return undef;
       }
-      unless ($hs + $chunk_size + $padding == $file_size) {
+      unless ($hs + $chunk_size == $file_size) {
 	carp "file size mismatch ($i,$j) (this shouldn't happen)";
 	carp "hs=$hs; chunk_size=$chunk_size; file_size=$file_size; pad=$padding";
 	return undef;
@@ -1123,6 +1133,34 @@ sub sf_combine {
     carp "key option also requires shares and sharelist options.";
     return undef;
   }
+
+  # Weed out any duplicate input file names. If duplicates are found,
+  # and the sharelist option is given, then some of the share numbers
+  # in that list will probably now be wrong. Rather than trying to fix
+  # up the numbers, we'll take the easy way out and simply report it
+  # as an error and return.
+  unless (scalar(@$infiles)) {
+    carp "No input files to process; aborting.";
+    return undef;
+  }
+  my %saw_file;
+  my $new_filelist=[];
+  foreach my $infile (@$infiles) {
+    if (exists($saw_file{$infile})) {
+      carp "Ignoring duplicate input file: $infile";
+    } else {
+      if (defined ($sharelist)) {
+	carp "Duplicate file invalidates supplied sharelist; aborting";
+	return undef;
+      }
+      $saw_file{$infile} = 1;
+      push @$new_filelist, $infile;
+    }
+  }
+  $infiles=$new_filelist;
+
+  # If k-value is given, only check it after we've de-duped the input
+  # file list.
   if (defined($k) and scalar(@$infiles) < $k) {
     carp "For given quorum value $k, I need (at least) $k infiles";
     return undef;
@@ -1172,6 +1210,10 @@ sub sf_combine {
 	} elsif (defined($key)) {
 	  carp "Ignoring file transform data (overriden by key option)";
 	} else {
+	  warn "Adding new transform row: [" . (join ", ", map
+    			  {sprintf("%02x",$_) } @{
+			    $header_info->{transform}
+			  }) . "]\n";
 	  push @matrix, $header_info->{transform};
 	}
       } else {
@@ -1193,8 +1235,15 @@ sub sf_combine {
   # Now that the header has been read in and all the streams agree on
   # $k and $w, we proceed to build the inverse matrix unless we've
   # been supplied with a key or (pre-inverted) matrix.
+
+  # first make sure we have k valid shares to combine
+  unless ($nshares >= $k) {
+    carp "Wrong number of shares to combine (have $nshares, want $k)";
+    return undef;
+  }
+
   unless (defined($key) or defined($mat)) {
-    #warn "Trying to create combine matrix with k=$k, w=$w\n";
+    warn "Trying to create combine matrix with k=$k, w=$w\n";
     $mat=Math::FastGF2::Matrix->new(
 				    rows  => $k,
 				    cols  => $k,
@@ -1203,12 +1252,16 @@ sub sf_combine {
 				   );
     my @vals=();
     map { push @vals, @$_ } @matrix;
-    #warn "matrix is [" . (join ", ", map
-    #			  {sprintf("%02x",$_) } @vals) . "] (" .
-    #     scalar(@vals) . " values)\n";
+    warn "matrix is [" . (join ", ", map
+    			  {sprintf("%02x",$_) } @vals) . "] (" .
+         scalar(@vals) . " values)\n";
     $mat->setvals(0,0, \@vals, $inorder);
     $mat=$mat->invert();
-    @vals=$mat->getvals(0,0,$k * $k);
+    unless (defined($mat)) {
+      carp "Failed to invert matrix!";
+      return undef;
+    }
+    #@vals=$mat->getvals(0,0,$k * $k);
     #warn "inverse is [" . (join ", ", map
     #			  {sprintf("%02x",$_) } @vals) . "] (" .
     #      scalar(@vals) . " values)\n";
@@ -1242,8 +1295,8 @@ sub sf_combine {
   return undef unless defined($output_bytes);
 
   if ($header_info->{opt_final}) {
-    warn "#Truncating output file to $header_info->{chunk_next} bytes\n";
-    #truncate $outfile, $header_info->{chunk_next};
+    warn "Truncating output file to $header_info->{chunk_next} bytes\n";
+    truncate $outfile, $header_info->{chunk_next};
   }
 
   return $output_bytes;

@@ -1,7 +1,7 @@
 # -*- Perl -*-
 
 use Test::More tests => 2567;
-BEGIN { use_ok('Crypt::IDA', ':default') };
+BEGIN { use_ok('Crypt::IDA', ':all') };
 
 my $class="Crypt::IDA";
 
@@ -192,21 +192,45 @@ for my $s ("A", "BC", "DEF", "GHIJ", "KLMNO", "PQRSTU") {  # 6 x
 		      inorder => 0,  outorder => 0,
 		     );
 
-	  # We have to invert the (sub)matrix ourselves. To keep
-	  # things simple, we'll just use the first $k rows of the
-	  # matrix (rather than a random subset of $k rows from $n).
-	  # (generated transform matrix is always 'rowwise')
-	  my @v=$mat->getvals(0,0,$k * $k);
+	  # For combining, we have to make the inverse matrix by
+	  # ourselves.
+	  #
+	  # Previously I was just using the first k shares, but for
+	  # better test coverage, I'm changing this to pick a random
+	  # selection of k shares. Note that as with picking random
+	  # keys, this introduces another source of non-determinism to
+	  # the test cases which isn't generally a good thing. But
+	  # bear in mind that if there's something wrong with the code
+	  # which this shuffling picks up, then the chances are
+	  # exceedingly good that random testing like this will most
+	  # likely point to a particular systemic problem (eg, writing
+	  # $k instead of $n in the code somewhere) rather than a rare
+	  # Heisenbug.  That is, that huge numbers of these tests
+	  # should fail, rather than only a few tests failing rarely.
+
+	  my @sharenums=(0.. $n-1);
+	  ida_fisher_yates_shuffle(\@sharenums,$k);
+
+	  my @f = ();
 	  my $inv=
 	    Math::FastGF2::Matrix->new(rows => $k,       cols  => $k,
 				       org  =>'rowwise', width => 1);
-	  $inv->setvals(0,0, [@v[ 0 .. $k * $k - 1 ]]);
+	  my $dest_row=0;
+
+	  # This code keeps the association between transform rows and
+	  # share data intact
+	  foreach my $row (@sharenums) {
+	    my @v=$mat->getvals($row,0,$k);
+	    $inv->setvals($dest_row,0, \@v);
+	    push @f,fill_from_string($sinks[$row]);
+	    ++$dest_row;
+	  }
 	  $inv=$inv->invert();	# replace original matrix
+	  warn "Failed to invert matrix\n" unless defined($inv);
 
 	  # combine ...
 	  my $output="";
 	  my $e=empty_to_string(\$output);
-	  my @f = map { fill_from_string($sinks[$_]) } (0..$k-1);
 	  my $outlen=
 	    ida_combine(
 			quorum  => $k,  width    => 1,
