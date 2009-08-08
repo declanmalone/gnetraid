@@ -1123,7 +1123,7 @@ Crypt::IDA - Michael Rabin's Information Dispersal Algorithm
 
 =head1 SYNOPSIS
 
-  use Crypt::IDA ":DEFAULT";
+  use Crypt::IDA ":default";
 
   $source=fill_from_string ($string,$align);
   $source=fill_from_fh     ($fh,$align,$offset);
@@ -1150,17 +1150,17 @@ prefixing the method names with the module name, eg:
 
  $source=Crypt::IDA::fill_from_string($string,$align)
 
-Alternatively, routines can be exported by adding ":DEFAULT" to the
+Alternatively, routines can be exported by adding ":default" to the
 "use" line, in which case the routine names do not need to be prefixed
 with the module name, ie:
 
-  use Crypt::IDA ":DEFAULT";
+  use Crypt::IDA ":default";
   
   $source=fill_from_string ($string,$align);
   # ...
 
 Some extra ancillary routines can also be exported with the ":extras"
-(just the extras) or ":all" (":extras" plus ":DEFAULT") parameters to
+(just the extras) or ":all" (":extras" plus ":default") parameters to
 the use line. See the section L<ANCILLARY ROUTINES> for details.
 
 =head1 GENERAL OPERATION
