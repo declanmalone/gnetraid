@@ -8,7 +8,9 @@ use Gtk2 qw/-init -threads-init/;
 
 package main;
 
-my $app="SplitCombine-gtkbuilder.glade";
+my $dir=$0;
+$dir=~s|(.*)/.*|$1|;
+my $app="$dir/SplitCombine.xml";
 
 #$gladexml = Gtk2::GladeXML->new($app);
 

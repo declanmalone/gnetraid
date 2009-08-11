@@ -3,5 +3,11 @@ Makefile.PL
 MANIFEST
 README
 t/Crypt-IDA.t
+t/Crypt-IDA-ShareFile.t
 lib/Crypt/IDA.pm
 lib/Crypt/IDA/ShareFile.pm
+bin/rabin-combine.pl
+bin/rabin-split.pl
+bin/SplitCombine.pl
+bin/SplitCombine.xml
+
