@@ -16,8 +16,9 @@ WriteMakefile(
 	# Un-comment this if you add C files to link with later:
 #    OBJECT            => 'FastGF2.o', # link all the C files too
 #    OBJECT            => '$(O_FILES)', # link all the C files too
-    EXE_FILES          => ['bin/benchmark-Math-FastGF2.pl',
-				'bin/shamir-combine.pl','shamir-split.pl'],
+    EXE_FILES          => ['script/benchmark-Math-FastGF2.pl',
+			   'script/shamir-combine.pl',
+			   'script/shamir-split.pl'],
 );
 sub MY::postamble {
 '$(MYEXTLIB): clib/Makefile

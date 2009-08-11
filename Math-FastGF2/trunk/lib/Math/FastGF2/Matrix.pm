@@ -533,6 +533,8 @@ Math::FastGF2::Matrix - Matrix operations for fast Galois Field arithmetic
 
 =head1 DESCRIPTION
 
+=head1 GETTING AND SETTING VALUES
+
 =head1 SEE ALSO
 
 =head1 AUTHOR
