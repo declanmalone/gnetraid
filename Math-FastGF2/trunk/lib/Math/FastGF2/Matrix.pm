@@ -529,6 +529,34 @@ sub invert {
 
 Math::FastGF2::Matrix - Matrix operations for fast Galois Field arithmetic
 
+=head1 SYNOPSIS
+
+=head1 DESCRIPTION
+
+=head1 SEE ALSO
+
+=head1 AUTHOR
+
+Declan Malone, E<lt>idablack@sourceforge.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2009 by Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of the "GNU General Public License" ("GPL").
+
+Please refer to the files "GNU_GPL.txt" and "GNU_LGPL.txt" in this
+distribution for details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+See the "GNU General Public License" for more details.
+
 =cut
 
 
