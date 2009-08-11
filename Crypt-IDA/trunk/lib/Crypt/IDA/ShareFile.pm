@@ -660,7 +660,7 @@ sub sf_calculate_chunk_sizes {
     unless ($file_size) {
       carp "warning: zero-sized file $filename; will use single chunk";
     }
-    ($cb,$cn,$cs)=(0,$padded_file_size,$padded_file_size);
+    ($cb,$cn,$cs)=(0,$file_size,$file_size);
     $o{"chunk_start"} = $cb;
     $o{"chunk_next"}  = $cn;
     $hs=sf_write_ida_header(%o);
@@ -704,8 +704,8 @@ sub sf_calculate_chunk_sizes {
     # a limit on the maximum size of $n_chunks above.
     $cs  = int(($padded_file_size + $n_chunks - 1) / $n_chunks);
     $cs -= $cs % ($k * $w);
-    die "Got chunk size of zero with file_size $padded_file_size, " .
-      "n_chunks=$n_chunks (this shouldn't happen)\n" unless $cs;
+    die "Got chunk size of zero with padded file_size $padded_file_size," .
+      " n_chunks=$n_chunks (this shouldn't happen)\n" unless $cs;
     ($cb,$cn)=(0,$cs);
     for my $i (0 .. $n_chunks - 2) { # all pre-final chunks
       $o{"chunk_start"} = $cb;
@@ -729,15 +729,16 @@ sub sf_calculate_chunk_sizes {
     }
     # final chunk; need to do this separately since we need to pass
     # correct values for chunk range to accurately calculate the
-    # header size
+    # header size (ie, a rough figure won't do if chunk_next is close
+    # to 256 ** width)
     $o{"chunk_start"} = $cb;
-    $o{"chunk_next"}  = $padded_file_size;
+    $o{"chunk_next"}  = $file_size; # without padding
     $hs=sf_write_ida_header(%o);
       push @chunks, {
 		     "chunk_start" => $cb,
-		     "chunk_next"  => $padded_file_size,
-		     "chunk_size"  => $padded_file_size - $cb,
-		     "file_size"   => $hs + $padded_file_size - $cb,
+		     "chunk_next"  => $file_size,
+		     "chunk_size"  => $file_size - $cb,
+		     "file_size"   => $hs + $padded_file_size,
 		     "opt_final"   => 1,
 		     "padding"     => $padded_file_size - $file_size,
 		    };
