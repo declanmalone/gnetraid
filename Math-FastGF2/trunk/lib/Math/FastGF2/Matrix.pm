@@ -33,7 +33,7 @@ sub new {
      rows => undef,
      cols => undef,
      width => undef,
-     org => undef,
+     org => "rowwise",
      @_,
     );
   my $org;			# numeric value 1==ROWWISE, 2==COLWISE
@@ -62,13 +62,15 @@ sub new {
     $org=1;			# default to ROWWISE
   }
 
-  if ($o{width} != 1 and $o{width} !=2 and $o{width} != 4) {
+  if ($o{width} != 1 and $o{width} != 2 and $o{width} != 4) {
     carp "Invalid width $o{width} (must be 1, 2 or 4)";
     ++$errors;
   }
 
   return undef if $errors;
 
+  #carp "Calling C Matrix allocator with rows=$o{rows}, ".
+  #  "cols=$o{cols}, width=$o{width}, org=$org";
   return alloc_c($class,$o{rows},$o{cols},$o{width},$org);
 
 }
@@ -251,21 +253,21 @@ sub getvals {
   my $class = ref($self);
   my $row   = shift;
   my $col   = shift;
-  my $bytes = shift;
+  my $words = shift;
   my $order = shift || 0;
   my $want_list = wantarray;
 
-  #carp "Asked to read ROW=$row, COL=$col, len=$bytes (bytes)\n";
+  #carp "Asked to read ROW=$row, COL=$col, len=$bytes (words)";
 
   unless ($class) {
     carp "getvals only operates on an object instance";
     return undef;
   }
-  if ($bytes % $self->WIDTH) {
-    carp "bytes to get must be a multiple of WIDTH";
-    return undef;
-  }
-  unless (defined($row) and defined($col) and defined($bytes)) {
+  #if ($bytes % $self->WIDTH) {
+  #  carp "bytes to get must be a multiple of WIDTH";
+  #  return undef;
+  #}
+  unless (defined($row) and defined($col) and defined($words)) {
     carp "getvals requires row, col, words parameters";
     return undef;
   }
@@ -284,7 +286,7 @@ sub getvals {
     return undef;
   }
 
-  my $s=get_raw_values_c($self, $row, $col, $bytes * $width, $order);
+  my $s=get_raw_values_c($self, $row, $col, $words, $order);
 
   return $s unless $want_list;
 
@@ -308,14 +310,14 @@ sub setvals {
   my ($str,$words);
   $order=0 unless defined($order);
 
-  #carp "Asked to write ROW=$row, COL=$col, len=" . length($vals) . "\n";
+  #carp "Asked to write ROW=$row, COL=$col";
 
   unless ($class) {
-    carp "getvals only operates on an object instance";
+    carp "setvals only operates on an object instance";
     return undef;
   }
   unless (defined($row) and defined($col)) {
-    carp "getvals requires row, col, order parameters";
+    carp "setvals requires row, col, order parameters";
     return undef;
   }
   if ($order < 0 or $order > 2) {
@@ -358,6 +360,7 @@ sub setvals {
     return undef;
   }
 
+  #carp "Writing $words word(s) to ($row,$col) (string '$str')";
   set_raw_values_c($self, $row, $col, $words, $order, $str);
   return $str;
 }

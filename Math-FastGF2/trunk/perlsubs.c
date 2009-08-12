@@ -5,6 +5,8 @@
   the GNU Lesser (Library) General Public License.
 */
 
+
+
 SV* mat_alloc_c(char* class, int rows, int cols, int width, int org) {
 
   gf2_matrix_t*  Matrix;
@@ -269,12 +271,12 @@ SV* mat_get_raw_values_c (SV *Self, int row, int col,
 
     to_start=SvPV(Str,len) + self->width - 1;
     for (i=self->width ;
-	 i-- ;
-	 --to_start, ++from_start) {
+	 i-- ; ) {
       from=from_start; to=to_start;
       for (j=words; j--; ) {
-	*to++=*from++;
+	*(to++)=*(from++);
       }
+      --to_start, ++from_start;
     }
   }
   /*  sv_2mortal(Str); */ /* apparently newSVpv takes care of this */
@@ -287,7 +289,7 @@ void mat_set_raw_values_c (SV *Self, int row, int col,
 
   gf2_matrix_t *self  = (gf2_matrix_t*) SvIV(SvRV(Self));
   int len=self->width * words;
-  char *from_start=SvPV(Str,len) + self->width - 1;;
+  char *from_start;
   char *to_start= self->values + 
     gf2_matrix_offset_down(self) * row +
     gf2_matrix_offset_right(self) * col;
@@ -295,20 +297,31 @@ void mat_set_raw_values_c (SV *Self, int row, int col,
   char *from, *to;
   int i,j;
 
+  /*
+  fprintf(stderr,"set_raw_values: words=%d, order=%d, native=%d, len=%d\n",
+	  words,byteorder,native_byteorder,len);
+  fprintf(stderr,"Perl string is %.*s\n",len,SvPV(Str,len));
+  fprintf(stderr,"width is %d\n", self->width);
+  fprintf(stderr,"from_start offset=%d\n", from_start - SvPV(Str,len));
+  fprintf(stderr,"to_start offset=%d\n", to_start - self->values);
+  */
+
   if ((self->width > 1) && 
       (((native_byteorder == 1) && (byteorder == 2)) ||
-       ((native_byteorder == 2) && (byteorder == 1))) ) {
+       ((native_byteorder == 2) && (byteorder == 1))) ) { 
+    from_start=SvPV(Str,len) + self->width - 1;
     for (i=self->width ;
-	 i-- ;
-	 --to_start, ++from_start) {
+	 i-- ; ) {
       from=from_start; to=to_start;
       for (j=words; j--; ) {
-	*to++=*from++;
+	*(to++)=*(from++);
       }
+      --from_start; ++to_start;
     }
   } else {
+    from_start=SvPV(Str,len);
     memcpy(to_start, from_start, len);
-  }
+  } 
   return;
 }
 
