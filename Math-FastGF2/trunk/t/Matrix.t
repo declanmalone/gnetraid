@@ -1,6 +1,6 @@
 # -*- Perl -*-
 
-use Test::More tests => 154;
+use Test::More tests => 160;
 BEGIN { use_ok('Math::FastGF2::Matrix', ':all') };
 
 my $failed;
@@ -464,8 +464,8 @@ for my $test_width (2,4) {
 }
 
 # All previous getvals/setvals have only checked reading and writing a
-# single value. Need to check reading/writing multiple values
-
+# single value. Need to check reading/writing multiple values. I'll do
+# that after testing basic 16 and 32-bit matrices...
 
 # Some tests on 16-bit and 32-bit matrices
 
@@ -628,6 +628,35 @@ for my $rows_32 ( [0,1,2,3], [4,2,1,3], [4,3,2,0],
       "inverse of inverse eq self for 32-bit, skipping row $skipped?");
 }
 
+# Back to testing different byte order flags for getvals, setvals
+my $wide_16=Math::FastGF2::Matrix->new(rows => 1, cols => 3, width=>2);
+my $wide_32=Math::FastGF2::Matrix->new(rows => 1, cols => 3, width=>4);
+
+my $string_16="ABCDEF";		# 6 letters from 0x41 up
+my $string_32="ABCDEFGHIJKL";	# 12 letters
+
+$wide_16->setvals(0,0,$string_16,1); # little-endian
+ok( $wide_16->getval(0,0) == 0x4241,
+     "16-bit setval as little endian... value 1?");
+ok( $wide_16->getval(0,1) == 0x4443,
+     "16-bit setval as little endian... value 2?");
+ok( $wide_16->getval(0,2) == 0x4645,
+     "16-bit setval as little endian... value 3?");
+
+# quicker than zeroing right now!
+$wide_16=Math::FastGF2::Matrix->new(rows => 1, cols => 3, width=>2);
+
+$wide_16->setvals(0,0,$string_16,2); # big-endian
+ok( $wide_16->getval(0,0) == 0x4142,
+     "16-bit setval as big endian... value 1?");
+ok( $wide_16->getval(0,1) == 0x4344,
+     "16-bit setval as big endian... value 2?");
+ok( $wide_16->getval(0,2) == 0x4546,
+     "16-bit setval as big endian... value 3?");
+
+# Actually, I couldn't be bothered checking 32-bit values... the same
+# code is used for both 16 and 32-bit values and there is really no
+# way for one to fail and not the other.
 
 # Test transpose matrix function
 

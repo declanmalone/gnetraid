@@ -319,15 +319,16 @@ SV* mat_get_raw_values_c (SV *Self, int row, int col,
   int native_byteorder=mat_local_byte_order();
   char *from, *to;
   int i,j;
+  int width=self->width;
 
-  if ( (self->width > 1) && byteorder && 
+  if ( (width > 1) && byteorder && 
        (native_byteorder != byteorder) ) {
 
-    to_start=SvPV(Str,len) + self->width - 1;
-    for (i=self->width ; i-- ; --to_start, ++from_start) {
+    to_start=SvPV(Str,len) + width - 1;
+    for (i=width ; i-- ; --to_start, ++from_start) {
       from=from_start; to=to_start;
-      for (j=words; j--; ) {
-	*(to++)=*(from++);
+      for (j=words; j--;  to += width, from += width) {
+	*to=*from;
       }
 ;
     }
@@ -349,23 +350,15 @@ void mat_set_raw_values_c (SV *Self, int row, int col,
   int native_byteorder=mat_local_byte_order();
   char *from, *to;
   int i,j;
+  int width=self->width;
 
-  /*
-  fprintf(stderr,"set_raw_values: words=%d, order=%d, native=%d, len=%d\n",
-	  words,byteorder,native_byteorder,len);
-  fprintf(stderr,"Perl string is %.*s\n",len,SvPV(Str,len));
-  fprintf(stderr,"width is %d\n", self->width);
-  fprintf(stderr,"from_start offset=%d\n", from_start - SvPV(Str,len));
-  fprintf(stderr,"to_start offset=%d\n", to_start - self->values);
-  */
-
-  if ( (self->width > 1) && byteorder &&
+  if ( (width > 1) && byteorder &&
        (native_byteorder != byteorder) ) {
-    from_start=SvPV(Str,len) + self->width - 1;
-    for (i=self->width ; i-- ; --from_start, ++to_start) {
+    from_start=SvPV(Str,len) + width - 1;
+    for (i=width ; i-- ; --from_start, ++to_start) {
       from=from_start; to=to_start;
-      for (j=words; j--; ) {
-	*(to++)=*(from++);
+      for (j=words; j--; to += width, from += width) {
+	*to=*from;
       }
     }
   } else {

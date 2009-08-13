@@ -1,6 +1,6 @@
 # -*- Perl -*-
 
-use Test::More tests => 1199;
+use Test::More tests => 3503;
 BEGIN { use_ok('Crypt::IDA', ':all') };
 
 my $class="Crypt::IDA";
@@ -174,8 +174,8 @@ for my $s ("A", "BC", "DEF", "GHIJ", "KLMNO", "PQRSTU") {  # 6 x
   for my $k (1,2,5,7) {                                    # 4 x
     for my $n ($k, $k + 1, $k + 3, $k + 5) {               # 4 x
       for my $l (0,length($s)) {                           # 2 x
-	for my $w (2,4) {	                           # 3 x
-	  for my $order (2) {                            # 2 x
+	for my $w (1,2,4) {	                           # 3 x
+	  for my $order (1,2) {                            # 2 x
 	    for my $b (1,3,7) {                            # 3 = 
 
 	      # split ...

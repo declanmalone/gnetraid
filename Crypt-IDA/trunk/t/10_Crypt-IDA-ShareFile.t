@@ -69,3 +69,5 @@ map { unlink "$tempfile-$_"} (0..2);
 $got_back=<TEMPFILE>;
 ok ($secret eq $got_back,     "(3,3) scheme without key/matrix");
 
+unlink $tempfile;
+
