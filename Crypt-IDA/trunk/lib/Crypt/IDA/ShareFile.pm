@@ -234,7 +234,7 @@ sub sf_read_ida_header {
   my $istream=shift;		  # assume istream is at start of file
   my $header_info={};   	  # values will be returned in this hash
 
-  warn "Reading header from istream " . ($istream->{FILENAME}->()) . "\n";
+  #warn "Reading header from istream " . ($istream->{FILENAME}->()) . "\n";
 
   # When calling this routine the caller can specify any
   # previously-read values for k, s, and so on and have us check the
@@ -412,10 +412,10 @@ sub sf_read_ida_header {
     }
     delete $header_info->{element};
     $header_info->{transform}=$matrix_row;
-    warn "Read transform row: [" . (join ", ", map
-    			  {sprintf("%02x",$_) } @{
-			    $header_info->{transform}
-			  }) . "]\n";
+    #warn "Read transform row: [" . (join ", ", map
+    #		  {sprintf("%02x",$_) } @{
+    #	    $header_info->{transform}
+    #  }) . "]\n";
   }
 
   # Now that we've read in all the header bytes, check that header
@@ -1211,10 +1211,10 @@ sub sf_combine {
 	} elsif (defined($key)) {
 	  carp "Ignoring file transform data (overriden by key option)";
 	} else {
-	  warn "Adding new transform row: [" . (join ", ", map
-    			  {sprintf("%02x",$_) } @{
-			    $header_info->{transform}
-			  }) . "]\n";
+	  #warn "Adding new transform row: [" . (join ", ", map
+	  #	  {sprintf("%02x",$_) } @{
+	  #	    $header_info->{transform}
+	  #  }) . "]\n";
 	  push @matrix, $header_info->{transform};
 	}
       } else {
@@ -1229,7 +1229,7 @@ sub sf_combine {
       last;
     }
 
-    warn "Filler to skip $header_size bytes\n";
+    #warn "Filler to skip $header_size bytes\n";
     push @$fillers, fill_from_file($infile,$k * $w, $header_size);
   }
 
@@ -1244,7 +1244,7 @@ sub sf_combine {
   }
 
   unless (defined($key) or defined($mat)) {
-    warn "Trying to create combine matrix with k=$k, w=$w\n";
+    #warn "Trying to create combine matrix with k=$k, w=$w\n";
     $mat=Math::FastGF2::Matrix->new(
 				    rows  => $k,
 				    cols  => $k,
@@ -1253,9 +1253,9 @@ sub sf_combine {
 				   );
     my @vals=();
     map { push @vals, @$_ } @matrix;
-    warn "matrix is [" . (join ", ", map
-    			  {sprintf("%02x",$_) } @vals) . "] (" .
-         scalar(@vals) . " values)\n";
+    #warn "matrix is [" . (join ", ", map
+    #			  {sprintf("%02x",$_) } @vals) . "] (" .
+    #     scalar(@vals) . " values)\n";
     $mat->setvals(0,0, \@vals, $inorder);
     $mat=$mat->invert();
     unless (defined($mat)) {

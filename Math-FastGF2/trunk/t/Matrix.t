@@ -1,6 +1,6 @@
 # -*- Perl -*-
 
-use Test::More tests => 109;
+use Test::More tests => 154;
 BEGIN { use_ok('Math::FastGF2::Matrix', ':all') };
 
 my $failed;
@@ -77,9 +77,9 @@ $m8x8 = Math::FastGF2::Matrix->new(rows=>8, cols =>8, width=>1);
 $i8x8 = Math::FastGF2::Matrix->new(rows=>8, cols =>8, width=>1);
 $id8x8= Math::FastGF2::Matrix->new(rows=>8, cols =>8, width=>1);
 
-ok(ref($m8x8)  eq "Math::FastGF2::Matrix", "Create 8x8 matrix OK?");
-ok(ref($i8x8)  eq "Math::FastGF2::Matrix", "Create 8x8 inverse matrix OK?");
-ok(ref($id8x8) eq "Math::FastGF2::Matrix", "Create 8x8 result matrix OK?");
+ok(ref($m8x8)  eq "Math::FastGF2::Matrix", "Create 8x8 matrix?");
+ok(ref($i8x8)  eq "Math::FastGF2::Matrix", "Create 8x8 inverse matrix?");
+ok(ref($id8x8) eq "Math::FastGF2::Matrix", "Create 8x8 result matrix?");
 
 # Before we write any values to the matrices below, we can check to
 # make sure that they were created with all values initially set to
@@ -107,13 +107,17 @@ my $r2=$m8x8->multiply($i8x8,$r8x8);
 ok(defined($r2),  "multiply returns value with supplied result matrix?");
 ok($r2 eq $r8x8,  "multiply returns supplied result matrix?");
 
-# Checking equality
+# Checking equality #1
 ok($r8x8->eq($r2),   "Equality test on same matrix?");
 ok($r8x8->ne($m),    "Inequality test on differently-sized matrices?");
 ok($r8x8->ne($m8x8), "Inequality test on differently-valued matrices?");
 
 # is matrix x inverse = identity?
 ok($r8x8->eq($id8x8), "Matrix x Inverse == Identity?");
+
+# Also check new_identity method to see if it's equal to id8x8
+my $test_id_8x8=Math::FastGF2::Matrix->new_identity(size => 8, width=> 1);
+ok ($test_id_8x8->eq($id8x8), "new_identity eq hand-crafted matrix?");
 
 # Test getvals in scalar context
 my $row="3536827AD27D7531";	  # first row of m8x8
@@ -134,41 +138,55 @@ $m=Math::FastGF2::Matrix->new(rows => 2, cols => 2, width => 1,
 			      org=> "rowwise"); # be explicit
 my @vals=(65, 66, 67, 68);
 my $str=$m->setvals(0,0,\@vals);
-ok (length $str == 4, "setvals returns string of correct length, given list?");
+ok (length $str == 4,
+    "setvals returns string of correct length, given list?");
 
 my $str2=$m->getvals(0,0,4);
 
 ok ($str eq $str2, "getvals ($str2) == setvals ($str)?");
 
-ok ($m->getval(0,0) == $vals[0],  "setvals (rowwise) sets (0,0) correctly?");
-ok ($m->getval(0,1) == $vals[1],  "setvals (rowwise) sets (0,1) correctly?");
-ok ($m->getval(1,0) == $vals[2],  "setvals (rowwise) sets (1,0) correctly?");
-ok ($m->getval(1,1) == $vals[3],  "setvals (rowwise) sets (1,1) correctly?");
+ok ($m->getval(0,0) == $vals[0],
+    "setvals (rowwise) sets (0,0) correctly?");
+ok ($m->getval(0,1) == $vals[1],
+    "setvals (rowwise) sets (0,1) correctly?");
+ok ($m->getval(1,0) == $vals[2],
+    "setvals (rowwise) sets (1,0) correctly?");
+ok ($m->getval(1,1) == $vals[3],
+    "setvals (rowwise) sets (1,1) correctly?");
 
 # Test setvals... using COLWISE
 $m=Math::FastGF2::Matrix->new(rows => 2, cols => 2, width => 1,
 			      org=> "colwise"); # be explicit
 ok (ref($m) eq $class,  "Created colwise matrix OK?");
 $str=$m->setvals(0,0,\@vals);
-ok (length $str == 4, "setvals returns string of correct length, given list?");
+ok (length $str == 4,
+    "setvals returns string of correct length, given list?");
 
 $str2=$m->getvals(0,0,4);
 
 ok ($str eq $str2, "getvals ($str2) == setvals ($str)?");
 
-ok ($m->getval(0,0) == $vals[0],  "setvals ([], colwise) sets (0,0) correctly?");
-ok ($m->getval(1,0) == $vals[1],  "setvals ([], colwise) sets (1,0) correctly?");
-ok ($m->getval(0,1) == $vals[2],  "setvals ([], colwise) sets (0,1) correctly?");
-ok ($m->getval(1,1) == $vals[3],  "setvals ([], colwise) sets (1,1) correctly?");
+ok ($m->getval(0,0) == $vals[0],
+    "setvals ([], colwise) sets (0,0) correctly?");
+ok ($m->getval(1,0) == $vals[1],
+    "setvals ([], colwise) sets (1,0) correctly?");
+ok ($m->getval(0,1) == $vals[2],
+    "setvals ([], colwise) sets (0,1) correctly?");
+ok ($m->getval(1,1) == $vals[3],
+    "setvals ([], colwise) sets (1,1) correctly?");
 
 # setvals with a string..
 $m=Math::FastGF2::Matrix->new(rows => 2, cols => 2, width => 1,
 			      org=> "colwise");
 $str=$m->setvals(0,0,$str);
-ok ($m->getval(0,0) == $vals[0],  "setvals (\$\$, colwise) sets (0,0) correctly?");
-ok ($m->getval(1,0) == $vals[1],  "setvals (\$\$, colwise) sets (1,0) correctly?");
-ok ($m->getval(0,1) == $vals[2],  "setvals (\$\$, colwise) sets (0,1) correctly?");
-ok ($m->getval(1,1) == $vals[3],  "setvals (\$\$, colwise) sets (1,1) correctly?");
+ok ($m->getval(0,0) == $vals[0],
+    "setvals (\$\$, colwise) sets (0,0) correctly?");
+ok ($m->getval(1,0) == $vals[1],
+    "setvals (\$\$, colwise) sets (1,0) correctly?");
+ok ($m->getval(0,1) == $vals[2],
+    "setvals (\$\$, colwise) sets (0,1) correctly?");
+ok ($m->getval(1,1) == $vals[3],
+    "setvals (\$\$, colwise) sets (1,1) correctly?");
 
 # Checking equality #2... rowwise vs colwise matrix
 my @by_row=(65,66,67,68);
@@ -309,9 +327,6 @@ for my $test_width (2,4) {
       "Writing $test_width-byte word as list overruns!");
 }
 
-
-# Test transpose matrix function
-
 # Test byte order flags for getvals, setvals
 #
 # The module doesn't export any functions or data which can be used to
@@ -327,18 +342,19 @@ for my $test_width (2,4) {
 # The values of these variables don't matter, only that they're the
 # reverse of each other. Array is indexed by width in bytes.
 my @native_vals=(undef,undef,0x0201,undef,0x04030201);
-my @reverse_vals=(undef,undef,0x0102,undef,0x01020304);
+my @alien_vals=(undef,undef,0x0102,undef,0x01020304);
 
 # similar array to @native_pack. See manpage for pack
 my @big_pack=(undef,undef,"n*",undef,"N*");
 my @little_pack=(undef,undef,"v*",undef,"V*");
 
+# Use the same numbering for storing our endian-ness as the module
+# does: 1=little endian, 2=big endian
+my $endian;			# our endian
+my $oendian;			# the "other"/"alien" endian
+
 for my $test_width (2,4) {
 
-  # Use the same numbering for storing our endian-ness as the module
-  # does: 1=little endian, 2=big endian
-  my $endian;			# our endian
-  my $oendian;			# the "other" endian
 
   # first create a a 1x1 test matrix
   my $emat=Math::FastGF2::Matrix->new(rows => 1, cols => 1,
@@ -347,32 +363,34 @@ for my $test_width (2,4) {
   ok ((defined ($emat) and ref($emat) eq $class),
       "Create 1x1 matrix with width $test_width?");
 
-  # the getval and setval routines all deal with native-endian values
+  # The getval and setval routines both always deal only with
+  # native-endian values ...
   $emat->setval(0,0,$native_vals[$test_width]);
 
-  # But we need to test getvals, setvals. First make sure that when we
-  # don't set a byte order that the value matches what was put
+  # ... but we need to test getvals, setvals. First make sure that
+  # when we don't set a byte order that the value matches what was put
   # in. Need to check for return in both list and string context.
   my (@got_back,$got_back_string,$got_back_value);
 
   @got_back=$emat->getvals(0,0,1);
   ok ($got_back[0] == $native_vals[$test_width],
-      "no byteorder flag, got back same value as put in (list context)?");
+      "no byteorder flag, got back same list as put in?");
 
   $got_back_string=$emat->getvals(0,0,1);
   $got_back_value=unpack $native_pack[$test_width], $got_back_string;
   ok ($got_back_value == $native_vals[$test_width],
-      "no byteorder flag, got back same value as put in (string context)?");
+      "no byteorder flag, got back same string as put in?");
 
-  # Since we haven't explictly tested setting byteorder to zero yet, do it here
+  # Since we haven't explictly tested setting byteorder to zero yet,
+  # do it here
   @got_back=$emat->getvals(0,0,1,0);
   ok ($got_back[0] == $native_vals[$test_width],
-      "byteorder 0, got back same value as put in (list context)?");
+      "byteorder 0, got back same list as put in?");
 
   $got_back_string=$emat->getvals(0,0,1,0);
   $got_back_value=unpack $native_pack[$test_width], $got_back_string;
   ok ($got_back_value == $native_vals[$test_width],
-      "byteorder 0, got back same value as put in (string context)?");
+      "byteorder 0, got back same string as put in?");
 
   # Now we can check byte order settings...
   my ($string1,$string2,$val1,$val2);
@@ -382,13 +400,13 @@ for my $test_width (2,4) {
   ($val2)=$emat->getvals(0,0,1,2);
 
   ok ($val1 ne $val2,
-      "different order for w=$test_width returns the same values!");
+      "different order for w=$test_width returns the same list!");
 
   $failed=0;
   if ($val1 eq $native_vals[$test_width]) {
     $endian=1;
-    ++$failed unless $val2 eq $reverse_vals[$test_width];
-  } elsif ($val1 eq $reverse_vals[$test_width]) {
+    ++$failed unless $val2 eq $alien_vals[$test_width];
+  } elsif ($val1 eq $alien_vals[$test_width]) {
     $endian=2;
     ++$failed unless $val2 eq $native_vals[$test_width];
   } else {
@@ -397,22 +415,23 @@ for my $test_width (2,4) {
   ok ($failed==0,
       "$test_width-byte order doesn't return either val or reverse!");
 
-  $oendian= 3 - $endian;	# 3 - 1 = 2, 3 - 1 = 2
+  $oendian= 3 - $endian;	# 3 - 1 = 2, 3 - 2 = 1
 
-  # now we can check calling getval in string string context since now
-  # that we know our endian value, we can figure out how to unpack the
-  # returned strings.
+  # we can now check calling getvals in string string context since
+  # now that we know our endian value, we can figure out how to
+  # pack/unpack the strings.
 
   # Firstly, using S (native unsigned 16 bit) or L (native unsigned 32
-  # bit) should always work if we set endian to our native endian
-  # value.
+  # bit) as our pack template should always work if we set the byte
+  # order to our native endian value (as opposed to 0, which we've
+  # already checked).
   $string1=pack $native_pack[$test_width], $native_vals[$test_width];
   ok ($emat->getvals(0,0,1,$endian) eq $string1,
-      "$test_width-byte word doesn't unpack to same as native unpack!");
+      "$test_width-byte string doesn't unpack to same as native unpack!");
   # and the reverse ...
-  $string2=pack $native_pack[$test_width], $reverse_vals[$test_width];
+  $string2=pack $native_pack[$test_width], $alien_vals[$test_width];
   ok ($emat->getvals(0,0,1,$oendian) eq $string2,
-      "$test_width-byte word doesn't unpack to reverse of alien unpack!");
+      "$test_width-byte string doesn't unpack to reverse of alien unpack!");
 
   # The next check might be redundant, but we can test that explicitly
   # setting the order parameter to our endian-ness gives similar
@@ -426,14 +445,191 @@ for my $test_width (2,4) {
   # Finally, we've been doing all these checks for getvals. Rather
   # than rewriting all the tests to check setvals in a similar way, we
   # can rely on previous multi-byte tests that showed that values for
-  # getvals/setvals matched and only check for correspondence when we
-  # pass an explicit byte order flag.
+  # getvals/setvals matched and only check for correspondence or
+  # reverse correspondence when we pass an explicit byte order flag.
   $emat->setvals(0,0,[$native_vals[$test_width]],$endian);
   ok ($emat->getval(0,0) == $native_vals[$test_width],
-      "setvals on native $test_width-byte word equals getval?");
+      "setvals on native $test_width-byte list equals getval?");
   $emat->setvals(0,0,[$native_vals[$test_width]],$oendian);
-  ok ($emat->getval(0,0) == $reverse_vals[$test_width],
-      "setvals on native $test_width-byte word reverses getval?");
+  ok ($emat->getval(0,0) == $alien_vals[$test_width],
+      "setvals on alien $test_width-byte list reverses getval?");
+
+  $emat->setvals(0,0,$string1,$endian);
+  ok ($emat->getval(0,0) == $native_vals[$test_width],
+      "setvals on native $test_width-byte string equals getval?");
+  $emat->setvals(0,0,$string1,$oendian);
+  ok ($emat->getval(0,0) == $alien_vals[$test_width],
+      "setvals on alien $test_width-byte string reverses getval?");
+
 }
 
-		
+# All previous getvals/setvals have only checked reading and writing a
+# single value. Need to check reading/writing multiple values
+
+
+# Some tests on 16-bit and 32-bit matrices
+
+# After some basic tests creating, comparing and multiplying identity
+# matrices I'll move on directly to more high-level testing involving
+# matrices defining a threshold scheme. Some k from n rows of the
+# matrix should be invertible, so I'll make the submatrix, invert it
+# and then multiply it by the original matrix and test whether the
+# result is an identity matrix.
+
+# Create identity matrices using two methods and compare the
+# values. We already have an @identity8x8 ist of values, so we can
+# generate a matrix from those, or we can use new_identity
+
+$id8x8_16= Math::FastGF2::Matrix->new(rows=>8, cols =>8, width=>2);
+$id8x8_32= Math::FastGF2::Matrix->new(rows=>8, cols =>8, width=>4);
+
+ok((defined($id8x8_16) and ref($id8x8_16) eq $class),
+   "Create 8x8 16-bit matrix?");
+ok((defined($id8x8_32) and ref($id8x8_32) eq $class),
+   "Create 8x8 32-bit matrix?");
+
+# Before we write any values to the matrices below, we can check to
+# make sure that they were created with all values initially set to
+# zero.
+$failed=0;
+for $r (0..7) {
+  for $c (0..7) {
+    ++$failed if $id8x8_16->getval($r,$c) or $id8x8_32->getval($r,$c);
+    $id8x8_16->setval($r,$c,$identity8x8[$r][$c]);
+    $id8x8_32->setval($r,$c,$identity8x8[$r][$c]);
+  }
+}
+
+# Now create matrices using new_identity and compare them with our
+# manually-populated matrices
+my $ni8x8_16=Math::FastGF2::Matrix->new_identity(size => 8, width=> 2);
+my $ni8x8_32=Math::FastGF2::Matrix->new_identity(size => 8, width=> 4);
+
+ok((defined($ni8x8_16) and ref($ni8x8_16) eq $class),
+   "new_identity size=>8, width=>2?");
+ok((defined($ni8x8_32) and ref($ni8x8_32) eq $class),
+   "new_identity size=>8, width=>4?");
+
+ok($ni8x8_16->eq($id8x8_16),
+   "16-bit new_identity eq hand-crafted matrix?");
+ok($ni8x8_32->eq($id8x8_32),
+   "32-bit new_identity eq hand-crafted matrix?");
+
+# Before moving on to inverting parts of our threshold scheme
+# matrices, just make sure that an identity matrix squared equals
+# itself. This will give us minimal confidence that multiplication
+# works.
+ok($ni8x8_16->eq($ni8x8_16->multiply($ni8x8_16)),
+   "16-bit identity squared eq itself?");
+ok($ni8x8_32->eq($ni8x8_32->multiply($ni8x8_32)),
+   "32-bit identity squared eq itself?");
+
+# Do the same for inverses
+ok($ni8x8_16->eq($ni8x8_16->invert),
+   "16-bit inverse identity eq itself?");
+ok($ni8x8_32->eq($ni8x8_32->invert),
+   "32-bit inverse identity eq itself?");
+
+# 16-bit threshold matrix test
+
+# The following matrix defines a threshold scheme where any 4 rows of
+# the matrix are linearly independent (ie, a (4,5) scheme).
+my @tr_4_from_5_u16=
+  (
+   [ "0340", "701f", "2b03", "d145" ],
+   [ "d918", "4a93", "3d03", "bcb5" ],
+   [ "c0ae", "95fe", "57b2", "fdc9" ],
+   [ "dd0d", "0684", "a066", "7c38" ],
+   [ "7a06", "0d0f", "0d57", "1045" ],
+  );
+
+# in-place conversion of hex strings to decimal values
+map { map { $_ = hex } @$_ } @tr_4_from_5_u16;
+
+my @skipped_rows=(4,0,1,3,2);	# useful for error message
+my $id_4x4=Math::FastGF2::Matrix->new_identity(size=>4, width=> 2);
+for my $rows_16 ( [0,1,2,3], [4,2,1,3], [4,3,2,0],
+		  [2,0,1,4], [3,0,4,1]) {
+  my ($new_4x4,$inv_4x4);
+  my $skipped=shift @skipped_rows;
+
+  # we can probably assume these work, given previous similar tests
+  $new_4x4=Math::FastGF2::Matrix->new(rows => 4, cols => 4, width => 2);
+
+  # copy values from @tr_4_from_5_u16 array
+  my $dest_row=0;
+  foreach my $from_row (@$rows_16) {
+    foreach $c (0..3) {
+      $new_4x4->setval($dest_row,$c,$tr_4_from_5_u16[$from_row][$c]);
+    }
+    ++$dest_row;
+  }
+
+  $inv_4x4=$new_4x4->invert;
+  ok((defined($inv_4x4) and ref($inv_4x4) eq $class),
+     "Failed to invert 16-bit threshold skipping row $skipped!");
+
+  # Next step will fail as well if we couldn't invert ...
+  my $product=$new_4x4->multiply($inv_4x4);
+  ok ($id_4x4->eq($product),
+      "matrix x inverse for 16-bit threshold skipping row $skipped?");
+
+  # Might as well also check that inverse of inverse is original matrix
+  ok ($new_4x4->eq($inv_4x4->invert),
+      "inverse of inverse eq self for 16-bit, skipping row $skipped?");
+}
+
+# 32-bit threshold matrix test
+
+# The following matrix defines a threshold scheme where any 4 rows of
+# the matrix are linearly independent (ie, a (4,5) scheme).
+my @tr_4_from_5_u32=
+  (
+   [ "7dd91d81", "a9b559a6", "fd2f668c", "eab462da" ],
+   [ "f77ad141", "d778e64f", "6f0cb2c1", "23b49e0a" ],
+   [ "64a7d945", "9947d2ad", "3a55ea06", "6d85f6b9" ],
+   [ "66b8caf2", "b9bbaa88", "1836f5fd", "211a93d3" ],
+   [ "7cbd8de1", "c838c711", "c3b13916", "ce0c5cc9" ],
+  );
+
+# in-place conversion of hex strings to decimal values
+map { map { $_ = hex } @$_ } @tr_4_from_5_u32;
+
+@skipped_rows=(4,0,1,3,2);	# useful for error message
+$id_4x4=Math::FastGF2::Matrix->new_identity(size=>4, width=> 4);
+for my $rows_32 ( [0,1,2,3], [4,2,1,3], [4,3,2,0],
+		  [2,0,1,4], [3,0,4,1]) {
+  my ($new_4x4,$inv_4x4);
+  my $skipped=shift @skipped_rows;
+
+  # we can probably assume these work, given previous similar tests
+  $new_4x4=Math::FastGF2::Matrix->new(rows => 4, cols => 4, width => 4);
+
+  # copy values from @tr_4_from_5_u32 array
+  my $dest_row=0;
+  foreach my $from_row (@$rows_32) {
+    foreach $c (0..3) {
+      $new_4x4->setval($dest_row,$c,$tr_4_from_5_u32[$from_row][$c]);
+    }
+    ++$dest_row;
+  }
+
+  $inv_4x4=$new_4x4->invert;
+  ok((defined($inv_4x4) and ref($inv_4x4) eq $class),
+     "Failed to invert 32-bit threshold skipping row $skipped!");
+
+  # Next step will fail as well if we couldn't invert ...
+  my $product=$new_4x4->multiply($inv_4x4);
+  ok ($id_4x4->eq($product),
+      "matrix x inverse for 32-bit threshold skipping row $skipped?");
+
+  # Might as well also check that inverse of inverse is original matrix
+  ok ($new_4x4->eq($inv_4x4->invert),
+      "inverse of inverse eq self for 32-bit, skipping row $skipped?");
+}
+
+
+# Test transpose matrix function
+
+
+

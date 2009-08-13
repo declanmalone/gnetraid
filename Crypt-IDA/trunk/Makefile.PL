@@ -5,7 +5,9 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
 	      NAME              => 'Crypt::IDA',
 	      VERSION_FROM      => 'lib/Crypt/IDA.pm', # finds $VERSION
-	      PREREQ_PM         => {}, # e.g., Module::Name => 1.1
+	      PREREQ_PM         => {
+				    'Math::FastGF2' => 0.02
+				   },
 	      ($] >= 5.005 ?     ## New keywords supported since 5.005
 	       (ABSTRACT_FROM  => 'lib/Crypt/IDA.pm',
 		AUTHOR => 'Declan Malone <idablack@sourceforge.net>') : ()),

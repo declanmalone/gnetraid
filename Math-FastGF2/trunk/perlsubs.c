@@ -5,8 +5,6 @@
   the GNU Lesser (Library) General Public License.
 */
 
-
-
 SV* mat_alloc_c(char* class, int rows, int cols, int width, int org) {
 
   gf2_matrix_t*  Matrix;
@@ -80,7 +78,6 @@ unsigned long mat_getval(SV *Self, int row, int col) {
     fprintf (stderr, "Math::FastGF2::Matrix - row out of range in getval\n");
     return 0;
   }
-
   if ((col < 0) || (col >= m->cols)) {
     fprintf (stderr, "Math::FastGF2::Matrix - col out of range in getval\n");
     return 0;
@@ -160,14 +157,17 @@ mat_multiply_submatrix_c (SV *Self, SV *Transform, SV *Result,
   gf2_matrix_t *result = (gf2_matrix_t*) SvIV(SvRV(Result));
   
   /* i == input == self, t == transform, o == output == result; r <- i * t */
-  int idown  = gf2_matrix_offset_down(self);  
+  /* all offsets are measured in bytes */
+  int idown  = gf2_matrix_offset_down(self);
   int iright = gf2_matrix_offset_right(self);
   int tdown  = gf2_matrix_offset_down(xform); 
   int tright = gf2_matrix_offset_right(xform);
   int odown  = gf2_matrix_offset_down(result); 
   int oright = gf2_matrix_offset_right(result); 
 
-  gf2_u8 u8,  *u8_irp,  *u8_orp,  *u8_tcp,  *u8_ocp,  *u8_vip,  *u8_vtp;
+  gf2_u8   u8,  *u8_irp,  *u8_orp,  *u8_tcp,  *u8_ocp,  *u8_vip,  *u8_vtp;
+  gf2_u16 u16, *u16_irp, *u16_orp, *u16_tcp, *u16_ocp, *u16_vip, *u16_vtp;
+  gf2_u32 u32, *u32_irp, *u32_orp, *u32_tcp, *u32_ocp, *u32_vip, *u32_vtp;
 
   int r,c,v;
 
@@ -191,6 +191,61 @@ mat_multiply_submatrix_c (SV *Self, SV *Transform, SV *Result,
 	  u8^=gf2_mul(8,*u8_vip,*u8_vtp);
 	}
 	*(u8_ocp + r * odown) = u8;
+      }
+    }
+    break;
+
+    /* 
+       For 16- and 32-bit words, we have to divide offset values by
+       width whenever adding them to gf2_u16 or gf2_u32 pointers since
+       C increments them to point to the next word rather than the
+       next byte. Other than that (and passing the correct width
+       parameter to gf2_mul) there's no difference between the u8 and
+       u16/u32 multiplication code
+    */
+
+  case 2:
+    for (r=0, 
+	   u16_irp=(gf2_u16 *) (self->values   + idown * self_row), 
+	   u16_orp=(gf2_u16 *) (result->values + odown * result_row);
+	 r < nrows;
+	 ++r,  u16_irp +=(idown >> 1), u16_orp + (odown >> 1)) {
+      for (c=0,
+	     u16_tcp=(gf2_u16 *) (xform->values  + tright * xform_col),
+	     u16_ocp=(gf2_u16 *) (result->values + oright * result_col);
+	   c < ncols;
+	   ++c, u16_tcp += (tright >> 1), u16_ocp += (oright >> 1)) {
+	for (v=0, 
+	       u16_vip=u16_irp, u16_vtp=u16_tcp,
+	       u16=gf2_mul(16,*u16_vip,*u16_vtp);
+	     u16_vip += (iright >> 1), u16_vtp += (tdown >> 1),
+	       ++v < self->cols; ) {
+	  u16^=gf2_mul(16,*u16_vip,*u16_vtp);
+	}
+	*(u16_ocp + r * (odown >> 1)) = u16;
+      }
+    }
+    break;
+    
+  case 4:
+    for (r=0, 
+	   u32_irp=(gf2_u32 *) (self->values   + idown * self_row), 
+	   u32_orp=(gf2_u32 *) (result->values + odown * result_row);
+	 r < nrows;
+	 ++r,  u32_irp +=(idown >> 2), u32_orp + (odown >> 2)) {
+      for (c=0,
+	     u32_tcp=(gf2_u32 *) (xform->values  + tright * xform_col),
+	     u32_ocp=(gf2_u32 *) (result->values + oright * result_col);
+	   c < ncols;
+	   ++c, u32_tcp += (tright >> 2), u32_ocp += (oright >> 2)) {
+	for (v=0, 
+	       u32_vip=u32_irp, u32_vtp=u32_tcp,
+	       u32=gf2_mul(32,*u32_vip,*u32_vtp);
+	     u32_vip += (iright >> 2), u32_vtp += (tdown >> 2),
+	       ++v < self->cols; ) {
+	  u32^=gf2_mul(32,*u32_vip,*u32_vtp);
+	}
+	*(u32_ocp + r * (odown >> 2)) = u32;
       }
     }
     break;
@@ -237,7 +292,7 @@ int mat_values_eq_c (SV *This, SV *That) {
 	   ++j, 
 	     thisp+=thisright - this->width,
 	     thatp+=thatright - that->width) {
-	switch (this -> width) { /* Duff's device variant */
+	switch (this -> width) {
 	case 4:
 	  if (*thisp++ != *thatp++) return 0;
 	  if (*thisp++ != *thatp++) return 0;
@@ -265,18 +320,16 @@ SV* mat_get_raw_values_c (SV *Self, int row, int col,
   char *from, *to;
   int i,j;
 
-  if ((self->width > 1) && 
-      (((native_byteorder == 1) && (byteorder == 2)) ||
-       ((native_byteorder == 2) && (byteorder == 1))) ) {
+  if ( (self->width > 1) && byteorder && 
+       (native_byteorder != byteorder) ) {
 
     to_start=SvPV(Str,len) + self->width - 1;
-    for (i=self->width ;
-	 i-- ; ) {
+    for (i=self->width ; i-- ; --to_start, ++from_start) {
       from=from_start; to=to_start;
       for (j=words; j--; ) {
 	*(to++)=*(from++);
       }
-      --to_start, ++from_start;
+;
     }
   }
   /*  sv_2mortal(Str); */ /* apparently newSVpv takes care of this */
@@ -306,29 +359,19 @@ void mat_set_raw_values_c (SV *Self, int row, int col,
   fprintf(stderr,"to_start offset=%d\n", to_start - self->values);
   */
 
-  if ((self->width > 1) && 
-      (((native_byteorder == 1) && (byteorder == 2)) ||
-       ((native_byteorder == 2) && (byteorder == 1))) ) { 
+  if ( (self->width > 1) && byteorder &&
+       (native_byteorder != byteorder) ) {
     from_start=SvPV(Str,len) + self->width - 1;
-    for (i=self->width ;
-	 i-- ; ) {
+    for (i=self->width ; i-- ; --from_start, ++to_start) {
       from=from_start; to=to_start;
       for (j=words; j--; ) {
 	*(to++)=*(from++);
       }
-      --from_start; ++to_start;
     }
   } else {
     from_start=SvPV(Str,len);
     memcpy(to_start, from_start, len);
   } 
   return;
-}
-
-int mat_invert_c (SV *Self, SV *Result, int size) {
-  gf2_matrix_t *self  = (gf2_matrix_t*) SvIV(SvRV(Self));
-  char *rows[self->rows];
-
-  return 1;
 }
 

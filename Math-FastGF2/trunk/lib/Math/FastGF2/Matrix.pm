@@ -218,7 +218,6 @@ sub offset_to_rowcol {
     carp "Offset out of range in offset_to_rowcol";
     return undef;
   }
-
   if ($self->ORG eq "rowwise") {
     return ((int ($offset / $self->COLS)),
 	    ($offset % $self->COLS) );
@@ -242,9 +241,9 @@ sub rowcol_to_offset {
     return undef;
   }
   if ($self->ORG eq "rowwise") {
-    return ($row * $self->COLS + $col) / $self->WIDTH;
+    return ($row * $self->COLS + $col) * $self->WIDTH;# / $self->WIDTH;
   } else {
-    return ($col * $self->ROWS + $row) / $self->WIDTH;
+    return ($col * $self->ROWS + $row) * $self->WIDTH; # / $self->WIDTH
   }
 }
 
@@ -433,10 +432,14 @@ sub solve {
 
     my ($s,$t,$col);
     if ($self->ORG eq "rowwise") {
-      $s=get_raw_values_c($self, $row1, $start_col, $self->COLS - $start_col, 0);
-      $t=get_raw_values_c($self, $row2, $start_col, $self->COLS - $start_col, 0);
-      set_raw_values_c   ($self, $row1, $start_col, $self->COLS - $start_col, 0, $t);
-      set_raw_values_c   ($self, $row2, $start_col, $self->COLS - $start_col, 0, $s);
+      $s=get_raw_values_c($self, $row1, $start_col,
+			  $self->COLS - $start_col, 0);
+      $t=get_raw_values_c($self, $row2, $start_col,
+			  $self->COLS - $start_col, 0);
+      set_raw_values_c   ($self, $row1, $start_col,
+			  $self->COLS - $start_col, 0, $t);
+      set_raw_values_c   ($self, $row2, $start_col,
+			  $self->COLS - $start_col, 0, $s);
     } else {
       for $col ($start_col .. $cols -1) {
 	$s=$self->getval($row1,$col);
@@ -517,11 +520,10 @@ sub invert {
     return undef;
   }
 
-  my $cat=$self->concat($self->new_identity(size => $self->COLS,
-					    width => $self->WIDTH));
-
+  my $cat=
+    $self->concat($self->new_identity(size => $self->COLS,
+				      width => $self->WIDTH));
   return undef unless defined ($cat);
-
   return $cat->solve;
 }
 

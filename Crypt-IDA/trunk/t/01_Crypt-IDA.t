@@ -1,6 +1,6 @@
 # -*- Perl -*-
 
-use Test::More tests => 2567;
+use Test::More tests => 1199;
 BEGIN { use_ok('Crypt::IDA', ':all') };
 
 my $class="Crypt::IDA";
@@ -171,88 +171,96 @@ ok ($w eq "cfi",    "ida_split gives correct third slice? (got '$w')");
 # other variables in the implementation.
 
 for my $s ("A", "BC", "DEF", "GHIJ", "KLMNO", "PQRSTU") {  # 6 x
-  for my $k (1,2,3,11,17,24) {                             # 6 x
-    for my $n ($k, $k + 1, $k + 2, $k + 3, $k + 7) {       # 5 x
+  for my $k (1,2,5,7) {                                    # 4 x
+    for my $n ($k, $k + 1, $k + 3, $k + 5) {               # 4 x
       for my $l (0,length($s)) {                           # 2 x
-	for my $b (1,2,3,4,5,6,7) {                        # 7 = 2520
+	for my $w (2,4) {	                           # 3 x
+	  for my $order (2) {                            # 2 x
+	    for my $b (1,3,7) {                            # 3 = 
 
-	  # split ...
-	  my $len=length $s;	# length before null padding
-	  while ($l % $k) {
-	    ++$l;		# length after null padding
+	      # split ...
+	      my $len=length $s;	# length before null padding
+	      while ($l % ($k * $w)) {
+		++$l;		# length after null padding
+	      }
+	      $f=fill_from_string($s, $k * $w );
+	      my @sinks=(("") x $n);
+	      @e=map { empty_to_string(\$sinks[$_]) } (0 .. $n-1);
+	      ($key,$mat,$rc)=
+		ida_split(
+			  quorum   => $k, shares   => $n, width => $w,
+			  filler   => $f, emptiers => \@e,
+			  bufsize  => $b, bytes    => $l,
+			  inorder  => 0,
+			  outorder => $order,
+			 );
+
+	      # For combining, we have to make the inverse matrix by
+	      # ourselves.
+	      #
+	      # Previously I was just using the first k shares, but
+	      # for better test coverage, I'm changing this to pick a
+	      # random selection of k shares. Note that as with
+	      # picking random keys, this introduces another source of
+	      # non-determinism to the test cases which isn't
+	      # generally a good thing. But bear in mind that if
+	      # there's something wrong with the code which this
+	      # shuffling picks up, then the chances are exceedingly
+	      # good that random testing like this will most likely
+	      # point to a particular systemic problem (eg, writing $k
+	      # instead of $n in the code somewhere) rather than a
+	      # rare Heisenbug.  That is, that huge numbers of these
+	      # tests should fail, rather than only a few tests
+	      # failing rarely.
+
+	      my @sharenums=(0.. $n-1);
+	      ida_fisher_yates_shuffle(\@sharenums,$k);
+
+	      my @f = ();
+	      my $inv=
+		Math::FastGF2::Matrix->new(rows => $k,       cols  => $k,
+					   org  =>'rowwise', width => $w );
+	      my $dest_row=0;
+
+	      # This code keeps the association between transform rows and
+	      # share data intact
+	      foreach my $row (@sharenums) {
+		my @v=$mat->getvals($row,0,$k);
+		$inv->setvals($dest_row,0, \@v);
+		push @f,fill_from_string($sinks[$row]);
+		++$dest_row;
+	      }
+	      $inv=$inv->invert();	# replace original matrix
+	      warn "Failed to invert matrix\n" unless defined($inv);
+
+	      # combine ...
+	      my $output="";
+	      my $e=empty_to_string(\$output);
+	      my $outlen=
+		ida_combine(
+			    quorum   => $k,  width    => $w,
+			    matrix   => $inv,
+			    fillers  => \@f, emptier  => $e,
+			    bufsize  => $b,  bytes    => $l,
+			    inorder  => $order,
+			    outorder => 0,
+			   );
+	      $output=~s/\0+$//;	# remember to truncate output
+	      # If the input were a binary file, deleting all \0's
+	      # from the end would not be a good idea.  There is an
+	      # alternative truncate method, provided we saved the
+	      # original length of the secret: $output=substr
+	      # $output,0,$len;
+
+	      # test ...
+	      ok ($output eq $s,
+		  "secret '$s', quorum $k, shares $n, bytes $l, ".
+		  "bufsize $b width $w order $order (got '$output', ".
+		  "length ". length($output). ")");
+	    }
 	  }
-	  $f=fill_from_string($s,$k);
-	  my @sinks=(("") x $n);
-	  @e=map { empty_to_string(\$sinks[$_]) } (0 .. $n-1);
-	  ($key,$mat,$rc)=
-	    ida_split(
-		      quorum  => $k, shares   => $n, width => 1,
-		      filler  => $f, emptiers => \@e,
-		      bufsize => $b, bytes    => $l,
-		      inorder => 0,  outorder => 0,
-		     );
-
-	  # For combining, we have to make the inverse matrix by
-	  # ourselves.
-	  #
-	  # Previously I was just using the first k shares, but for
-	  # better test coverage, I'm changing this to pick a random
-	  # selection of k shares. Note that as with picking random
-	  # keys, this introduces another source of non-determinism to
-	  # the test cases which isn't generally a good thing. But
-	  # bear in mind that if there's something wrong with the code
-	  # which this shuffling picks up, then the chances are
-	  # exceedingly good that random testing like this will most
-	  # likely point to a particular systemic problem (eg, writing
-	  # $k instead of $n in the code somewhere) rather than a rare
-	  # Heisenbug.  That is, that huge numbers of these tests
-	  # should fail, rather than only a few tests failing rarely.
-
-	  my @sharenums=(0.. $n-1);
-	  ida_fisher_yates_shuffle(\@sharenums,$k);
-
-	  my @f = ();
-	  my $inv=
-	    Math::FastGF2::Matrix->new(rows => $k,       cols  => $k,
-				       org  =>'rowwise', width => 1);
-	  my $dest_row=0;
-
-	  # This code keeps the association between transform rows and
-	  # share data intact
-	  foreach my $row (@sharenums) {
-	    my @v=$mat->getvals($row,0,$k);
-	    $inv->setvals($dest_row,0, \@v);
-	    push @f,fill_from_string($sinks[$row]);
-	    ++$dest_row;
-	  }
-	  $inv=$inv->invert();	# replace original matrix
-	  warn "Failed to invert matrix\n" unless defined($inv);
-
-	  # combine ...
-	  my $output="";
-	  my $e=empty_to_string(\$output);
-	  my $outlen=
-	    ida_combine(
-			quorum  => $k,  width    => 1,
-			matrix  => $inv,
-			fillers => \@f, emptier  => $e,
-			bufsize => $b,  bytes    => $l,
-			inorder => 0,   outorder => 0
-		       );
-	  $output=~s/\0+$//;	# remember to truncate output
-	  # If the input were a binary file, deleting all \0's from
-	  # the end would not be a good idea.  There is an alternative
-	  # truncate method, provided we saved the original length of
-	  # the secret:
-	  # $output=substr $output,0,$len;
-
-	  # test ...
-	  ok ($output eq $s,
-	      "secret '$s', quorum $k, shares $n, bytes $l, ".
-	      "bufsize $b (got '$output')");
 	}
       }
     }
   }
 }
-

@@ -247,6 +247,8 @@ sub ida_process_streams {
   #warn "-------------------------------------\n";
   #warn "Asked to process $bytes_to_read bytes\n";
   #warn "Input cols is " .$in->COLS. ", Output cols is " . $out->COLS . "\n";
+  #warn "Inorder is $inorder, Outorder is $outorder\n";
+  #warn "There are $nfillers fillers, $nemptiers emptiers\n";
 
   if ($bytes_to_read % ($width * $xform->COLS)) {
     carp "process_streams: bytes to read not a multiple of COLS * WIDTH";
@@ -269,8 +271,8 @@ sub ida_process_streams {
       return undef;
     }
     $ILEN=$rows * $in->COLS * $width;
-    $idown=1;
-    $iright=$in->ROWS;
+    $idown=$width;
+    $iright=$in->ROWS * $width;
     $want_in_size = $width * $rows;
   } else {
     if ($in->ORG ne "rowwise" and $in->ROWS != 1) {
@@ -279,13 +281,14 @@ sub ida_process_streams {
     }
     $ILEN=$in->COLS * $width;
     $idown=$ILEN;
-    $iright=1;
+    $iright=$width;
     $want_in_size = $width;
   }
   for my $i (0 .. $nfillers - 1) {
-    $fillers->[$i]->{"IW" } = $i * $idown;
-    $fillers->[$i]->{"END"} = $i * $idown + $ILEN - 1;
-    $fillers->[$i]->{"BF"}  = 0;
+    $fillers->[$i]->{"IW" }  = $i * $idown;
+    $fillers->[$i]->{"END"}  = $i * $idown + $ILEN - 1;
+    $fillers->[$i]->{"BF"}   = 0;
+    $fillers->[$i]->{"PART"} = ""; # partial word
   }
   if ($nemptiers == 1) {
     if ($out->ORG ne "colwise" and $out->ROWS != 1) {
@@ -293,23 +296,24 @@ sub ida_process_streams {
       return undef;
     }
     $OLEN=$out->ROWS * $out->COLS * $width;
-    $odown=1;
-    $oright=$out->ROWS;
+    $odown=$width;
+    $oright=$out->ROWS * $width;
     $want_out_size = $width * $out->ROWS;
   } else {
     if ($out->ORG ne "rowwise" and $out->ROWS != 1) {
       carp "Need a 'rowwise' output matrix with multiple emptiers";
       return undef;
     }
-    $OLEN=$out->COLS * $width;
-    $odown=$OLEN;
-    $oright=1;
+    $OLEN   = $out->COLS * $width;
+    $odown  = $OLEN;
+    $oright = $width;
     $want_out_size = $width;
   }
   for my $i (0 .. $nemptiers - 1) {
-    $emptiers->[$i]->{"OR"}  = $i * $odown;
-    $emptiers->[$i]->{"END"} = $i * $odown + $OLEN - 1;
-    $emptiers->[$i]->{"BF"}  = 0;
+    $emptiers->[$i]->{"OR"}   = $i * $odown;
+    $emptiers->[$i]->{"END"}  = $i * $odown + $OLEN - 1;
+    $emptiers->[$i]->{"BF"}   = 0;
+    $emptiers->[$i]->{"SKIP"} = 0;
   }
 
   do {
@@ -343,6 +347,12 @@ sub ida_process_streams {
 	#next unless $max_fill;
 
 	#warn "Calling fill handler, maxfill $max_fill\n";
+
+	# Subtract the length of any bytes from partial word read in
+	# the last time around.
+	$max_fill-=length $fillers->[$i]->{"PART"};
+	die "max fill: $max_fill < 0\n" unless $max_fill >= 0;
+
 	$str=$fillers->[$i]->{"SUB"}->($max_fill);
 
 	#warn "Got input '$str' on row $i, length ". length($str). "\n";
@@ -353,11 +363,44 @@ sub ida_process_streams {
 	} elsif ($str eq "") {
 	  ++$eof;
 	} else {
-	  $in->setvals($in->offset_to_rowcol($fillers->[$i]->{"IW"} / $width),
-		       $str,$inorder);
-	  $bytes_read             += (length $str); # - ((length $str) % $want_in_size);
-	  $fillers->[$i]->{"BF"}  += length $str;
-	  $fillers->[$i]->{"IW"}  += length $str;
+	  # setvals must be passed a string that's aligned to width
+	  # (mainly so that it can do byte-order manipulation). As a
+	  # result, we need to keep track of any bytes left over from
+	  # the last call to the fill handler and prepend them to the
+	  # string to be sent to setvals. We also need to chop off any
+	  # extra bytes at the end of the string and save them until
+	  # the next time around.
+
+	  #warn "Got string '$str' from filler $i\n";
+	  #warn "length of str is " . (length($str)) . "\n";
+
+	  my $aligned=$fillers->[$i]->{"PART"} . $str;
+	  $fillers->[$i]->{"PART"}=
+	    substr $aligned,
+	      (length($aligned) - (length($aligned) % $width)),
+		(length($aligned) % $width),
+		  "";
+	  die "Alignment problem with filler $i\n"
+	    if length($aligned) % $width;
+	  die "Alignment problem with fill pointer $i\n"
+	    if $fillers->[$i]->{"IW"} % $width;
+
+	  #next unless length $aligned;
+
+	  #warn "Adding string '$aligned' to input buffer\n";
+
+	  $in->
+	    setvals($in->
+		    offset_to_rowcol($fillers->[$i]->{"IW"}),
+		    $aligned,
+		    $inorder);
+
+	  # For the purpose of updating IW and BF variables, we
+	  # pretend we didn't see any bytes from partial words
+	  my $saw_bytes=(length $aligned) - (length($aligned) % $width) ;
+	  $bytes_read += $saw_bytes;
+	  $fillers->[$i]->{"BF"}  += $saw_bytes;
+	  $fillers->[$i]->{"IW"}  += $saw_bytes;
 	  if ($fillers->[$i]->{"IW"} > $fillers->[$i]->{"END"}) {
 	    $fillers->[$i]->{"IW"}  -= $ILEN;
 	  }
@@ -405,26 +448,43 @@ sub ida_process_streams {
 	    }
 	  }
 
+	  die "invalid max empty $max_empty\n" 
+	    if $max_empty>0 and $max_empty<$width;
 	  #next unless $max_empty;
 
 	  # call handler to empty some data
 	  #warn "Emptying row $i, col ".
 	  #  ($emptiers->[$i]->{"OR"} % ( $out->COLS * $width)) .
 	  #    " with $max_empty bytes\n";
-	  ($rr,$cc)=$out->offset_to_rowcol($emptiers->[$i]->{"OR"});
-	  #warn "got (row,col) ($rr,$cc) from OR#$i offset ". 
+
+	  die "Alignment problem with OR emptier $i" if
+	    $emptiers->[$i]->{"OR"} % $width;
+	  ($rr,$cc)=$out->
+	    offset_to_rowcol($emptiers->[$i]->{"OR"});
+
+	  #warn "got (row,col) ($rr,$cc) from OR#$i offset ".
 	  #  $emptiers->[$i]->{"OR"}. "\n";
+
+	  # When emptying, we have to check whether the emptier
+	  # emptied full words. If it emptied part of a word, we have
+	  # to prevent those bytes that were sent from being sent
+	  # again. To do this, we keep track of a SKIP variable for
+	  # each output buffer, which is the number of bytes to skip
+	  # at the start of the output string.
+
 	  $str=$out->
 	    getvals($rr,$cc,
 		    $max_empty / $width,
 		    $outorder);
+	  #substr $str, 0, $emptiers->[$i]->{"SKIP"}, "";
 	  $rc=$emptiers->[$i]->{"SUB"}->($str);
-	  #warn "Emptying output '$str' to row $i\n";
 
 	  unless (defined($rc)) {
 	    carp "ERROR: write error $!\n";
 	    return undef;
 	  }
+	  #$emptiers->[$i]->{"SKIP"} = $rc % $width;
+	  #$rc -= $rc % $width;
 	  $emptiers->[$i]->{"BF"}   -= $rc;
 	  $emptiers->[$i]->{"OR"}   += $rc;
 	  if ($emptiers->[$i]->{"OR"} > $emptiers->[$i]->{"END"}) {
