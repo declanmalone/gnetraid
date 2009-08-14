@@ -529,6 +529,7 @@ sub invert {
 
 1;
 
+__END__
 
 =head1 NAME
 
@@ -536,11 +537,256 @@ Math::FastGF2::Matrix - Matrix operations for fast Galois Field arithmetic
 
 =head1 SYNOPSIS
 
+ use Math::FastGF2::Matrix;
+ 
+ $m=Math::FastGF2::Matrix->
+   new(rows => $r, cols => $c, width => $w, org => "rowwise");
+ $i=Math::FastGF2::Matrix->
+   new_identity(size => $size, width => $w, org => "rowwise");
+ 
+ $rows = $m->ROWS;   $cols  = $m->COLS;
+ $org  = $m->ORG;    $width = $m->WIDTH;
+ 
+ $val=$m->getval($row,$col);
+ $m->setval($row,$col,$val);
+ 
+ @vals=$m->getvals($row,$col,$words,$order);
+ $vals=$m->getvals($row,$col,$words,$order);
+ $vals=$m->setvals($row,$col,\@vals,$order);
+ $vals=$m->setvals($row,$col,$vals,$order);
+ 
+ $product=$m->multiply($m);
+ $inverse=$m->invert;
+ $adjoined=$m->concat($m);
+ $solution=$m->solve;
+
 =head1 DESCRIPTION
+
+This module provides basic functionality for handling matrices of
+Galois Field elements. It is a fairly "close to the metal"
+implementation using the C language to store the underlying object and
+handle performance-critical tasks such as bulk input/output of values
+and matrix multiplication. Less critical tasks are handled by Perl
+methods.
+
+All matrix elements are treated as polynomials in GF(2^m), with all
+calculations on them being done using the Math::FastGF2 module.
+
+=head1 CONSTRUCTORS
+
+=head2 new
+
+New Math::FastGF2::Matrix objects are created and initialised to with
+zero values with the C<new()> constructor method:
+
+ $m=Math::FastGF2::Matrix->
+   new(rows => $r, cols => $c, width => $w, org => "rowwise");
+
+The rows and cols parameters specify how many rows and columns the new
+matrix should have. The width parameter must be set to 1, 2 or 4 to
+indicate Galois Fields of that many bytes in size.
+
+The C<org> parameter is optional and defaults to "rowwise" if
+unset. This parameter specifies how the matrix should be organised in
+memory. This parameter affects how the bulk data input/output routines
+C<setvals> and C<getvals> enter data and retrieve it from the
+matrix. With "rowwise" organisation, values are written in
+left-to-right order first, moving down to the next row as each row
+becomes full. With "colwise" organisation, values are written
+top-to-bottom first, moving right to the next column as each column
+becomes full.
+
+=head2 new_identity
+
+To create a new identity matrix with C<$size> rows and columns, width
+C<$w> and organisation C<$org>:
+
+ $i=Math::FastGF2::Matrix->
+          new_identity(size => $size, width => $w, org => $org);
+
+As with the C<new> constructor, the C<org> parameter is optional and
+default to "rowwise".
 
 =head1 GETTING AND SETTING VALUES
 
+Getting and setting individual values in the matrix is handled by the
+C<getval> and C<setval> methods:
+
+ $val=$m->getval($row,$col);
+ $m->setval($row,$col,$val);
+
+Multiple values can be got/set at once, using the more efficient
+C<getvals>/C<setvals> methods:
+
+ @vals=$m->getvals($row,$col,$words,$order);
+ $vals=$m->getvals($row,$col,$words,$order);
+ $vals=$m->setvals($row,$col,\@vals,$order);
+ $vals=$m->setvals($row,$col,$vals,$order);
+
+These methods copy the values out of/into the C data structure. The
+C<$words> parameter to C<getvals> specifies how many values to extract
+from the Matrix.
+
+These methods can take an optional C<$order> parameter which can be
+used to perform byte-swapping on 2-byte and 4-byte words where it is
+needed. The possible values are:
+
+=over
+
+=item 0. input is/output should be in native byte order (no
+byte-swapping)
+
+=item 1. input is/output should be in little-endian byte order
+
+=item 2. input is/output should be in big-endian byte order
+
+=back
+
+=cut
+
+If the specified byte order is different from the native byte order on
+the machine, then bytes within each word will be swapped. Otherwise,
+the values are passed through unchanged.
+
+All these routines have the choice of operating on strings (close to
+the internal representation of the matrix in memory) or lists of
+values (regular numeric scalars, as used by getval/setval). Byte order
+translation (where specified) is performed regardless of whether
+strings or lists are used. Operating with strings is slightly more
+efficient than using lists of values, since data can be copied with
+fewer operations without needing to pack/unpack a list of values.
+
+=head2 Examples
+
+To swap two rows of a "rowwise" matrix using temporary lists
+
+ die "Expected matrix to be ROWWISE\n" unless $m->ORG eq "rowwise"
+ @list1 = $m->getvals($row1,0,$m->COLS);
+ @list2 = $m->getvals($row2,0,$m->COLS);
+ $m->setvals($row1,0,\@list2);
+ $m->setvals($row2,0,\@list1);
+
+The same example using slightly more efficient string form:
+
+ die "Expected matrix to be ROWWISE\n" unless $m->ORG eq "rowwise"
+ $str1 = $m->getvals($row1,0,$m->COLS);
+ $str2 = $m->getvals($row2,0,$m->COLS);
+ $m->setvals($row1,0,$str2);
+ $m->setvals($row2,0,$str1);
+
+This is an example of how I<not> to implement the above. It fails
+because getvals is being called in a list context. I<Beware>:
+
+ ($str1,$str2) = ( $m->getvals($row1,0,$m->COLS),
+                   $m->getvals($row2,0,$m->COLS) );
+ $m->setvals($row1,0,$str2);
+ $m->setvals($row2,0,$str1);
+
+Likewise, this common idiom also implies a list context:
+
+ my ($var) = ...
+
+When in doubt about list/scalar context, always use a simple
+assignment to a scalar variable. Alternatively, scalar context can be
+enforced by using Perl's C<scalar> keyword, eg:
+
+ my ($str) = (scalar $m->getvals(...));
+
+Read in some little-endian values from a file, and have them converted
+to Perl's internal format if necessary:
+
+ # assume ROWWISE, writing values into row $row of matrix
+ sysread $fh, $str, $m->COLS * $m->WIDTH;
+ $m->setvals($row,0,$str,1);
+
+Take values from a matrix and output them to a file as a list of
+little-endian values:
+
+ # assume ROWWISE, reading values from row $row of matrix
+ $str=$m->getvals($row,0,$str,1);
+ syswrite $fh, $str, $m->COLS * $m->WIDTH;
+
+Zero all elements in a matrix (works regardless of matrix
+organisation):
+
+ $m->setvals(0,0,(0) x ($m->ROWS * $m->COLS));
+
+=head1 MATRIX OPERATIONS
+
+=head2 Multiply
+
+To multiply two matrices $m1 (on left) and $m2 (on right), use:
+
+ $result=$m1->multiply($m2);
+
+This returns a new matrix in C<$result> or undef on error. The number
+of columns in C<$m1> must equal the number of rows in C<$m2>. The
+resulting matrix will have the same number of rows as $m1 and the same
+number of columns as $m2. An alternative form allows storing the
+result in an existing matrix (of the appropriate dimensions), thus
+avoiding the overhead of allocating a new one:
+
+ $m1->multiply($m2,$result);
+
+The C<$result> matrix is also returned, though it can be safely
+ignored.
+
+=head2 Invert
+
+To invert a square matrix (using Gauss-Jordan method):
+
+ $inverse=$m->invert;
+
+A new inverse matrix is returned if the matrix was invertible, or
+undef otherwise.
+
+=head2 Concat(enate)
+
+To create a new matrix which has matrix $m1 on the left and $m2 on the
+right, use:
+
+$adjoined = $m1->concat($m2);
+
+The number of rows in C<$m1> and C<$m2> must be the same. Returns a
+new matrix or undef in the case of an error.
+
+=head2 Solve
+
+Treat matrix as a set of simultaneous equations and attempt to solve
+it:
+
+ $solution=$m->solve;
+
+The result is a new matrix, or undef if the equations have no
+solution. The input matrix must have at least one more column than
+rows, with the first $m->ROWS columns being the coefficients of the
+equations to be solved (ie, the left-hand side of equations), and the
+remaining column(s) being the value(s) the equations evaluate to (ie,
+the right-hand side of equations).
+
+=head2 Equality
+
+To test whether two matrices have the same values:
+
+ if ($m1->eq($m2)) {
+   # Matrices are equal
+   ...
+ }
+
+Testing for inequality:
+
+ if ($m1->ne($m2)) {
+   # Matrices are not equal
+   ...
+ }
+
 =head1 SEE ALSO
+
+See L<Math::FastGF2> for details of the underlying Galois Field
+arithmetic.
+
+See L<Math::Matrix> for storing and manipulating matrices of regular
+numbers.
 
 =head1 AUTHOR
 
@@ -553,8 +799,8 @@ Copyright (C) 2009 by Declan Malone
 This package is free software; you can redistribute it and/or modify
 it under the terms of the "GNU General Public License" ("GPL").
 
-Please refer to the files "GNU_GPL.txt" and "GNU_LGPL.txt" in this
-distribution for details.
+Please refer to the file "GNU_GPL.txt" in this distribution for
+details.
 
 =head1 DISCLAIMER
 

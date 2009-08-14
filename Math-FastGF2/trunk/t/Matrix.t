@@ -656,7 +656,10 @@ ok( $wide_16->getval(0,2) == 0x4546,
 
 # Actually, I couldn't be bothered checking 32-bit values... the same
 # code is used for both 16 and 32-bit values and there is really no
-# way for one to fail and not the other.
+# way for one to fail and not the other. This holds for strings
+# anyway. In my next session I probably will check what happens when
+# setvals is given a list of numbers from unpack. And check that
+# getvals works as expected too...
 
 # Test transpose matrix function
 
