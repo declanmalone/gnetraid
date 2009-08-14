@@ -1,0 +1,20 @@
+Revision history for Perl extension Math::FastGF2.
+
+0.02  Fri Aug 14 18:00:00 2009
+        - New release. Add Matrix code.
+        - All installable perl scripts now go in bin/ where they
+          belong.
+        - Make building of XS code depend on perlsubs.c
+        - Automated tests by CPAN testers are failing because of
+          different sizes for "unsigned long". A future release will
+          try to determine the correct word size at compile time.
+          Until then, if the system tests fail with code 11 (segfault)
+          on systems with 64-bit native ints, please manually change
+          the type of gf2_u32 to something appropriate and also update
+          the Perl XS functions (and prototypes) to use the same
+          value. Thank you.
+
+0.01  Mon Jul 13 20:19:47 2009
+	- original version; created by h2xs 1.23 with options
+		-A -n Math::FastGF2
+
