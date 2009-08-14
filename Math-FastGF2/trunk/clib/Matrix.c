@@ -39,6 +39,12 @@ int gf2_matrix_offset_down (gf2_matrix_t *m) {
   return 0;
 }
 
+#ifdef NOW_IS_OK
+
+/* 
+  Misc stuff that's implemented in Perl now, but I might enable as C
+  routines later
+*/
 
 OFF_T
 gf2_process_streams(gf2_matrix_t *xform,
@@ -380,8 +386,6 @@ gf2_process_streams(gf2_matrix_t *xform,
   } while (!eof);
 }
 
-
-#ifdef NOW_IS_OK
 
 /* Create a new identity matrix or if passed an existing matrix, store
    an identity matrix in it. If matrix is passed in, any other passed

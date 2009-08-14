@@ -23,5 +23,8 @@ WriteMakefile(
 sub MY::postamble {
 '$(MYEXTLIB): clib/Makefile
 	cd clib && $(MAKE) $(PASSTHRU)
+
+# Add dependency to ensure files are rebuilt if perlsubs.c changes
+FastGF2.c : perlsubs.c
 ';
 }
