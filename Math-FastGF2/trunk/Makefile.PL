@@ -51,6 +51,7 @@ WriteMakefile(
     LIBS              => [''], # e.g., '-lm'
     DEFINE            => (join ' ', @defines),
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'
+#    DIR               => ['clib'],
     MYEXTLIB          => 'clib/libfastgf2$(LIB_EXT)',
 	# Un-comment this if you add C files to link with later:
 #    OBJECT            => 'FastGF2.o', # link all the C files too
@@ -61,7 +62,8 @@ WriteMakefile(
 );
 sub MY::postamble {
 '$(MYEXTLIB): clib/Makefile
-	cd clib && $(MAKE) $(PASSTHRU)
+	cd clib && perl Makefile.PL DEFINE="' .
+(join ' ', @defines) . '"&& $(MAKE) $(PASSTHRU)
 
 # Add dependency to ensure files are rebuilt if perlsubs.c changes
 FastGF2.c : perlsubs.c
