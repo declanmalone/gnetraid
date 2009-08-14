@@ -270,10 +270,9 @@ simple to implement a straight multiplication routine, although I do
 not foresee any need for it.
 
 As for the other two problems, the natural solution is to provide
-functions that do more work with each call. Specifically, in future
-versions you can expect to find a range of matrix-related operations
-to allow efficient operations on large blocks of data from a single
-call.
+functions that do more work with each call. Specifically, starting
+with version 0.02, there is support for matrix-related operations to
+allow efficient operations on large blocks of data from a single call.
 
 I intend future versions to be backward-compatible with this one.  In
 terms of design, I've decided that using Perl scalars for storing
@@ -290,9 +289,13 @@ applications involving codes or cryptography. The main ones are:
 
 =over
 
-=item * The Advanced Encryption Standard (Rijndael) algorithm for encrpytion. This operates on 8-bit fields and uses the same irreducible polynomial as implemented in this library.
+=item * The Advanced Encryption Standard (Rijndael) algorithm for
+encrpytion. This operates on 8-bit fields and uses the same
+irreducible polynomial as implemented in this library.
 
-=item * Error-correcting codes, particularly Reed-Solomon encoding. (RS encoding and Rabin's IDA are actually versions of the same algorithm)
+=item * Error-correcting codes, particularly Reed-Solomon
+encoding. (RS encoding and Rabin's IDA are actually versions of the
+same algorithm)
 
 =back
 
@@ -340,9 +343,13 @@ for the following reasons:
 
 =over
 
-=item * technically, division by zero gives an undefined result, so the problem is with the calling program (which shouldn't have asked to divide by zero) rather than this module; and
+=item * technically, division by zero gives an undefined result, so
+the problem is with the calling program (which shouldn't have asked to
+divide by zero) rather than this module; and
 
-=item * while the fix is trivial, the extra test needed would slow down all calls to the division routine to handle a case that should really happen only very rarely.
+=item * while the fix is trivial, the extra test needed would slow
+down all calls to the division routine to handle a case that should
+really happen only very rarely.
 
 =back
 
@@ -410,8 +417,6 @@ This module is part of the GnetRAID project. For project development
 page, see:
 
   https://sourceforge.net/projects/gnetraid/develop
-
-
 
 =head1 AUTHOR
 
