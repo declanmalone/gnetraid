@@ -15,7 +15,7 @@ require Exporter;
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = (  );
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 require XSLoader;
 XSLoader::load('Math::FastGF2', $VERSION);
@@ -271,8 +271,9 @@ not foresee any need for it.
 
 As for the other two problems, the natural solution is to provide
 functions that do more work with each call. Specifically, starting
-with version 0.02, there is support for matrix-related operations to
-allow efficient operations on large blocks of data from a single call.
+with version 0.02, there is support for matrix-related operations in
+the L<Math::FastGF2::Matrix> module to allow efficient operations on
+large blocks of data from a single call.
 
 I intend future versions to be backward-compatible with this one.  In
 terms of design, I've decided that using Perl scalars for storing
@@ -412,6 +413,9 @@ of Shamir's secret sharing algorithm, on which C<shamir-split.pl> and
 C<shamir-combine.pl> are based. These new versions replace the integer
 modulo a prime fields with Galois fields implemented with
 Math::FastGF2.
+
+The L<Math::FastGF2::Matrix> module has a range of Matrix functions to
+operate more efficiently on large blocks of data.
 
 This module is part of the GnetRAID project. For project development
 page, see:
