@@ -6,16 +6,84 @@
 */
 
 /*
-  These may need to be changed to suit word sizes on your platform. If
-  you change them, be sure to also change any function prototypes
-  below.
+  Typedefs may need to be changed to suit the word sizes on your
+  particular platform. The main Makefile.PL should be able to guess
+  these and pass the appropriate -DDEFINES (see below), but if not,
+  you can use define USE_CUSTOM_TYPEDEFS and supply your own types.
 */
+
+#ifdef USE_CUSTOM_TYPEDEFS
+
+/*
+  If you have a modern compiler that supports C99, you can include
+  this next library to get access to u?int_(16|32) types:
+
+#include <stdint.h>
+*/
+
+/* Put in your custom typedefs here. Here are some example values */
 typedef unsigned char    gf2_u8;
-typedef unsigned short   gf2_u16;
-typedef unsigned long    gf2_u32;
 typedef signed char      gf2_s8;
+typedef unsigned short   gf2_u16;
 typedef signed short     gf2_s16;
+typedef unsigned long    gf2_u32;
 typedef signed long      gf2_s32;
+
+#else
+
+/*
+  Or else rely on the main Makefile.PL to define two of the following
+  (ie, one from each column):
+
+    SHORT_HAS_16_BITS          SHORT_HAS_32_BITS	  
+    INT_HAS_16_BITS	       INT_HAS_32_BITS	  
+    LONG_HAS_16_BITS  	       LONG_HAS_32_BITS	  
+    LONG_LONG_HAS_16_BITS      LONG_LONG_HAS_32_BITS   
+*/
+
+/* These should be the same everywhere */
+typedef unsigned char    gf2_u8;
+typedef signed char      gf2_s8;
+
+/*
+  But these may need to be tailored to this machine. Exactly one of
+  these must exist for each word size or else the compilation will
+  fail with messages about undeclared types.
+*/
+#ifdef SHORT_HAS_16_BITS
+typedef unsigned short      gf2_u16;
+typedef signed short        gf2_s16;
+#endif
+#ifdef INT_HAS_16_BITS
+typedef unsigned int        gf2_u16;
+typedef signed int          gf2_s16;
+#endif
+#ifdef LONG_HAS_16_BITS
+typedef unsigned long       gf2_u16;
+typedef signed long         gf2_s16;
+#endif
+#ifdef LONGLONG_HAS_16_BITS
+typedef unsigned long long  gf2_u16;
+typedef signed long long    gf2_s16;
+#endif
+#ifdef SHORT_HAS_32_BITS
+typedef unsigned short      gf2_u32;
+typedef signed short        gf2_s32;
+#endif
+#ifdef INT_HAS_32_BITS
+typedef unsigned int        gf2_u32;
+typedef signed int          gf2_s32;
+#endif
+#ifdef LONG_HAS_32_BITS
+typedef unsigned long       gf2_u32;
+typedef signed long         gf2_s32;
+#endif
+#ifdef LONGLONG_HAS_32_BITS
+typedef unsigned long long  gf2_u32;
+typedef signed long long    gf2_s32;
+#endif
+
+#endif
 
 #ifdef _LARGEFILE64_SOURCE
 #define OFF_T off64_t
@@ -30,10 +98,10 @@ typedef signed long      gf2_s32;
 /* Public interface routines */
 
 /* basic maths */
-unsigned long gf2_mul (int width, unsigned long a, unsigned long b);
-unsigned long gf2_inv (int width, unsigned long a);
-unsigned long gf2_div (int width, unsigned long a, unsigned long b);
-unsigned long gf2_info(int bits);
+gf2_u32 gf2_mul (int width, gf2_u32 a, gf2_u32 b);
+gf2_u32 gf2_inv (int width, gf2_u32 a);
+gf2_u32 gf2_div (int width, gf2_u32 a, gf2_u32 b);
+gf2_u32 gf2_info(int bits);
 
 /* matrix */
 typedef struct {

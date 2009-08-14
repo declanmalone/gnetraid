@@ -13,30 +13,30 @@ MODULE = Math::FastGF2		PACKAGE = Math::FastGF2
 
 PROTOTYPES: ENABLE
 
-unsigned long
+gf2_u32
 gf2_mul (width, a, b)
 	int	width
-	unsigned long	a
-	unsigned long	b
+	gf2_u32	a
+	gf2_u32	b
 
-unsigned long
+gf2_u32
 gf2_inv (width, a)
 	int	width
-	unsigned long	a
+	gf2_u32	a
 
-unsigned long
+gf2_u32
 gf2_div (width, a, b)
 	int	width
-	unsigned long	a
-	unsigned long	b
+	gf2_u32	a
+	gf2_u32	b
 
-unsigned long
+gf2_u32
 gf2_pow (width, a, b)
 	int	width
-	unsigned long	a
-	unsigned long	b
+	gf2_u32	a
+	gf2_u32	b
 
-unsigned long
+gf2_u32
 gf2_info (bits)
 	int bits
 
@@ -78,18 +78,18 @@ int
 mat_ORGNUM (self)
   SV* self
 
-unsigned long
+gf2_u32
 mat_getval (self, row, col) 
   SV* self
   int row
   int col
 
-unsigned long
+gf2_u32
 mat_setval(self, row, col, val)
   SV *self
   int row
   int col
-  unsigned long val
+  gf2_u32 val
 
 void
 mat_multiply_submatrix_c (S, T, R, sr, rr, nr, xc, rc, nc)

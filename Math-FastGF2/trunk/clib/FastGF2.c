@@ -1321,7 +1321,7 @@ static gf2_u32 gf2_long_mod_inverse_u32 (gf2_u32 x);
 static gf2_u16 gf2_long_mod_power_u16 (gf2_u16 x, gf2_u16 y);
 static gf2_u32 gf2_long_mod_power_u32 (gf2_u32 x, gf2_u32 y);
 
-unsigned long gf2_mul (int width, unsigned long a, unsigned long b) {
+gf2_u32 gf2_mul (int width, gf2_u32 a, gf2_u32 b) {
   /* keep 8-bit log/exp tables handy */
   static const gf2_s16 *log_table=fast_gf2_log;
   static const gf2_u8  *exp_table=fast_gf2_exp+512;
@@ -1339,7 +1339,7 @@ unsigned long gf2_mul (int width, unsigned long a, unsigned long b) {
   }
 }
 
-unsigned long gf2_inv (int width, unsigned long a) {
+gf2_u32 gf2_inv (int width, gf2_u32 a) {
   /* keep 8-bit log/exp tables handy */
   static const gf2_s16 *log_table=fast_gf2_log;
   static const gf2_u8  *exp_table=fast_gf2_exp+512;
@@ -1357,7 +1357,7 @@ unsigned long gf2_inv (int width, unsigned long a) {
   }
 }
 
-unsigned long gf2_div (int width, unsigned long a, unsigned long b) {
+gf2_u32 gf2_div (int width, gf2_u32 a, gf2_u32 b) {
   /* keep 8-bit log/exp tables handy */
   static const gf2_s16 *log_table=fast_gf2_log;
   static const gf2_u8  *exp_table=fast_gf2_exp+512;
@@ -1375,7 +1375,7 @@ unsigned long gf2_div (int width, unsigned long a, unsigned long b) {
   }
 }
 
-unsigned long gf2_pow (int width, unsigned long a, unsigned long b) {
+gf2_u32 gf2_pow (int width, gf2_u32 a, gf2_u32 b) {
   /* keep 8-bit log/exp tables handy */
   static const gf2_s16 *log_table=fast_gf2_log;
   static const gf2_u8  *exp_table=fast_gf2_exp+512;
@@ -1565,7 +1565,7 @@ static gf2_u32 gf2_long_mod_power_u32 (gf2_u32 x, gf2_u32 y) {
   return z;
 }
 
-unsigned long gf2_info(int bits) {
+gf2_u32 gf2_info(int bits) {
   switch(bits) {
   case 8:
     return poly_u8;

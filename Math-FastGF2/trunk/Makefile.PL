@@ -1,7 +1,46 @@
 use 5.008000;
 use ExtUtils::MakeMaker;
-# See lib/ExtUtils/MakeMaker.pm for details of how to influence
-# the contents of the Makefile that is written.
+
+use Config;
+
+# Attempt to divine the size of the native C data types and set up
+# -DDEFINES to change how the gf2_u16 and gf2_u32 types are defined
+# during compilation.
+my @defines=();
+sub find_right_type {
+  my $size=shift;
+  if ($Config{shortsize} == $size) {
+    return "SHORT";
+  } elsif ($Config{intsize}  == $size) {
+    return "INT";
+  } elsif ($Config{longsize} == $size) {
+    return "LONG";
+  } elsif (exists($Config{d_longlong}) and
+	   $Config{d_longlong} eq "HAS_LONG_LONG" and
+	   $Config{longlongsize} == $size) {
+    return "LONGLONG";		# long (long) shot
+  } else {
+    return "NOTHING";
+  }
+}
+if (scalar(@ARGV) > 0 and $ARGV[0] =~ "USE_CUSTOM_TYPEDEFS") {
+  warn "OK, skipping attempt to divine proper typedefs from \$Config\n";
+  push @defines,"-DUSE_CUSTOM_TYPEDEFS";
+  shift @ARGV;
+} else {
+  foreach my $size (2,4) {
+    my $what=find_right_type($size);
+    if ($what eq "NOTHING") {
+      warn "Couldn't find a C data type on this machine with $size bytes\n";
+      warn "You will have to edit the file clib/FastGF2.h manually\n";
+      warn "Then re-run with USE_CUSTOM_TYPEDEFS as the first parameter\n";
+      exit 0;
+    }
+    push @defines,"-D${what}_HAS_" . ($size << 3) ."_BITS";
+  }
+}
+
+
 WriteMakefile(
     NAME              => 'Math::FastGF2',
     VERSION_FROM      => 'lib/Math/FastGF2.pm', # finds $VERSION
@@ -10,7 +49,7 @@ WriteMakefile(
       (ABSTRACT_FROM  => 'lib/Math/FastGF2.pm', # retrieve abstract from module
        AUTHOR         => 'Declan Malone <idablack@sourceforge.net>') : ()),
     LIBS              => [''], # e.g., '-lm'
-    DEFINE            => '', # e.g., '-DHAVE_SOMETHING'
+    DEFINE            => (join ' ', @defines),
     INC               => '-I.', # e.g., '-I. -I/usr/include/other'
     MYEXTLIB          => 'clib/libfastgf2$(LIB_EXT)',
 	# Un-comment this if you add C files to link with later:

@@ -5,6 +5,7 @@
   the GNU Lesser (Library) General Public License.
 */
 
+
 SV* mat_alloc_c(char* class, int rows, int cols, int width, int org) {
 
   gf2_matrix_t*  Matrix;
@@ -58,13 +59,7 @@ int mat_ORGNUM  (SV* Self) {
   return ((gf2_matrix_t*)SvIV(SvRV(Self)))->organisation;
 }
 
-/*
-typedef unsigned char    gf2_u8;
-typedef unsigned short   gf2_u16;
-typedef unsigned long    gf2_u32;
-*/
-
-unsigned long mat_getval(SV *Self, int row, int col) {
+gf2_u32 mat_getval(SV *Self, int row, int col) {
   gf2_matrix_t *m=(gf2_matrix_t*)SvIV(SvRV(Self));
   int  down=gf2_matrix_offset_down(m);
   int right=gf2_matrix_offset_right(m);
@@ -99,7 +94,7 @@ unsigned long mat_getval(SV *Self, int row, int col) {
   }
 }
 
-unsigned long mat_setval(SV *Self, int row, int col,unsigned long val) {
+gf2_u32 mat_setval(SV *Self, int row, int col, gf2_u32 val) {
   gf2_matrix_t *m=(gf2_matrix_t*)SvIV(SvRV(Self));
   int  down=gf2_matrix_offset_down(m);
   int right=gf2_matrix_offset_right(m);
