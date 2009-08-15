@@ -2,8 +2,8 @@ Changes
 Makefile.PL
 MANIFEST
 README
-t/Crypt-IDA.t
-t/Crypt-IDA-ShareFile.t
+t/01_Crypt-IDA.t
+t/10_Crypt-IDA-ShareFile.t
 lib/Crypt/IDA.pm
 lib/Crypt/IDA/ShareFile.pm
 bin/rabin-combine.pl

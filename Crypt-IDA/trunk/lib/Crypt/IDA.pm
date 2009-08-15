@@ -1937,7 +1937,7 @@ inferior platforms which do not have an equivalent of /dev/[u]random)
 
 =head1 AUTHOR
 
-Declan Malone, idablack@sourceforge.net
+Declan Malone, E<lt>idablack@sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 

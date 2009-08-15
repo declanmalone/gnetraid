@@ -7,7 +7,8 @@ use Crypt::IDA ":all";
 
 my $patt='%f-%c-%s';
 
-ok (sf_sprintf_filename($patt,"foo",2,3) eq 'foo-2-3', "sf_sprintf_filename");
+ok (sf_sprintf_filename($patt,"foo",2,3) eq 'foo-2-3',
+    "sf_sprintf_filename");
 
 # first test uses an identity matrix as the transform, which should
 # effect a striping of input
@@ -26,11 +27,11 @@ sf_split(quorum => 3, shares => 3, matrix => $id, filename => $tempfile);
 
 unlink $tempfile;
 
-sf_combine(infiles => [ map { "$tempfile-$_"} (0..2) ],
+sf_combine(infiles => [ map { "$tempfile-$_.sf"} (0..2) ],
 	   outfile => $tempfile);
 open TEMPFILE, "<$tempfile";
 
-map { unlink "$tempfile-$_"} (0..2);
+map { unlink "$tempfile-$_.sf"} (0..2);
 
 my $got_back=<TEMPFILE>;
 
@@ -45,11 +46,11 @@ sf_split(quorum => 3, shares => 3, filename => $tempfile,
 
 unlink $tempfile;
 
-sf_combine(infiles => [ map { "$tempfile-$_"} (0..2) ],
+sf_combine(infiles => [ map { "$tempfile-$_.sf"} (0..2) ],
 	   outfile => $tempfile);
 open TEMPFILE, "<$tempfile";
 
-map { unlink "$tempfile-$_"} (0..2);
+map { unlink "$tempfile-$_.sf"} (0..2);
 
 $got_back=<TEMPFILE>;
 ok ($secret eq $got_back,     "(3,3) scheme with our key");
@@ -60,11 +61,11 @@ sf_split(quorum => 3, shares => 3, filename => $tempfile);
 
 unlink $tempfile;
 
-sf_combine(infiles => [ map { "$tempfile-$_"} (0..2) ],
+sf_combine(infiles => [ map { "$tempfile-$_.sf"} (0..2) ],
 	   outfile => $tempfile);
 open TEMPFILE, "<$tempfile";
 
-map { unlink "$tempfile-$_"} (0..2);
+map { unlink "$tempfile-$_.sf"} (0..2);
 
 $got_back=<TEMPFILE>;
 ok ($secret eq $got_back,     "(3,3) scheme without key/matrix");

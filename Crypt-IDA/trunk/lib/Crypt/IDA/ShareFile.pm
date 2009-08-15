@@ -572,9 +572,9 @@ sub sf_calculate_chunk_sizes {
   #  chunk_start
   #  chunk_next
   #  chunk_size   (chunk_next - chunk_start)
-  #  file_size    (including header)
+  #  file_size    (output file size, including header)
   #  opt_final    (is the last chunk in the file?)
-  #  padding      (how many bytes of padding are needed? final chunk only)
+  #  padding      (number of padding bytes in (final) chunk)
   #
   # We store these in a hash, and return a list of references to
   # hashes, one for each chunk.
@@ -850,7 +850,7 @@ sub sf_split {
       return undef;
     }
   } else {
-    $filespec=(scalar (@chunks) == 1) ? '%f-%s' : '%f-%c-%s';
+    $filespec=(scalar (@chunks) == 1) ? '%f-%s.sf' : '%f-%c-%s.sf';
   }
 
   # check the sharelist and chunklist arrays to weed out dups and
@@ -1296,12 +1296,11 @@ sub sf_combine {
   return undef unless defined($output_bytes);
 
   if ($header_info->{opt_final}) {
-    warn "Truncating output file to $header_info->{chunk_next} bytes\n";
+    #warn "Truncating output file to $header_info->{chunk_next} bytes\n";
     truncate $outfile, $header_info->{chunk_next};
   }
 
   return $output_bytes;
-
 }
 
 1;
@@ -1314,21 +1313,23 @@ Crypt::IDA::ShareFile - Archive file format for Crypt::IDA module
 
 =head1 SYNOPSIS
 
-  use Crypt::IDA::ShareFile ":DEFAULT";
+  use Crypt::IDA::ShareFile ":default";
+ 
+  @list  = sf_split( ... );
+  $bytes = sf_combine ( ... );
 
 =head1 DESCRIPTION
 
 This module implements a file format for creating, storing and
 distributing shares created with Crypt::IDA. Created files contain
 share data and (by default) the corresponding transform matrix row
-used to split the input file. This means that share files are
-stand-alone in the sense that they may recombined later without
-needing any other stored key or the involvement of the original
-issuer.
+used to split the input file. This means that share files are (again,
+by default) stand-alone and may recombined later without needing any
+other stored key or the involvement of the original issuer.
 
 In addition to creating a number of shares, the module can also handle
 breaking the input file into several chunks before processing, in a
-similar way to multi-volume PKZIP, ARJ or RAR archives. Each of the
+way similar to multi-volume PKZIP, ARJ or RAR archives. Each of the
 chunks may be split into shares using a different transform matrix.
 Individual groups of chunks may be re-assembled independently, as they
 are collected, and the quorum for each is satisfied.
@@ -1340,32 +1341,130 @@ prefixing the method names with the module name, eg:
 
  $foo=Crypt::IDA::ShareFile::sf_split(...)
 
-Alternatively, routines can be exported by adding ":DEFAULT" to the
+Alternatively, routines can be exported by adding ":default" to the
 "use" line, in which case the routine names do not need to be prefixed
 with the module name, ie:
 
-  use Crypt::IDA::ShareFile ":DEFAULT";
+  use Crypt::IDA::ShareFile ":default";
  
   $foo=Crypt::IDA::ShareFile::sf_split(...)
   # ...
 
 Some extra ancillary routines can also be exported with the ":extras"
-(just the extras) or ":all" (":extras" plus ":DEFAULT") parameters to
+(just the extras) or ":all" (":extras" plus ":default") parameters to
 the use line. See the section L<ANCILLARY ROUTINES> for details.
 
 =head1 SPLIT OPERATION
 
-The template for a call to C<sf_split>, showing all default values,
-is as follows:
+The template for a call to C<sf_split>, showing all possible inputs
+and default values, is as follows:
 
+ @list=sf_split(
+	 shares => undef,
+	 quorum => undef,
+	 width => 1,
+	 filename => undef,
+	 # supply a key, a matrix or neither
+	 key => undef,
+	 matrix => undef,
+	 # misc options
+	 version => 1,		# header version
+	 rand => "/dev/urandom",
+	 bufsize => 4096,
+	 save_transform => 1,
+         # chunking methods; pick one at most
+	 n_chunks => undef,
+	 in_chunk_size => undef,
+	 out_chunk_size => undef,
+	 out_file_size => undef,
+	 # allow creation of a subset of shares, chunks
+	 sharelist => undef,	# [ $row1, $row2, ... ]
+	 chunklist => undef,	# [ $chunk1, $chunk2, ... ]
+	 # specify pattern to use for share filenames
+	 filespec => undef,	# default value set later on
+   );
 
-The function returns ...
+The minimal set of inputs is:
+
+ @list=sf_split(
+	 shares => $number_of_shares,
+	 quorum => $quorum_value,
+	 filename => "filename",
+   );
+
+The function returns a list of
+C<[$key,$mat,$bytes_read,@output_files]> listrefs corresponding to
+each chunk that was created, or undef in the case of an error.
+
+The C<n_chunks>, C<in_chunk_size>, C<out_chunk_size> and
+C<out_file_size> options allow control over how (or if) the input file
+is broken into chunks. At most one of these options may be specified.
+The C<n_chunks> option divides the input into the specified number of
+chunks, which will be of (more-or-less) equal size.
+
+The filespec option allows control over naming of output files. By
+default this is set to '%f-%c-%s.sf' when a file is being split into
+several chunks, or '%f-%s.sf' where no chunking is performed. Before
+creating the output files, the '%f', '%c' and '%s' patterns are
+replaced by:
+
+=over
+
+=item %f: input file name
+
+=item %c: chunk number
+
+=item %s: share number
+
+=back
+
+If an error is encountered during the creation of one set of shares in
+a multi-chunk job, then the routine returns immediately without
+attempting to split any other remaining chunks.
 
 =head1 COMBINE OPERATION
 
-The template for a call to C<sf_combine> is as follows:
+The template for a call to C<sf_combine>, showing all possible inputs
+and default values, is as follows:
 
-The return value is ...
+ $bytes_read = sf_split (
+     infiles => undef,		# [ $file1, $file2, ... ]
+     outfile => undef,		# "filename"
+     # If specified, the following must agree with the values stored
+     # in the sharefiles. There's normally no need to set these.
+     quorum => undef,
+     width => undef,
+     # optional matrix, key parameters
+     key => undef,
+     matrix => undef,
+     shares => undef,		# required if key supplied
+     sharelist => undef,	# required if key supplied
+     # misc options
+     bufsize => 4096,
+    );
+
+The minimal set of inputs is:
+
+ $bytes_written = sf_combine (
+     infiles => [ $file1, $file2, ... ],
+     outfile => $output_filename
+ );
+
+The return value is the number of bytes written to the output file or
+null in the case of some error.
+
+The current version of the module only supports combining a single
+chunk with each call to C<ida_combine>. Apart from being used in the
+call to open the input file, the routine does not examine the input
+filenames at all since all information necessary to combine the file
+is expected to be contained within the files themselves (along with
+any key/matrix parameters passed in, in the case where this
+information is not stored in the file itself).
+
+Chunks may be combined in any order. When the final chunk is
+processed, if any any padding bytes were added to it during the
+C<sf_split> routine, these will be removed by truncating the output
+file.
 
 =head1 ANCILLARY ROUTINES
 
@@ -1373,15 +1472,61 @@ The extra routines are exported by using the ":extras" or ":all"
 parameter with the initial "use" module line. The extra routines are
 as follows:
 
+ $filename = sf_sprintf_filename($format,$infile,$chunk,$share);
+
+This routine creates share file names from the given parameters. It is
+used internally by C<sf_split>.
+
+ @chunk_info=sf_calculate_chunk_sizes(
+      quorum => undef,
+      width => undef,
+      filename => undef,
+      # misc options
+      version => 1,		# header version
+      save_transform => 1,	# whether to store transform in header
+      # chunking method: pick at most one
+      n_chunks => undef,
+      in_chunk_size => undef,
+      out_chunk_size => undef,
+      out_file_size => undef,
+ );
+
+This returns a list of hashrefs containing information about chunk
+sizes, ranges, etc., with one element for each chunk which would be
+created with the given parameters. All input values match those which
+would be passed to C<sf_split> except for the C<save_transform> value,
+which specifies whether the transform matrix row for each share should
+be stored within the file header. Each hash in the returned list has
+the following keys:
+
+=over
+
+=item * chunk_start  first byte of chunk
+
+=item * chunk_next   first byte of next chunk
+
+=item * chunk_size   chunk_next - chunk_start
+
+=item * file_size    share file size, including header
+
+=item * opt_final    is the last chunk in the file?
+
+=item * padding      number of padding bytes in (final) chunk
+
+=back
+
+This routine is used internally by C<sf_split> to calculate chunk
+sizes. It is available for calling routines since it may be useful to
+know in advance how large output files will be before any shares are
+created, such as for cases where there is limited space (eg, network
+share or CD image) for creation of those output shares.
 
 =head1 KEY MANAGEMENT
 
-
-=head2 Adding extra shares at a later time
-
-
-=head2 In the event of lost or stolen shares
-
+Provided the default settings are used, created sharefiles will have
+all the information necessary to reconstruct the file once sufficient
+shares have been collected. For systems where an alternative scheme is
+required, see the discussion in the L<Crypt::IDA> man page.
 
 =head1 TECHNICAL DETAILS
 
@@ -1395,7 +1540,7 @@ as follows:
   2       magic          marker for "Share File" format; "SF" = {5346}
   1       version        file format version = 1
   1       options        options bits (see below)
-  1-2     k,quorum       quorum k-value (set both names on read)
+  1-2     k,quorum       quorum k-value
   1-2     s,security     security level (ie, field width, in bytes)
   var     chunk_start    absolute offset of chunk in file
   var     chunk_next     absolute offset of next chunk in file
@@ -1424,8 +1569,8 @@ stored as the concatenation of two values:
 =back
 
 So, for example, the offset "0" would be represented as the single
-byte "0". An offset of 0x0321 would be represented as the hex bytes
-"02", "03", "31".
+byte "0", while the offset 0x4321 would be represented as the hex
+bytes "02", "43", "21".
 
 Note that the chunk_next field is 1 greater than the actual offset of
 the chunk end. In other words, each chunk ranges from the byte starting
@@ -1438,19 +1583,65 @@ The current implementation is limited to handling input files less
 than 4Gb in size. This is merely a limitation of the current header
 handling code, and this restriction may by removed in a later version.
 
-=head1 SEE ALSO
-
-See the documentation for L<Crypt::IDA> for more details of the
-underlying algorithm for creating and combining shares.
+Currently, the only chunking options available are for no chunking or
+for chunking a file into a given number of chunks (with n_chunks
+option).
 
 =head1 FUTURE VERSIONS
 
 It is possible that the following changes/additions will be made in
 future versions:
 
+=over
+
+=item * implement a routine to scan given list of input files and
+group them into batches that can be passed to C<sf_combine> (as well
+as weeding out sub-quorum batches and broken, overlapping or
+non-compliant files);
+
+=item * implement a file format that can keep track of created
+sharefiles along with parameters used to create them;
+
+=item * implement encryption of input data stream along with dispersed
+storage of decryption key in share files;
+
+=item * implement a cryptographic accumulator to eliminate the
+possibility of a cheater presenting an invalid share at the combine
+stage;
+
+=item * implement regular checksum/hash to detect damage to share
+data;
+
+=item * implement storing a row number with shares in the case where
+the transform data for that share is not stored in the sharefile
+header;
+
+=item * implement a scatter/gather function to disperse shares over
+the network and download (some of) them again to reconstitute the file
+(probably in a new module);
+
+=item * implement a network-based peer protocol which allows peers
+with the same file to co-ordinate key generation so that they can
+generate compatible shares and also share the burden of ShareFile
+creation and distribution (long-term goal)
+
+=item * I'm open to suggestions on any of these features or any other
+feature that anybody might want ...
+
+=back
+
+=head1 SEE ALSO
+
+See the documentation for L<Crypt::IDA> for more details of the
+underlying algorithm for creating and combining shares.
+
+This distribution includes two command-line scripts called
+C<rabin-split.pl> and C<rabin-combine.pl> which provide simple
+wrappers to access all functionality of the module.
+
 =head1 AUTHOR
 
-Declan Malone, idablack@sourceforge.net
+Declan Malone, E<lt>idablack@sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
