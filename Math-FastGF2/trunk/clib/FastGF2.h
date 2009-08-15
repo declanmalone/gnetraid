@@ -85,16 +85,6 @@ typedef signed long long    gf2_s32;
 
 #endif
 
-#ifdef _LARGEFILE64_SOURCE
-#define OFF_T off64_t
-#define OFF_T_FMT "%lld"
-#define SEEK lseek64
-#else
-#define OFF_T off_t
-#define OFF_T_FMT "%ld"
-#define SEEK lseek
-#endif
-
 /* Public interface routines */
 
 /* basic maths */
@@ -122,6 +112,23 @@ typedef struct {
   } alloc_bits;
 } gf2_matrix_t;
 
+
+int gf2_matrix_offset_right (gf2_matrix_t *m);
+int gf2_matrix_offset_down (gf2_matrix_t *m);
+
+#ifdef NOW_IS_OK
+
+/* disabled code... mostly this is now implemented in Perl */
+
+#ifdef _LARGEFILE64_SOURCE
+#define OFF_T off64_t
+#define OFF_T_FMT "%lld"
+#define SEEK lseek64
+#else
+#define OFF_T off_t
+#define OFF_T_FMT "%ld"
+#define SEEK lseek
+#endif
 
 struct gf2_matrix_closure;	/* forward declaration needed */
 typedef struct gf2_matrix_closure* gf2_matrix_closure_t;
@@ -153,16 +160,6 @@ struct gf2_matrix_closure {
   union gf2_polymorphic u2;
 };
 
-/* data common to all coder/decoder jobs */
-
-struct child {			/* track create_single_share processes */
-  OFF_T    current_offset;	/* where are we in current i/o? */
-  int        result;		/* error return from process */
-  int        shareno;		/* which share is being written */
-  pid_t      pid;		/* process ID */
-  char       finished;          /* is process finished? */
-};
-
 /* streambuf control wraps up a closure and buffer-management data */
 struct gf2_streambuf_control {
   struct gf2_matrix_closure handler;
@@ -182,10 +179,6 @@ struct gf2_streambuf_control {
   } hs;
 };
 
-int gf2_matrix_offset_right (gf2_matrix_t *m);
-int gf2_matrix_offset_down (gf2_matrix_t *m);
-
-#ifdef NOW_IS_OK
 int gf2_matrix_row_size_in_bytes (gf2_matrix_t *m);
 int gf2_matrix_col_size_in_bytes (gf2_matrix_t *m);
 char* gf2_matrix_element (gf2_matrix_t *m, int r, int c);
