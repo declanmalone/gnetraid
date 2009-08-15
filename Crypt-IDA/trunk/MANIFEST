@@ -10,4 +10,4 @@ bin/rabin-combine.pl
 bin/rabin-split.pl
 bin/SplitCombine.pl
 bin/SplitCombine.xml
-
+GNU_GPL.txt
