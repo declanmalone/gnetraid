@@ -424,7 +424,7 @@ page, see:
 
 =head1 AUTHOR
 
-Declan Malone, E<lt>idablack@sourceforge.netE<gt>
+Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 

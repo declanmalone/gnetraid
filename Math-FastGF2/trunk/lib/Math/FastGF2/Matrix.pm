@@ -411,6 +411,62 @@ sub concat {
   return $cat;
 }
 
+# Swapping rows and columns in a matrix is done in-place
+sub swap_rows {
+  my ($self, $row1, $row2, $start_col) = @_;
+  return if $row1==$row2;
+  $start_col=0 unless defined $start_col;
+
+  my $cols=$self->COLS;
+  my ($s,$t);
+
+  if ($self->ORG eq "rowwise") {
+    $s=get_raw_values_c($self, $row1, $start_col,
+			$cols - $start_col, 0);
+    $t=get_raw_values_c($self, $row2, $start_col,
+			$cols - $start_col, 0);
+    set_raw_values_c   ($self, $row1, $start_col,
+			$cols - $start_col, 0, $t);
+    set_raw_values_c   ($self, $row2, $start_col,
+			$cols - $start_col, 0, $s);
+  } else {
+    for my $col ($start_col .. $cols -1) {
+      $s=$self->getval($row1,$col);
+      $t=$self->getval($row2,$col);
+      $self->setval($row1, $col, $t);
+      $self->setval($row2, $col, $s);
+    }
+  }
+}
+
+sub swap_cols {
+  my ($self, $col1, $col2, $start_row) = @_;
+  return if $col1==$col2;
+  $start_row=0 unless defined $start_row;
+
+  my $rows=$self->ROWS;
+  my ($s,$t);
+
+  if ($self->ORG eq "colwise") {
+    $s=get_raw_values_c($self, $start_row, $col1,
+			$rows - $start_row, 0);
+    $t=get_raw_values_c($self, $start_row, $col2,
+			$rows - $start_row, 0);
+    set_raw_values_c   ($self, $start_row, $col1,
+			$rows - $start_row, 0, $t);
+    set_raw_values_c   ($self, $start_row, $col2,
+			$rows - $start_row, 0, $s);
+  } else {
+    for my $row ($start_row .. $rows -1) {
+      $s=$self->getval($row,$col1);
+      $t=$self->getval($row,$col2);
+      $self->setval($row, $col1, $t);
+      $self->setval($row, $col2, $s);
+    }
+  }
+}
+
+
 # I'll replace this with some C code later
 sub solve {
 
@@ -419,36 +475,12 @@ sub solve {
 
   my $rows=$self->ROWS;
   my $cols=$self->COLS;
-  my $order=$self->WIDTH * 8;
+  my $bits=$self->WIDTH * 8;
 
   unless ($cols > $rows) {
     carp "solve only works on matrices with COLS > ROWS";
     return undef;
   }
-
-  local *swap_rows = sub {
-    my ($row1, $row2, $start_col) = @_;
-    return if $row1==$row2;
-
-    my ($s,$t,$col);
-    if ($self->ORG eq "rowwise") {
-      $s=get_raw_values_c($self, $row1, $start_col,
-			  $self->COLS - $start_col, 0);
-      $t=get_raw_values_c($self, $row2, $start_col,
-			  $self->COLS - $start_col, 0);
-      set_raw_values_c   ($self, $row1, $start_col,
-			  $self->COLS - $start_col, 0, $t);
-      set_raw_values_c   ($self, $row2, $start_col,
-			  $self->COLS - $start_col, 0, $s);
-    } else {
-      for $col ($start_col .. $cols -1) {
-	$s=$self->getval($row1,$col);
-	$t=$self->getval($row2,$col);
-	$self->setval($row1, $col, $t);
-	$self->setval($row2, $col, $s);
-      }
-    }
-  };
 
   # work down the diagonal one row at a time ...
   for my $row (0 .. $rows - 1) {
@@ -469,16 +501,16 @@ sub solve {
 	}
       }
       return undef unless defined $found;
-      swap_rows($row,$found,$row);
+      $self->swap_rows($row,$found,$row);
     }
 
     # normalise the current row first
-    my $diag_inverse = gf2_inv($order,$self->getval($row,$row));
+    my $diag_inverse = gf2_inv($bits,$self->getval($row,$row));
 
     $self->setval($row,$row,1);
     for my $col ($row + 1 .. $cols - 1) {
       $self->setval($row,$col,
-	gf2_mul($order, $self->getval($row,$col), $diag_inverse));
+	gf2_mul($bits, $self->getval($row,$col), $diag_inverse));
     }
 
     # zero all elements above and below ...
@@ -490,7 +522,7 @@ sub solve {
       $self->setval($other_row,$row,0);
       for my $col ($row + 1 .. $cols - 1) {
 	$self->setval($other_row,$col,
-	  gf2_mul($order, $self->getval($row,$col), $other) ^
+	  gf2_mul($bits, $self->getval($row,$col), $other) ^
 	    $self->getval($other_row,$col));
       }
     }
@@ -526,6 +558,245 @@ sub invert {
   return undef unless defined ($cat);
   return $cat->solve;
 }
+
+sub zero {
+  my $self  = shift;
+  my $class = ref($self);
+
+  $self->setvals(0,0,"\0" x ($self->ROWS * $self->COLS * $self->WIDTH));
+
+}
+
+# Generic routine for copying some matrix elements into a new matrix
+#
+# rows => [ $row1, $row2, ... ]
+# cols => [ $col1, $col2, ... ]
+# submatrix => [ $first_row, $first_col, $last_row, $last_col ]
+#
+# In order to keep this routine fairly simple, the newly-created
+# matrix will have the same organisation as the original, and we won't
+# allow for transposition in the same step.
+sub copy {
+  my $self  = shift;
+  my $class = ref($self);
+  my %o=(
+	 rows => undef,
+	 cols => undef,
+	 submatrix => undef,
+	 @_,
+	);
+
+  my $rows      = $o{rows};
+  my $cols      = $o{cols};
+  my $submatrix = $o{submatrix};
+
+  if (defined($submatrix)) {
+    if (defined($rows) or defined($cols)) {
+      carp "Can't specify both submatrix and rows/cols";
+      return undef;
+    }
+    my ($row1,$col1,$row2,$col2)=@$submatrix;
+    unless (defined($row1) and defined($col1) and
+	    defined($row2) and defined($col2)) {
+      carp 'Need submatrx => [$row1,$col1,$row2,$col2]';
+      return undef;
+    }
+
+    unless ($row1 >=0 and $row1 <= $row2 and $row2 < $self->ROWS and
+	    $col1 >=0 and $col1 <= $col2 and $col2 < $self->COLS) {
+      carp "submatrix corners out of range";
+      return undef;
+    }
+    my $mat=alloc_c($class, $row2 - $row1 + 1, $col2 - $col1 + 1,
+		    $self->WIDTH, $self->ORGNUM);
+    my ($s,$dest)=("",0);
+    if ($self->ORG eq "rowwise") {
+      for my $r ($row1 .. $row2) {
+	$s=$self->getvals($r,$col1,$col2 - $col1 + 1);
+	$mat->setvals($dest,0,$s);
+	++$dest;
+      }
+    } else {
+      for my $c ($col1 .. $col2) {
+	$s=$self->getvals($row1,$c,$row2 - $row1 + 1);
+	$mat->setvals(0,$dest,$s);
+	++$dest;
+      }
+    }
+    return $mat;
+
+  } elsif (defined($rows) or defined($cols)) {
+
+    if (defined($rows) and !ref($rows)) {
+      carp "rows must be a reference to a list of rows";
+      return undef;
+    }
+    if (defined($cols) and !ref($cols)) {
+      carp "cols must be a reference to a list of columns";
+      return undef;
+    }
+
+    if (defined($rows) and defined($cols)) {
+      my $mat=alloc_c($class, scalar(@$rows), scalar(@$cols),
+		      $self->WIDTH, $self->ORGNUM);
+      my $dest_row=0;
+      my $dest_col;
+      for my $r (@$rows) {
+	$dest_col=0;
+	for my $c (@$cols) {
+	  $mat->setval($dest_row,$dest_col++,
+		       $self->getval($r,$c));
+	}
+	++$dest_row;
+      }
+      return $mat;
+
+    } elsif (defined($rows) and $self->ORG eq "rowwise") {
+      my $mat=alloc_c($class, scalar(@$rows), $self->COLS,
+		      $self->WIDTH, $self->ORGNUM);
+      my ($s,$dest)=("",0);
+      for my $r (@$rows) {
+	$s=$self->getvals($r,0,$self->COLS);
+	$mat->setvals($dest,0,$s);
+	++$dest;
+      }
+      return $mat;
+
+    } elsif (defined($cols) and $self->ORG eq "colwise") {
+      my $mat=alloc_c($class, $self->ROWS, scalar(@$cols),
+		      $self->WIDTH, $self->ORGNUM);
+      my ($s,$dest)=("",0);
+      for my $c (@$cols) {
+	$s=$self->getvals(0,$c,$self->ROWS);
+	$mat->setvals(0,$dest,$s);
+	++$dest;
+      }
+      return $mat;
+
+    } else {
+      # we've been told to copy some rows or some columns, but the
+      # organisation of the matrix doesn't allow for using quick
+      # getvals. Iterate as we would have done if both rows and cols
+      # were specified, but set whichever of rows/cols wasn't set to
+      # the input matrix's rows/cols.
+      $rows=[ 0 .. $self->ROWS - 1] unless defined($rows);
+      $cols=[ 0 .. $self->COLS - 1] unless defined($cols);
+      my $mat=alloc_c($class, scalar(@$rows), scalar(@$cols),
+		      $self->WIDTH, $self->ORGNUM);
+      my $dest_row=0;
+      my $dest_col;
+      for my $r (@$rows) {
+	$dest_col=0;
+	for my $c (@$cols) {
+	  $mat->setval($dest_row,$dest_col++,
+		       $self->getval($r,$c));
+	}
+	++$dest_row;
+      }
+      return $mat;
+
+    }
+
+  } else {
+    # No submatrix/rows/cols option given, so do a full copy. This is
+    # made easy by not allowing transpose or re-organistaion options
+    my $mat=alloc_c($class, $self->ROWS, $self->COLS,
+		    $self->WIDTH, $self->ORGNUM);
+    return undef unless defined $mat;
+    my $s=$self->getvals(0,0,$self->ROWS * $self->COLS);
+    $mat->setvals(0,0,$s);
+    return $mat;
+  }
+
+  die "Unreachable? ORLY?\n";
+}
+
+# provide aliases for all forms of copy except copy rows /and/ cols
+
+sub copy_rows {
+  return shift -> copy(rows => [ @_ ]);
+}
+
+sub copy_cols {
+  return shift -> copy(cols => [ @_ ]);
+}
+
+sub submatrix {
+  return shift -> copy(submatrix => [ @_ ]);
+}
+
+# Roll the transpose and reorganise code into one "flip" routine.
+# This can save the user one step in some cases.
+
+sub flip {
+  my $self=shift;
+  my %o=( transpose => 0, org => $self->ORG, @_ );
+
+  my $transpose=$o{"transpose"};
+  my $mat;
+  my ($fliporg,$neworg);
+  my ($r,$c,$s);
+
+  if (($o{"org"} ne $self->ORG)) {
+    $neworg=$o{"org"};
+    $fliporg=1;
+  } else {
+    $neworg=$self->ORG;
+    $fliporg=0;
+  }
+
+  if ($transpose) {
+    $mat=Math::FastGF2::Matrix->
+      new(rows => $self->COLS, cols=>$self->ROWS,
+	  width => $self->WIDTH, org => $neworg);
+    return undef unless defined ($mat);
+    if ($fliporg) {
+      $s=$self->getvals(0,0,$self->COLS * $self->ROWS);
+      $mat->setvals(0,0,$s);
+    } else {
+      for $r (0..$self->ROWS - 1) {
+	for $c (0..$self->COLS - 1) {
+	  $mat->setval($c,$r,$self->getval($r,$c));
+	}
+      }
+    }
+    return $mat;
+
+  } elsif ($fliporg) {
+    $mat=Math::FastGF2::Matrix->
+      new(rows => $self->ROWS, cols=> $self->COLS,
+	  width => $self->WIDTH, org => $neworg);
+    return undef unless defined ($mat);
+    for $r (0..$self->ROWS - 1) {
+      for $c (0..$self->COLS - 1) {
+	$mat->setval($r,$c,$self->getval($r,$c));
+      }
+    }
+    return $mat;
+
+  } else {
+    # no change, but return a new copy of self to be in line with all
+    # other input cases.
+    return $self->copy;
+  }
+  die "Unreachable? ORLY?\n";
+}
+
+
+sub transpose {
+  return shift -> flip(transpose => 1);
+}
+
+sub reorganise {
+  my $self=shift;
+
+  if ($self->ORG eq "rowwise") {
+    return $self->flip(org => "colwise");
+  } else {
+    return $self->flip(org => "rowwise");
+  }
+}
+
 
 1;
 
@@ -606,6 +877,77 @@ C<$w> and organisation C<$org>:
 
 As with the C<new> constructor, the C<org> parameter is optional and
 default to "rowwise".
+
+=head2 copy
+
+The copy method copy of some or all elements of an existing
+matrix. The template for a call, showing the default values of all
+parameters is as follows:
+
+ $new_matrix = $m->copy(
+	 rows => undef,		# [ $row1, $row2, ... ]
+	 cols => undef,		# [ $col1, $col2, ... ]
+	 submatrix => undef,    # [ $row1, $col1, $row2, $col2 ]
+ );
+
+If no parameters are set, then then the entire matrix is copied. The
+C<rows> and C<cols> parameters can be set individually or in
+combination with each other, to copy only the selected rows or columns
+to the new matrix. The C<submatrix> parameter copies a rectangular
+region of the original matrix into the new matrix. The C<submatrix>
+option cannot be used in combination with the C<rows> or C<cols>
+options.
+
+The new matrix will have the same values set for the C<width> and
+C<org> parameters as the original matrix.
+
+The C<copy_rows>, C<copy_cols> and C<submatrix> methods are
+implemented as small wrapper functions which call the C<copy> method
+with the appropriate parameters.
+
+=head2 copy_rows
+
+ $new_matrix = $m->copy_rows ($row1, $row2, ... );
+
+Create a new matrix from the selected rows of the original
+matrix.
+
+=head2 copy_cols
+
+ $new_matrix = $m->copy_cols ($col1, $col2, ... );
+
+Create a new matrix from the selected columns of the original
+matrix.
+
+=head2 submatrix
+
+ $new_matrix = $m->submatrix ($row1, $col1, $row2, $col2);
+
+Create a new matrix from the selected rectangular region of the
+original matrix.
+
+=head2 transpose
+
+Return a new matrix which is the transpose of the original matrix. The
+organisation of the original matrix is carried over to the new matrix:
+
+ $new_matrix = $m->transpose;
+
+=head2 reorganise
+
+Return a new matrix which has the opposite organisation to the
+original matrix:
+
+ $new_matrix = $m->reorganise;
+
+=head2 flip
+
+Carry out transpose and/or reorganise operations in one step:
+
+ $new_matrix = $m->flip( transpose = > (0 or 1),
+                         org => ("rowwise" or "colwise") );
+
+The org parameter is the organisation to use for the new matrix.
 
 =head1 GETTING AND SETTING VALUES
 
@@ -711,6 +1053,12 @@ organisation):
 
  $m->setvals(0,0,(0) x ($m->ROWS * $m->COLS));
 
+or:
+
+  $m->setvals(0,0,"\0" x ($self->ROWS * $self->COLS * $self->WIDTH));
+
+(which is exactly what the C<zero> method does.)
+
 =head1 MATRIX OPERATIONS
 
 =head2 Multiply
@@ -790,7 +1138,7 @@ numbers.
 
 =head1 AUTHOR
 
-Declan Malone, E<lt>idablack@sourceforge.netE<gt>
+Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 

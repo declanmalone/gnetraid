@@ -1,12 +1,12 @@
 # -*- Perl -*-
 
-use Test::More tests => 160;
+use Test::More tests => 195;
 BEGIN { use_ok('Math::FastGF2::Matrix', ':all') };
 
 my $failed;
 my $class="Math::FastGF2::Matrix";
 
-# Create a 1x1 square matrix?
+# Create a 1x1 matrix?
 my $onesquare;
 for my $w (1,2,4) {
   $onesquare=Math::FastGF2::Matrix->new(rows=>1, cols =>1, width=>$w);
@@ -28,7 +28,7 @@ map { ++$failed if $m->getval($_/2, $_ & 1) } 0..3;
 ok (!$failed,  "All values initialised to zero?");
 
 $failed=0;
-map { ++$failed if $_ * 7 + 1 != $m->setval($_/2, $_ & 1, $_ * 7 + 1) } 0..3;
+map { ++$failed if $_*7 + 1 != $m->setval($_/2, $_ & 1, $_*7 + 1) } 0..3;
 ok (!$failed,  "setval returns set value?");
 
 $failed=0;
@@ -548,9 +548,9 @@ map { map { $_ = hex } @$_ } @tr_4_from_5_u16;
 
 my @skipped_rows=(4,0,1,3,2);	# useful for error message
 my $id_4x4=Math::FastGF2::Matrix->new_identity(size=>4, width=> 2);
+my ($new_4x4,$inv_4x4);
 for my $rows_16 ( [0,1,2,3], [4,2,1,3], [4,3,2,0],
 		  [2,0,1,4], [3,0,4,1]) {
-  my ($new_4x4,$inv_4x4);
   my $skipped=shift @skipped_rows;
 
   # we can probably assume these work, given previous similar tests
@@ -599,7 +599,6 @@ map { map { $_ = hex } @$_ } @tr_4_from_5_u32;
 $id_4x4=Math::FastGF2::Matrix->new_identity(size=>4, width=> 4);
 for my $rows_32 ( [0,1,2,3], [4,2,1,3], [4,3,2,0],
 		  [2,0,1,4], [3,0,4,1]) {
-  my ($new_4x4,$inv_4x4);
   my $skipped=shift @skipped_rows;
 
   # we can probably assume these work, given previous similar tests
@@ -657,11 +656,184 @@ ok( $wide_16->getval(0,2) == 0x4546,
 # Actually, I couldn't be bothered checking 32-bit values... the same
 # code is used for both 16 and 32-bit values and there is really no
 # way for one to fail and not the other. This holds for strings
-# anyway. In my next session I probably will check what happens when
-# setvals is given a list of numbers from unpack. And check that
-# getvals works as expected too...
+# anyway.
 
-# Test transpose matrix function
+# put in some values as a list in little- and big-endian
+# format. Compare output string.
+$wide_16->setvals(0,0,[0x4241,0x4443,0x4645],1);
+ok ($wide_16->getvals(0,0,3) eq "ABCDEF",
+    "16-bit setval putting little-endian list, getting native string?");
+$wide_16->setvals(0,0,[0x4241,0x4443,0x4645],2);
+ok ($wide_16->getvals(0,0,3) eq "BADCFE",
+    "16-bit setval putting big-endian list, getting native string?");
 
+# Check that getvals works with big and little endian
+$wide_16->setvals(0,0,[0x4241,0x4443,0x4645],0);
+ok ($wide_16->getvals(0,0,3,1) eq "ABCDEF",
+    "16-bit setval putting native list, getting little-endian string?");
+ok ($wide_16->getvals(0,0,3,2) eq "BADCFE",
+    "16-bit setval putting native list, getting big-endian string?");
 
+# Test copy modes
+my $copy;
+
+# no arguments == copy entire matrix
+$copy=$m8x8->copy;
+ok ($copy->eq($m8x8), "full matrix copy?");
+
+# submatrix copy with complete matrix
+$copy=undef; $copy=$m8x8->copy(submatrix=> [0,0,7,7]);
+ok ($copy->eq($m8x8), "full submatrix matrix copy?");
+
+# copy rows with all rows
+$copy=undef; $copy=$m8x8->copy(rows=> [0..7]);
+ok ($copy->eq($m8x8), "copy matrix with all rows?");
+
+# copy columns with all cols
+$copy=undef; $copy=$m8x8->copy(cols=> [0..7]);
+ok ($copy->eq($m8x8), "copy matrix with all columns?");
+
+# copy rows,columns with all rows,cols
+$copy=undef; $copy=$m8x8->copy(rows=> [0..7],cols=> [0..7]);
+ok ($copy->eq($m8x8), "copy matrix with all rows, columns?");
+
+# Test wrapper functions for doing the above
+
+# submatrix on complete matrix
+$copy=undef; $copy=$m8x8->submatrix(0,0,7,7);
+ok ($copy->eq($m8x8), "submatrix method copy?");
+
+# copy_rows with all rows
+$copy=undef; $copy=$m8x8->copy_rows(0..7);
+ok ($copy->eq($m8x8), "copy_rows with all rows?");
+
+# copy_cols with all columns
+$copy=undef; $copy=$m8x8->copy_cols(0..7);
+ok ($copy->eq($m8x8), "copy_cols with all columns?");
+
+# check some other cases on smaller parts of the matrices. Will use
+# one of the 4x4 matrices to cut down on typing. Note that creating
+# new matrices with a bunch of values is a bit long-winded at the
+# moment. Also, note that I'm using a 16-bit matrix this time, which
+# helps cover some more possible failures. If something does fail
+# here, though, it might be because of a problem in the copy routine
+# or something to do with the width of the fields. Beware...
+
+# create a 5x4 matrix from @tr_4_from_5_u16 ("map" flattens the list)
+my $mat_5x4=Math::FastGF2::Matrix->new(rows=> 5, cols => 4, width=> 2);
+$mat_5x4->setvals(0,0, [map { @{ $tr_4_from_5_u16[$_] } } (0..4)] );
+
+# full copy
+$copy=undef; $copy=$mat_5x4->copy();
+ok ($copy->eq($mat_5x4),
+    "full copy from 5x4 matrix?");
+
+# submatrix copy
+$copy=undef; $copy=$mat_5x4->copy(submatrix=> [1,1,3,2]);
+my $submatrix=Math::FastGF2::Matrix->new(rows=> 3, cols => 2, width=> 2);
+$submatrix->setvals(0,0,[0x4a93, 0x3d03,
+			 0x95fe, 0x57b2,
+			 0x0684, 0xa066]);
+ok ($copy->eq($submatrix),
+    "copy submatrix [1,1,3,2] from 5x4 matrix?");
+
+# copy rows (reuse same $submatrix variable name)
+$copy=undef; $submatrix=undef;
+$copy=$mat_5x4->copy(rows => [4,2,0]);
+$submatrix=Math::FastGF2::Matrix->new(rows=> 3, cols => 4, width=> 2);
+$submatrix->setvals(0,0,[0x7a06, 0x0d0f, 0x0d57, 0x1045,
+			 0xc0ae, 0x95fe, 0x57b2, 0xfdc9,
+			 0x0340, 0x701f, 0x2b03, 0xd145, ]);
+ok ($copy->eq($submatrix),
+    "copy rows [4,2,0] from 5x4 matrix?");
+
+# copy cols
+$copy=undef; $submatrix=undef;
+$copy=$mat_5x4->copy(cols => [3,1]);
+$submatrix=Math::FastGF2::Matrix->new(rows=> 5, cols => 2, width=> 2);
+$submatrix->setvals(0,0,[ 0xd145, 0x701f,
+			  0xbcb5, 0x4a93,
+			  0xfdc9, 0x95fe,
+			  0x7c38, 0x0684,
+			  0x1045, 0x0d0f, ]);
+ok ($copy->eq($submatrix),
+    "copy rows [3,1] from 5x4 matrix?");
+
+# copy rows and cols
+$copy=undef; $submatrix=undef;
+$copy=$mat_5x4->copy(rows => [0,2,4], cols => [3,1]);
+$submatrix=Math::FastGF2::Matrix->new(rows=> 3, cols => 2, width=> 2);
+$submatrix->setvals(0,0,[ 0xd145, 0x701f,
+			  0xfdc9, 0x95fe,
+			  0x1045, 0x0d0f, ]);
+ok ($copy->eq($submatrix),
+    "copy rows [3,1], cols [0,2,4] from 5x4 matrix?");
+
+# Test new zero method. It works in-place on the matrix, so I'll make a
+# copy of an existing matrix before zeroing it.
+$copy=$m8x8->copy;
+$copy->zero;
+ok ($copy->eq(Math::FastGF2::Matrix->new(rows=>8,cols=>8,width=>1)),
+   "zero works as expected?");
+
+# Test flip/transpose/reorganise matrix functions
+#
+# Working on same 5x4 matrix as above. First manually create a 4x5
+# transposed version of it.
+my $tr_5x4=Math::FastGF2::Matrix->new(rows=> 4, cols => 5, width=> 2);
+for $r (0..4) {
+  for $c (0..3) {
+    $tr_5x4->setval($c,$r,$mat_5x4->getval($r,$c));
+  }
+}
+
+# Test the wrapper functions first. Using eq here just examines
+# values, dimensions and width, as it doesn't care about the
+# underlying matrix organisation.
+$copy=$mat_5x4->transpose;
+ok ($copy->eq($tr_5x4), "transpose of 5x4 matrix?");
+ok ($copy ne $mat_5x4,  "transpose returns a new matrix?");
+
+$copy=$mat_5x4->reorganise;
+ok ($copy->eq($mat_5x4),
+    "reorganised matrix eq previous organisation?");
+ok ($copy ne $mat_5x4, "reorganise returns a new matrix?");
+ok ($mat_5x4->ORG ne $copy->ORG,
+    "reorganise actually changes \$matrix->ORG?");
+
+# The four ways of calling flip combine transpose values (0,1) x
+# organisation values ("rowwise", "colwise"). Report organisation
+# values as "same", "different" in error messages.
+
+$copy=$mat_5x4->flip(transpose=>0, org => "rowwise");
+ok ($copy ne $mat_5x4,
+    "transpose: no, org: same returns new matrix?");
+ok ($copy->eq($mat_5x4),
+    "transpose: no, org: same equals original matrix?");
+ok ($copy->ORG eq $mat_5x4->ORG, 
+    "transpose: no, org: same returns same ORG?");
+
+$copy=$mat_5x4->flip(transpose=>1, org => "rowwise");
+ok ($copy ne $mat_5x4,
+    "transpose: yes, org: same returns new matrix?");
+ok ($copy->eq($tr_5x4),
+    "transpose: yes, org: same equals transpose matrix?");
+ok ($copy->ORG eq $mat_5x4->ORG,
+    "transpose: yes, org: same returns same ORG?");
+
+$copy=$mat_5x4->flip(transpose=>0, org => "colwise");
+ok ($copy ne $mat_5x4,
+    "transpose: no, org: different returns new matrix?");
+ok ($copy->eq($mat_5x4),
+    "transpose: no, org: different equals original matrix?");
+ok ($copy->ORG ne $mat_5x4->ORG, 
+    "transpose: no, org: different returns different ORG?");
+
+$copy=$mat_5x4->flip(transpose=>1, org => "colwise");
+ok ($copy ne $mat_5x4,
+    "transpose: yes, org: different returns new matrix?");
+ok ($copy->eq($tr_5x4),
+    "transpose: yes, org: different equals transpose matrix?");
+ok ($copy->ORG ne $mat_5x4->ORG,
+    "transpose: yes, org: different returns different ORG?");
 
