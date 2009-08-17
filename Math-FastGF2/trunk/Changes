@@ -1,5 +1,16 @@
 Revision history for Perl extension Math::FastGF2.
 
+0.04  Mon Aug 17 21:00:00 2009
+	- Add copy/flip-related Matrix code
+        - More tests on getvals/setvals
+ 	- Remove some unused code that was causing compilation errors
+ 	  on some platforms.
+        - Documentation updates
+	- Downgrade version of perl required to version 5.6. I have
+          not personally tested this version, but I've no reason to
+          suspect any problems. I will keep an eye out for test
+          reports on this, though.
+
 0.03  Fri Aug 14 22:50:00 2009
         - New release. Attempt to automatically determine the correct
           C data types for 16 and 32-bit values. This should simplify

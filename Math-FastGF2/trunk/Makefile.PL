@@ -1,4 +1,4 @@
-use 5.008000;
+use 5.006000;
 use ExtUtils::MakeMaker;
 
 use Config;
@@ -23,6 +23,7 @@ sub find_right_type {
     return "NOTHING";
   }
 }
+
 if (scalar(@ARGV) > 0 and $ARGV[0] =~ "USE_CUSTOM_TYPEDEFS") {
   warn "OK, skipping attempt to divine proper typedefs from \$Config\n";
   push @defines,"-DUSE_CUSTOM_TYPEDEFS";
@@ -40,27 +41,29 @@ if (scalar(@ARGV) > 0 and $ARGV[0] =~ "USE_CUSTOM_TYPEDEFS") {
   }
 }
 
-
 WriteMakefile(
-    NAME              => 'Math::FastGF2',
-    VERSION_FROM      => 'lib/Math/FastGF2.pm', # finds $VERSION
-    PREREQ_PM         => {}, # e.g., Module::Name => 1.1
-    ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
-      (ABSTRACT_FROM  => 'lib/Math/FastGF2.pm', # retrieve abstract from module
-       AUTHOR         => 'Declan Malone <idablack@sourceforge.net>') : ()),
-    LIBS              => [''], # e.g., '-lm'
-    DEFINE            => (join ' ', @defines),
-    INC               => '-I.', # e.g., '-I. -I/usr/include/other'
-#    DIR               => ['clib'],
-    MYEXTLIB          => 'clib/libfastgf2$(LIB_EXT)',
-	# Un-comment this if you add C files to link with later:
-#    OBJECT            => 'FastGF2.o', # link all the C files too
-#    OBJECT            => '$(O_FILES)', # link all the C files too
-    EXE_FILES          => ['bin/benchmark-Math-FastGF2.pl',
-			   'bin/shamir-combine.pl',
-			   'bin/shamir-split.pl'],
+ NAME              => 'Math::FastGF2',
+ VERSION_FROM      => 'lib/Math/FastGF2.pm',
+ PREREQ_PM         => {}, # e.g., Module::Name => 1.1
+ ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
+  (ABSTRACT_FROM  => 'lib/Math/FastGF2.pm', # retrieve abstract from module
+   AUTHOR         => 'Declan Malone <idablack@users.sourceforge.net>') :
+  ()),
+ LIBS              => [''], # e.g., '-lm'
+ DEFINE            => (join ' ', @defines),
+ INC               => '-I.', # e.g., '-I. -I/usr/include/other'
+# DIR               => ['clib'],
+ MYEXTLIB          => 'clib/libfastgf2$(LIB_EXT)',
+# Un-comment this if you add C files to link with later:
+# OBJECT            => 'FastGF2.o', # link all the C files too
+# OBJECT            => '$(O_FILES)', # link all the C files too
+ EXE_FILES          => ['bin/benchmark-Math-FastGF2.pl',
+			'bin/shamir-combine.pl',
+			'bin/shamir-split.pl'],
 );
+
 sub MY::postamble {
+# See perlxstut. This also passes any -DDEFINEs along to recursive make
 '$(MYEXTLIB): clib/Makefile
 	cd clib && perl Makefile.PL DEFINE="' .
 (join ' ', @defines) . '"&& $(MAKE) $(PASSTHRU)

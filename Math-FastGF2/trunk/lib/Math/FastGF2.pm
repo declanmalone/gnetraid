@@ -1,6 +1,6 @@
 package Math::FastGF2;
 
-use 5.008000;
+use 5.006000;
 use strict;
 use warnings;
 
@@ -15,7 +15,7 @@ require Exporter;
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = (  );
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('Math::FastGF2', $VERSION);

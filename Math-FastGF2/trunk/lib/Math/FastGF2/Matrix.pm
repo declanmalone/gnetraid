@@ -1,7 +1,7 @@
 
 package Math::FastGF2::Matrix;
 
-use 5.008000;
+use 5.006000;
 use strict;
 use warnings;
 use Carp;
@@ -17,7 +17,7 @@ require Exporter;
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = (  );
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('Math::FastGF2', $VERSION);
@@ -814,12 +814,20 @@ Math::FastGF2::Matrix - Matrix operations for fast Galois Field arithmetic
    new(rows => $r, cols => $c, width => $w, org => "rowwise");
  $i=Math::FastGF2::Matrix->
    new_identity(size => $size, width => $w, org => "rowwise");
- 
+ $copy=$m->copy( ... );
+ $copy=$m->copy_rows($row1, $row2, ... );
+ $copy=$m->copy_cols($col1, $col2, ... );
+ $copy=$m->submatrix($row1,$col1,$row2,$col2);
+ $copy=$m->flip(...);
+ $copy=$m->transpose;
+ $copy=$m->reorganise;
+
  $rows = $m->ROWS;   $cols  = $m->COLS;
  $org  = $m->ORG;    $width = $m->WIDTH;
  
  $val=$m->getval($row,$col);
  $m->setval($row,$col,$val);
+ $m->zero;
  
  @vals=$m->getvals($row,$col,$words,$order);
  $vals=$m->getvals($row,$col,$words,$order);
@@ -859,7 +867,7 @@ indicate Galois Fields of that many bytes in size.
 
 The C<org> parameter is optional and defaults to "rowwise" if
 unset. This parameter specifies how the matrix should be organised in
-memory. This parameter affects how the bulk data input/output routines
+memory, which affects how the bulk data input/output routines
 C<setvals> and C<getvals> enter data and retrieve it from the
 matrix. With "rowwise" organisation, values are written in
 left-to-right order first, moving down to the next row as each row
