@@ -8,6 +8,7 @@ of size 8, 16 and 32 bits. Once the program has been installed, for
 full documentation use
 
   perldoc Math::FastGF2
+  perldoc Math::FastGF2::Matrix
 
 INSTALLATION
 
