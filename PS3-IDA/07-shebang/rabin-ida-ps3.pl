@@ -1,6 +1,10 @@
 #!/usr/bin/perl -w
 #
 # Rabin's information dispersal algorithm
+#
+# Copyright (c) Declan Malone 2009
+#
+# License: GPL 2
 
 use strict;
 use warnings;
