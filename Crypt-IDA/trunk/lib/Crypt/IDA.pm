@@ -410,7 +410,7 @@ sub ida_process_streams {
 	}
       }
       if ($eof) {
-	print "EOF detected in $eof stream(s)\n";
+	#print "EOF detected in $eof stream(s)\n";
 	if ($eof % $nfillers) {
 	  carp "Not all input streams of same length";
 	  return undef;
