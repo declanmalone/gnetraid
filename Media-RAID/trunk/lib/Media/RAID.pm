@@ -5,7 +5,7 @@ use strict;
 
 =head1 NAME
 
-Media::RAID - The great new Media::RAID!
+Media::RAID - Implements a RAID-style backup system using Crypt::IDA::*
 
 =head1 VERSION
 
@@ -98,9 +98,9 @@ L<http://search.cpan.org/dist/Media-RAID/>
 
 Copyright 2011 Declan Malone.
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
+This program is free software; you can redistribute it and/or modify
+it under the terms the GNU General Public License version 2 or (at
+your choice) any later version.
 
 See http://dev.perl.org/licenses/ for more information.
 
