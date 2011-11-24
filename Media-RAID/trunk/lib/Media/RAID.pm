@@ -110,7 +110,6 @@ sub new {
   }
 
   bless $self,$class;
-  return $self;
 }
 
 =head2 Defining RAID schemes
@@ -124,7 +123,7 @@ broken up into several sections. The basic outline is:
     (
       name => "(short,unique) name of this RAID scheme",
       description => "Human-readable description",
-      master_dirs => { <details of dirs being managed> },
+      master_stores => { <details of dirs being managed> },
       raid => { <details of RAID scheme used to backup dirs> },
       # options local to this scheme:
       scan_others => 1,  # see scan method for details
@@ -150,7 +149,7 @@ names.
 
 =head3 Specifying Master Directories
 
-The master_dirs parameter is a (reference to a) hash of hashes, each
+The master_stores parameter is a (reference to a) hash of hashes, each
 of which specifies the path of a master directory that is to be backed
 up. There are two ways in which to specify master directories. The
 first way is to specify a path on a removable hard disk:
@@ -159,7 +158,7 @@ first way is to specify a path on a removable hard disk:
   $raid->add_scheme
     (
       ...
-      master_dirs => {
+      master_stores => {
         "movies" =>                 # name of this group of files
           {
             drive => "Saturn",	    # volume label of drive
@@ -194,7 +193,7 @@ special mount commands or the need to physically attach a disk:
   $raid->add_scheme
     (
       ...
-      master_dirs => {
+      master_stores => {
         "movies" =>
           {
             fixed => "/home/ida/Video", # absolute path
@@ -270,6 +269,8 @@ should be distinct across all schemes.
 
 =cut
 
+sub validate_schemes;
+
 sub add_scheme {
   my $self = shift;
 
@@ -278,7 +279,7 @@ sub add_scheme {
     (
      name        => undef,
      description => undef,
-     master_dirs => { },
+     master_stores => { },
      raid        => { },
      scan_others => 1
     );
@@ -289,7 +290,7 @@ sub add_scheme {
      quorum       => undef,
      width        => 1,
      share_stores => [ ],
-     share_root   => undef,
+#     share_root   => undef,
      working_dir  => undef,
    );
 
@@ -304,30 +305,167 @@ sub add_scheme {
   my %args = (@_);
   while (my ($key,$value) = each %args) {
 
-    if ($key eq "name" or $key eq "description" or $key eq "scan_others") {
+    if ($key eq "name") {
+      if (exists($self->{schemes}->{$value})) {
+	carp "Cannot add scheme '$value'; that name already exists\n";
+	return 0;
+      }
       $scheme_keys{$key} = $value;
 
-    } elsif ($key eq "master_dirs") {
-      unless (ref($value) eq "ARRAY") {
-	carp "master_dirs didn't point to an array ([...])\n";
+    } elsif ($key eq "description" or $key eq "scan_others") {
+      $scheme_keys{$key} = $value;
+
+    } elsif ($key eq "master_stores") {
+      unless (ref($value) eq "HASH") {
+	carp "master_stores must be a hash ref ({...})\n";
 	$ok = 0;
 	next;
       }
 
-      
+      while (my ($group,$pathref) = each(%$value)) {
+	unless (ref($pathref) eq "HASH") {
+	  carp "Directory group '$group' must be a hash ref ({...})\n";
+	  next;
+	}
 
+	unless (exists($pathref->{path})) {
+	  carp "Directory group '$group' needs a 'path' key\n";
+	  next;
+	}
+
+	unless (exists($pathref->{drive}) or exists($pathref->{fixed})) {
+	  carp "Directory group '$group' needs a fixed or drive key\n";
+	  next
+	}
+
+	# deep copy group hash so values in it can't change unexpectedly
+	my $href = {};	# fresh hash
+	map { $href->{$_} = $pathref->{$_} } keys %$pathref;
+	$scheme_keys{master_stores}->{$group} = $href;
+      }
+
+      unless (keys %{$scheme_keys{master_stores}}) {
+	carp "No valid groups found in master_stores\n";
+	$ok = 0;
+	next;
+      }
 
     } elsif ($key eq "raid") {
+      unless (ref($value) eq "HASH") {
+	carp "raid must be a hash ref ({...})\n";
+	$ok = 0;
+	next;
+      }
 
+      while (my ($raidkey,$raidval) = each(%$value)) {
 
-    } else {
+	if ($raidkey eq "nshares") {
+	  if ($raidval >= 1) {
+	    $raid_keys{nshares} = $raidval;
+	  } else {
+	    carp "raid nshares ($raidval) not a positive integer\n";
+	    $ok = 0;
+	    next;
+	  }
+	} elsif ($raidkey eq "quorum") {
+	  if ($raidval >= 1) {
+	    $raid_keys{quorum} = $raidval;
+	  } else {
+	    carp "raid quorum ($raidval) not a positive integer\n";
+	    $ok = 0;
+	    next;
+	  }
+	} elsif ($raidkey eq "width") {
+	  if ($raidval == 1 or $raidval == 2 or $raidval == 4) {
+	    $raid_keys{width} = $raidval;
+	  } else {
+	    carp "raid width ($raidval) not 1, 2 or 4\n";
+	    $ok = 0;
+	    next;
+	  }
+	} elsif ($raidkey eq "working_dir") {
+	  $raid_keys{working_dir} = $raidval;
 
-      carp "Unknown option passed to add_scheme: $key\n";
-      $ok = 0;
+	# } elsif ($raidkey eq "share_root") {
+	# share_root replaced by putting path => into silo definitions
+
+	} elsif ($raidkey eq "share_stores") {
+	  unless (ref($raidval) eq "ARRAY") {
+	    carp "raid share_stores not an array ref ([...])\n";
+	    $ok = 0;
+	    next;
+	  }
+
+	  my $silo=0;		# incrementing silo number
+	  for my $siloref (@$raidval) {
+	    unless (ref($siloref) eq "HASH") {
+	      carp "raid silo $silo must be a hash ref ({...})\n";
+	      $ok=0;		# for safety's sake
+	      next;
+	    }
+	    unless (exists($siloref->{path})) {
+	      carp "raid silo $silo needs a 'path' key\n";
+	      $ok=0;		# for safety's sake
+	      next;
+	    }
+	    unless (exists($siloref->{drive}) or exists($siloref->{fixed})) {
+	      carp "raid silo $silo needs a fixed or drive key\n";
+	      $ok=0;		# for safety's sake
+	      next;
+	    }
+	    ++$silo;
+
+	    # deep copy hash so values in it can't change unexpectedly
+	    my $href = {};	# fresh hash
+	    map { $href->{$_} = $siloref->{$_} } keys %$siloref;
+	    push @{$raid_keys{share_stores}}, $href;
+	  }
+
+	  unless (@{$raid_keys{share_stores}}) {
+	    carp "No valid share_stores found in raid\n";
+	    $ok = 0;
+	  }
+
+	  for ('nshares','quorum','width','working_dir') {
+	    next if defined($raid_keys{$_});
+	    carp "raid missing required key $_\n";
+	    $ok = 0;
+	  }
+	  next unless ($ok);
+	  unless ($raid_keys{nshares} >= $raid_keys{quorum}) {
+	    carp "raid nshares not >= quorum\n";
+	    $ok = 0;
+	  }
+	  unless ($raid_keys{nshares} == (@{$raid_keys{share_stores}})) {
+	    carp "raid nshares not equal to number of share_stores\n";
+	    $ok = 0;
+	  }
+
+	} else {
+	  carp "Ignoring unknown key $raidkey in raid section\n";
+	}
+      }
+
+    } else {			# unknown method parameter
+
+      carp "Ignored unknown option passed to add_scheme: $key\n";
+      # no need to set $ok
     }
 
   }
 
+  # Some checks that can only be done after all values are in our
+  # hashes
+
+
+  # Also check this scheme against all other schemes to ensure no
+  # conflicts
+
+
+  # Finally, copy valid values into $self and make working dirs/files
+  if ($ok) { }
+
+  $ok;
 }
 
 # TODO: In future, it would be nice to have a generic object
