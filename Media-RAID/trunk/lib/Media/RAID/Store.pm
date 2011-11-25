@@ -9,16 +9,19 @@ use Exporter;
 # Generic constructor method (use Classname::new)
 sub new {
   my $class = shift;
-  my $self  = { path => undef, @_ };
+  my $self  = { path => undef, mount_root => "", @_ };
 
   unless (defined($self->{path})) {
-    carp "Media::RAID::Store objects require path key\n";
+    carp "Media::RAID::Store::new requires a path key\n";
+    return undef;
+  }
+  unless (substr($self->{path},0,1) eq "/") {
+    carp "path must begin with '/'\n";
     return undef;
   }
   if (exists($self->{drive})) {
     $self->{type}       = "drive";
     $self->{id}         = $self->{drive};
-    $self->{mount_root} = "";
     delete $self->{drive};
     return bless $self, 'Media::RAID::Store';
   }
@@ -26,20 +29,24 @@ sub new {
     $self->{type} = "fixed";
     $self->{id}   = $self->{dixed};
     delete $self->{fixed};
-    $self->{mount_root} = "";
     return bless $self, 'Media::RAID::Store';
   }
-  carp "Media::RAID::Store objects require a drive or fixed key\n";
+  carp "Media::RAID::Store::new requires a drive or fixed key\n";
   return undef;
 }
 
-# Shortcut functions (don't call Classname::new_*_store)
+# Exported shortcut functions (don't call via $ref->* or Classname::*)
 sub new_drive_store {
-  unless (@_ == 2) {
-    carp "new_drive_store requires (drive,path) args\n";
+  unless (@_ >= 2) {
+    carp "new_drive_store requires (drive,path[,mount_root]) args\n";
     return undef;
   }
-  my $self  = { id   => shift, path => shift, type => "drive" };
+  my $self = { id   => shift, path => shift, type => "drive",
+	       mount_root => (shift or "")};
+  unless (substr($self->{path},0,1) eq "/") {
+    carp "path must begin with '/'\n";
+    return undef;
+  }
   bless($self,'Media::RAID::Store');
 }
 
@@ -48,7 +55,11 @@ sub new_fixed_store {
     carp "new_fixed_store requires (fixed,path) args\n";
     return undef;
   }
-  my $self  = { id   => shift, path => shift, type => "fixed" };
+  my $self = { id=>shift, path=>shift, type=>"fixed", mount_root=>"" };
+  unless (substr($self->{path},0,1) eq "/") {
+    carp "path must begin with '/'\n";
+    return undef;
+  }
   bless($self,'Media::RAID::Store');
 }
 
@@ -60,16 +71,47 @@ sub mountable { my $self = shift; $self->{type} eq "drive" ? 1 : 0 }
 # get/update mount_root
 sub mount_root {
   my $self = shift;
-  unless ($self->mountable) {
-    carp "Fixed store is not mountable\n";
-    return undef;
-  }
   my $new_mount = shift;
-  $self->{mount_root} = $new_mount if defined $new_mount;
+  if (defined($new_mount)) {
+    unless($self->mountable) {
+      carp "Fixed store is not mountable (can't change mount_root)\n";
+      return "";
+    }
+    $self->{mount_root} = $new_mount;
+  }
   $self->{mount_root};
 }
 
-# as_path doesn't take mount paths into account, so user must prepend it
-sub as_path { "$self->{id}/$self->{path}"; }
+# check_mount returns true if we have a valid mount_root and can see
+# at least the base dir (eg, '/fixed/path' or '/media/Disk'). This
+# will generally be called once after setting up, or as a check after
+# mounting a directory.
+sub check_mount {
+  my $self = shift;
+
+  if ($self->mountable) {
+    # note that the following assumes an automount scheme where the
+    # directory for a labelled disk is created automatically when the
+    # disk is mounted, and the dir is removed when it's unmounted. It
+    # would probably be better to use Filesys::Df to check that it's
+    # actually mounted.
+    return (-d "$self->{mount_root}/$self->{id}"          ? 1 : 0);
+  } else {
+    return (-d $self->{id} and $self->{mount_root} eq "") ? 1 : 0;
+  }
+}
+
+# as_path sticks together all the components to create a path name.
+# If this store is mountable, but mount_root isn't set, we return
+# undef.
+sub as_path {
+  my $self = shift;
+  my $path = "";
+  if ($self->mountable) {
+    $path = "$self->{mount_root}/";
+    return undef if ($path eq "/");
+  }
+  return "$path" . "$self->{id}" . "$self->{path}";
+}
 
 1;

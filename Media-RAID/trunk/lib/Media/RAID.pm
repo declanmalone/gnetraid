@@ -34,6 +34,7 @@ files.
 The general outline of using the module is outlined below:
 
    use Media::RAID;
+   use Media::RAID::Store qw(new_drive_store new_fixed_store)
 
    # initialise object and configure a RAID scheme
    my $raid = Media::RAID->new(global_opt => value, ...);
@@ -119,9 +120,7 @@ sub new {
 Since this is the most complicated part of using the module, it is
 broken up into several sections. The basic outline is:
 
-  $rc = $raid->add_scheme
-    (
-      name => "(short,unique) name of this RAID scheme",
+  $rc = $raid->add_scheme ( "unique name for this scheme",
       description => "Human-readable description",
       master_stores => { <details of dirs being managed> },
       raid => { <details of RAID scheme used to backup dirs> },
@@ -217,7 +216,7 @@ distinct. Therefore, although it is possible to setup a single scheme,
 with a single master dir whose path is set to "/", it is inadvisable
 to do so.
 
-=head3 Specifying RAID Details
+=head3 RAID Parameters
 
 Although I have been describing this system as "RAID-like",
 mathematically is it actually quite different. For a full explanation
@@ -231,24 +230,20 @@ shown below:
   $raid->add_scheme
     (
       ...
-      raid =>
-        {
-	  # IDA parameters
-          nshares => 4,  # number of shares to create
-          quorum  => 3,  # number of shares needed to combine
-          width => 1,    # word size in bytes (1,2 or 4; 1=quickest)
-	  # Storage "silos"; shares are spread across these
-          share_stores => [
-		     { drive => 'Jupiter' },
-		     { fixed => '/var/media-raid/' },
-		     { drive => 'Io' },
-		     { drive => 'Ganymede' }
-		    ],
-	  # Housekeeping variables
-          share_root => '/shares',    # appended to share_stores dirs
-          working_dir => "$ENV{HOME}/.media-raid",
-        },
-      ...  # other parameters to add_scheme
+      # IDA parameters
+      nshares => 4,  # number of shares to create
+      quorum  => 3,  # number of shares needed to combine
+      width => 1,    # word size in bytes (1,2 or 4; 1=quickest)
+      # Storage "silos"; shares are spread across these
+      share_stores => [
+	 new_drive_store ('Jupiter',        '/shares','/media'),
+	 new_fixed_store ('/var/media-raid','/shares'         ),
+	 new_drive_store ('Io',             '/shares','/media'),
+	 new_drive_store ('Ganymede',       '/shares','/media'),
+	],
+      # Housekeeping variables
+      working_dir => "$ENV{HOME}/.media-raid",
+      ...
     );
 
 Most of these values should be fairly self-explanatory, but note:
@@ -259,8 +254,12 @@ Most of these values should be fairly self-explanatory, but note:
 
 =item * you can mix "drive" and "fixed" storage silos;
 
-=item * share_root is appended to the base drive mount point/fixed
-mount point directory within the backup directories;
+=item * all drives include a local mount point, but fixed stores don't
+use/accept this parameter.
+
+=item * all shares will be stored in the '/shares' directory relateive
+to the drive/fixed mount point directory within the backup
+directories;
 
 =item * working_dir is needed to store various work files and it
 should be distinct across all schemes.
@@ -275,24 +274,18 @@ sub add_scheme {
   my $self = shift;
 
   # list of valid keys, including default values
-  my %scheme_keys =
-    (
-     name        => undef,
-     description => undef,
+  my $scheme =
+    {
+     name          => undef,
+     description   => undef,
      master_stores => { },
-     raid        => { },
-     scan_others => 1
-    );
-
-  my %raid_keys =
-    (
-     nshares      => undef,
-     quorum       => undef,
-     width        => 1,
-     share_stores => [ ],
-#     share_root   => undef,
-     working_dir  => undef,
-   );
+     scan_others   => 1,
+     share_stores  => [ ],
+     nshares       => undef,
+     quorum        => undef,
+     width         => 1,
+     working_dir   => undef,
+    };
 
   # check for even number of args
   if ((0 + @_) & 1) {
@@ -310,10 +303,10 @@ sub add_scheme {
 	carp "Cannot add scheme '$value'; that name already exists\n";
 	return 0;
       }
-      $scheme_keys{$key} = $value;
+      $scheme->{$key} = $value;
 
     } elsif ($key eq "description" or $key eq "scan_others") {
-      $scheme_keys{$key} = $value;
+      $scheme->{$key} = $value;
 
     } elsif ($key eq "master_stores") {
       unless (ref($value) eq "HASH") {
@@ -341,109 +334,66 @@ sub add_scheme {
 	# deep copy group hash so values in it can't change unexpectedly
 	my $href = {};	# fresh hash
 	map { $href->{$_} = $pathref->{$_} } keys %$pathref;
-	$scheme_keys{master_stores}->{$group} = $href;
+	$scheme->{master_stores}->{$group} = $href;
       }
 
-      unless (keys %{$scheme_keys{master_stores}}) {
+      unless (keys %{$scheme->{master_stores}}) {
 	carp "No valid groups found in master_stores\n";
 	$ok = 0;
 	next;
       }
 
-    } elsif ($key eq "raid") {
-      unless (ref($value) eq "HASH") {
-	carp "raid must be a hash ref ({...})\n";
+    } elsif ($key eq "nshares") {
+      if ($value >= 1) {
+	$scheme->{nshares} = $value;
+      } else {
+	carp "raid nshares ($value) not a positive integer\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "quorum") {
+      if ($value >= 1) {
+	$scheme->{quorum} = $value;
+      } else {
+	carp "raid quorum ($value) not a positive integer\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "width") {
+      if ($value == 1 or $value == 2 or $value == 4) {
+	$scheme->{width} = $value;
+      } else {
+	carp "raid width ($value) not 1, 2 or 4\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "working_dir") {
+      $scheme->{working_dir} = $value;
+
+      # } elsif ($key eq "share_root") {
+      # share_root replaced by putting path => into silo definitions
+
+    } elsif ($key eq "share_stores") {
+      unless (ref($value) eq "ARRAY") {
+	carp "raid share_stores not an array ref ([...])\n";
 	$ok = 0;
 	next;
       }
 
-      while (my ($raidkey,$raidval) = each(%$value)) {
-
-	if ($raidkey eq "nshares") {
-	  if ($raidval >= 1) {
-	    $raid_keys{nshares} = $raidval;
-	  } else {
-	    carp "raid nshares ($raidval) not a positive integer\n";
-	    $ok = 0;
-	    next;
-	  }
-	} elsif ($raidkey eq "quorum") {
-	  if ($raidval >= 1) {
-	    $raid_keys{quorum} = $raidval;
-	  } else {
-	    carp "raid quorum ($raidval) not a positive integer\n";
-	    $ok = 0;
-	    next;
-	  }
-	} elsif ($raidkey eq "width") {
-	  if ($raidval == 1 or $raidval == 2 or $raidval == 4) {
-	    $raid_keys{width} = $raidval;
-	  } else {
-	    carp "raid width ($raidval) not 1, 2 or 4\n";
-	    $ok = 0;
-	    next;
-	  }
-	} elsif ($raidkey eq "working_dir") {
-	  $raid_keys{working_dir} = $raidval;
-
-	# } elsif ($raidkey eq "share_root") {
-	# share_root replaced by putting path => into silo definitions
-
-	} elsif ($raidkey eq "share_stores") {
-	  unless (ref($raidval) eq "ARRAY") {
-	    carp "raid share_stores not an array ref ([...])\n";
-	    $ok = 0;
-	    next;
-	  }
-
-	  my $silo=0;		# incrementing silo number
-	  for my $siloref (@$raidval) {
-	    unless (ref($siloref) eq "HASH") {
-	      carp "raid silo $silo must be a hash ref ({...})\n";
-	      $ok=0;		# for safety's sake
-	      next;
-	    }
-	    unless (exists($siloref->{path})) {
-	      carp "raid silo $silo needs a 'path' key\n";
-	      $ok=0;		# for safety's sake
-	      next;
-	    }
-	    unless (exists($siloref->{drive}) or exists($siloref->{fixed})) {
-	      carp "raid silo $silo needs a fixed or drive key\n";
-	      $ok=0;		# for safety's sake
-	      next;
-	    }
-	    ++$silo;
-
-	    # deep copy hash so values in it can't change unexpectedly
-	    my $href = {};	# fresh hash
-	    map { $href->{$_} = $siloref->{$_} } keys %$siloref;
-	    push @{$raid_keys{share_stores}}, $href;
-	  }
-
-	  unless (@{$raid_keys{share_stores}}) {
-	    carp "No valid share_stores found in raid\n";
-	    $ok = 0;
-	  }
-
-	  for ('nshares','quorum','width','working_dir') {
-	    next if defined($raid_keys{$_});
-	    carp "raid missing required key $_\n";
-	    $ok = 0;
-	  }
-	  next unless ($ok);
-	  unless ($raid_keys{nshares} >= $raid_keys{quorum}) {
-	    carp "raid nshares not >= quorum\n";
-	    $ok = 0;
-	  }
-	  unless ($raid_keys{nshares} == (@{$raid_keys{share_stores}})) {
-	    carp "raid nshares not equal to number of share_stores\n";
-	    $ok = 0;
-	  }
-
-	} else {
-	  carp "Ignoring unknown key $raidkey in raid section\n";
+      my $silo=0;		# incrementing silo number
+      for my $siloref (@$value) {
+	unless (ref($siloref) =~ /^Media::RAID::Store/) {
+	  carp "raid silo $silo not a Media::RAID::Store object\n";
+	  $ok=0;		# for safety's sake
+	  next;
 	}
+	++$silo;
+	push @{$scheme->{share_stores}}, $siloref;
+      }
+
+      unless (@{$scheme->{share_stores}}) {
+	carp "No valid share_stores found in raid\n";
+	$ok = 0;
       }
 
     } else {			# unknown method parameter
@@ -456,6 +406,20 @@ sub add_scheme {
 
   # Some checks that can only be done after all values are in our
   # hashes
+  for ('nshares','quorum','width','working_dir') {
+    next if defined($scheme->{$_});
+    carp "raid missing required key $_\n";
+    $ok = 0;
+  }
+  next unless ($ok);
+  unless ($scheme->{nshares} >= $scheme->{quorum}) {
+    carp "raid nshares not >= quorum\n";
+    $ok = 0;
+  }
+  unless ($scheme->{nshares} == (@{$scheme->{share_stores}})) {
+    carp "raid nshares not equal to number of share_stores\n";
+    $ok = 0;
+  }
 
 
   # Also check this scheme against all other schemes to ensure no
