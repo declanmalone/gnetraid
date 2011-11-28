@@ -3,6 +3,8 @@ package Media::RAID;
 use warnings;
 use strict;
 use Carp;
+use YAML::Any qw(LoadFile);
+
 
 =head1 NAME
 
@@ -34,7 +36,7 @@ files.
 The general outline of using the module is outlined below:
 
    use Media::RAID;
-   use Media::RAID::Store qw(new_drive_store new_fixed_store)
+   use Media::RAID::Store qw(new_drive_store new_fixed_store);
 
    # initialise object and configure a RAID scheme
    my $raid = Media::RAID->new(global_opt => value, ...);
@@ -71,46 +73,217 @@ On success, returns a Media::RAID object, or undef otherwise.
 
 =cut
 
-# Constructor
+# forward declarations
+sub validate_scheme;
+sub validate_master_stores;
 
+# List of all valid options and other keys, and whether they're
+# required
+our %required_options     = (local_mount => 1, clobber => 0,
+			     verbosity   => 0, dryrun => 0);
+our %required_keys        = (options => 1, schemes =>1, hosts => 0);
+our %required_scheme_keys = (nshares => 1, quorum => 1, width => 1,
+			     share_stores => 1, master_stores => 1,
+			     working_dir => 1);
+
+# encapsulate defaults so they're the same everywhere they're needed
+our @default_options = (
+			local_mount => "/media",
+			clobber     => 1,
+			verbosity   => 0,
+			dryrun      => 0,
+		       );
+
+# Constructor
 sub new {
   my $class = shift;
-  my $self  = { options =>
-		{
-		 local_mount => "/media",
-		 clobber     => 1,
-		 verbosity   => 0,
-		 dryrun      => 0,
-		},
+  my $self  = { options => { @default_options, @_ },
 		schemes => {},
 		hosts   => {},
 	      };
 
-  # read in global options
-  # expect key => value pairs, so complain if we have an odd number of
-  # args
-  if ((0 + @_) & 1) {
-    carp "Odd number of args passed to new; expected key => value args\n";
-    return undef;
+  # do we know about all options passed in?  Allow user to set unknown
+  # options beginning with '_' (to aid extensions), but delete all
+  # others.
+  for my $key (keys %{$self->{options}}) {
+    unless (exists($required_options{$key}) or $key =~ /^_/) {
+      carp "Unknown global option '$key'\n";
+      delete $self->{option}->{$key};
+    }
   }
 
-  my %opts=(@_);
-  while (my ($key,$value) = each %opts) {
-    if ($key eq "clobber") {
-      $self->{options}->{$key} = $value;
-    } elsif ($key eq "verbosity") {
-      $self->{options}->{$key} = $value;
-    } elsif ($key eq "local_mount") {
-      $self->{options}->{$key} = $value;
-    } elsif ($key eq "dryrun") {
-      $self->{options}->{$key} = $value;
-    } else {
-      carp "Unknown global option '$key'\n";
-      # not fatal, so continue
+  # do we have all required options?
+  for my $key (%required_options) {
+    next unless $required_options{$key}; # skip if not actually required
+    unless (exists $self->{options}->{$key}) {
+      carp "Required option '$key' not set\n";
+      return undef;
     }
   }
 
   bless $self,$class;
+}
+
+# does basic validity checking on a single scheme
+sub validate_scheme {
+  my ($self,$schemekey) =(shift,shift);
+
+  unless (defined ($schemekey) and exists $self->{schemes}->{$schemekey}) {
+    carp "validate_scheme called on non-existant scheme\n";
+    return 0;
+  }
+
+  # basic validity checks on scheme keys
+
+  my $scheme = $self->{schemes}->{$schemekey};
+
+  unless (ref($scheme) eq "HASH") {
+    carp "Scheme $schemekey is not a HASHREF ({...})\n";
+    return 0;
+  }
+
+  my $ok = 1;
+
+  # first delete all unknown keys
+  for my $key (keys %{$scheme}) {
+    unless (exists($required_scheme_keys {$key}) or $key =~ /^_/) {
+      carp "deleting unknown scheme option '$key'\n";
+      delete $self->{option}->{$key};
+    }
+  }
+
+  # do we have all required options?
+  for my $key (%required_scheme_keys) {
+    next unless $required_scheme_keys{$key}; # skip if not actually required
+    unless (exists $self->{schemes}->{$key}) {
+      carp "Required scheme option '$key' not set\n";
+      return 0;
+    }
+  }
+
+  while (my ($key,$value) = each %$scheme) {
+
+    if ($key eq "master_stores") {
+      unless (ref($value) eq "HASH") {
+	carp "master_stores must be a hash ref ({...})\n";
+	$ok = 0;
+	next;
+      }
+
+      while (my ($group,$storeref) = each(%$value)) {
+	unless (ref($storeref) =~ /^Media::RAID::Store/) {
+	  carp "Directory group '$group' not a Media::RAID::Store object\n";
+	  next;
+	}
+	$scheme->{master_stores}->{$group} = $storeref;
+      }
+
+      unless (keys %{$scheme->{master_stores}}) {
+	carp "No valid groups found in master_stores\n";
+	$ok = 0;
+	next;
+      }
+
+    } elsif ($key eq "nshares") {
+      if ($value >= 1) {
+	$scheme->{nshares} = $value;
+      } else {
+	carp "raid nshares ($value) not a positive integer\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "quorum") {
+      if ($value >= 1) {
+	$scheme->{quorum} = $value;
+      } else {
+	carp "raid quorum ($value) not a positive integer\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "width") {
+      if ($value == 1 or $value == 2 or $value == 4) {
+	$scheme->{width} = $value;
+      } else {
+	carp "raid width ($value) not 1, 2 or 4\n";
+	$ok = 0;
+	next;
+      }
+    } elsif ($key eq "working_dir") {
+      $scheme->{working_dir} = $value;
+
+      # } elsif ($key eq "share_root") {
+      # share_root replaced by putting path => into silo definitions
+
+    } elsif ($key eq "share_stores") {
+      unless (ref($value) eq "ARRAY") {
+	carp "raid share_stores not an array ref ([...])\n";
+	$ok = 0;
+	next;
+      }
+
+      my $silo=0;		# incrementing silo number
+      for my $siloref (@$value) {
+	unless (ref($siloref) =~ /^Media::RAID::Store/) {
+	  carp "raid silo $silo not a Media::RAID::Store object\n";
+	  $ok=0;		# for safety's sake
+	  next;
+	}
+	++$silo;
+	push @{$scheme->{share_stores}}, $siloref;
+      }
+
+      unless (@{$scheme->{share_stores}}) {
+	carp "No valid share_stores found in raid\n";
+	$ok = 0;
+      }
+
+    } else {			# unknown method parameter
+
+      carp "Ignored unknown option passed to add_scheme: $key\n";
+      # no need to set $ok
+    }
+
+  }
+
+  # Some checks that can only be done after all values are in our
+  # hashes
+  for ('nshares','quorum','width','working_dir') {
+    next if defined($scheme->{$_});
+    carp "raid missing required key $_\n";
+    $ok = 0;
+  }
+  return 0 unless ($ok);
+  unless ($scheme->{nshares} >= $scheme->{quorum}) {
+    carp "raid nshares not >= quorum\n";
+    $ok = 0;
+  }
+  unless ($scheme->{nshares} == (@{$scheme->{share_stores}})) {
+    carp "raid nshares not equal to number of share_stores\n";
+    $ok = 0;
+  }
+
+
+  return $ok;
+}
+
+
+
+sub new_from_yaml {
+
+  my ($class,$type,$value) = @_;
+
+  unless ($type eq "string" or $type eq "file") {
+    carp "new_from_yaml needs 'string' or 'file' as 2nd argument\n";
+    return undef;
+  }
+  unless (defined($value)) {
+    carp "new_from_yaml needs a $type as 3rd argument\n";
+    return undef;
+  }
+
+  
+
+
 }
 
 =head2 Defining RAID schemes
@@ -272,11 +445,27 @@ sub validate_schemes;
 
 sub add_scheme {
   my $self = shift;
+  my $name;
+
+  unless (defined($name=shift)) {
+    carp "add_scheme needs scheme name as first argument\n";
+    return 0;
+  }
+
+  if (exists($self->{schemes}->{$name})) {
+    carp "Cannot add scheme '$name'; that name already exists\n";
+    return 0;
+  }
+
+  # check for even number of args
+  if ((0 + @_) & 1) {
+    carp "Odd number of args passed to new; expected key => value args\n";
+    return 0;			# failure
+  }
 
   # list of valid keys, including default values
   my $scheme =
     {
-     name          => undef,
      description   => undef,
      master_stores => { },
      scan_others   => 1,
@@ -285,151 +474,21 @@ sub add_scheme {
      quorum        => undef,
      width         => 1,
      working_dir   => undef,
+     @_				# bring in args
     };
 
-  # check for even number of args
-  if ((0 + @_) & 1) {
-    carp "Odd number of args passed to new; expected key => value args\n";
-    return 0;			# failure
+
+  $self->{schemes}->{$name} = $scheme;
+  unless ($self->validate_scheme($name)) {
+    carp "deleted invalid scheme $name\n";
+    delete $self->{schemes}->{$name};
+    return 0;
   }
 
-  # basic validity checks on args
-  my $ok = 1;
-  my %args = (@_);
-  while (my ($key,$value) = each %args) {
+  # TODO: Also check this scheme against all other schemes to ensure
+  # no conflicts.
 
-    if ($key eq "name") {
-      if (exists($self->{schemes}->{$value})) {
-	carp "Cannot add scheme '$value'; that name already exists\n";
-	return 0;
-      }
-      $scheme->{$key} = $value;
-
-    } elsif ($key eq "description" or $key eq "scan_others") {
-      $scheme->{$key} = $value;
-
-    } elsif ($key eq "master_stores") {
-      unless (ref($value) eq "HASH") {
-	carp "master_stores must be a hash ref ({...})\n";
-	$ok = 0;
-	next;
-      }
-
-      while (my ($group,$pathref) = each(%$value)) {
-	unless (ref($pathref) eq "HASH") {
-	  carp "Directory group '$group' must be a hash ref ({...})\n";
-	  next;
-	}
-
-	unless (exists($pathref->{path})) {
-	  carp "Directory group '$group' needs a 'path' key\n";
-	  next;
-	}
-
-	unless (exists($pathref->{drive}) or exists($pathref->{fixed})) {
-	  carp "Directory group '$group' needs a fixed or drive key\n";
-	  next
-	}
-
-	# deep copy group hash so values in it can't change unexpectedly
-	my $href = {};	# fresh hash
-	map { $href->{$_} = $pathref->{$_} } keys %$pathref;
-	$scheme->{master_stores}->{$group} = $href;
-      }
-
-      unless (keys %{$scheme->{master_stores}}) {
-	carp "No valid groups found in master_stores\n";
-	$ok = 0;
-	next;
-      }
-
-    } elsif ($key eq "nshares") {
-      if ($value >= 1) {
-	$scheme->{nshares} = $value;
-      } else {
-	carp "raid nshares ($value) not a positive integer\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "quorum") {
-      if ($value >= 1) {
-	$scheme->{quorum} = $value;
-      } else {
-	carp "raid quorum ($value) not a positive integer\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "width") {
-      if ($value == 1 or $value == 2 or $value == 4) {
-	$scheme->{width} = $value;
-      } else {
-	carp "raid width ($value) not 1, 2 or 4\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "working_dir") {
-      $scheme->{working_dir} = $value;
-
-      # } elsif ($key eq "share_root") {
-      # share_root replaced by putting path => into silo definitions
-
-    } elsif ($key eq "share_stores") {
-      unless (ref($value) eq "ARRAY") {
-	carp "raid share_stores not an array ref ([...])\n";
-	$ok = 0;
-	next;
-      }
-
-      my $silo=0;		# incrementing silo number
-      for my $siloref (@$value) {
-	unless (ref($siloref) =~ /^Media::RAID::Store/) {
-	  carp "raid silo $silo not a Media::RAID::Store object\n";
-	  $ok=0;		# for safety's sake
-	  next;
-	}
-	++$silo;
-	push @{$scheme->{share_stores}}, $siloref;
-      }
-
-      unless (@{$scheme->{share_stores}}) {
-	carp "No valid share_stores found in raid\n";
-	$ok = 0;
-      }
-
-    } else {			# unknown method parameter
-
-      carp "Ignored unknown option passed to add_scheme: $key\n";
-      # no need to set $ok
-    }
-
-  }
-
-  # Some checks that can only be done after all values are in our
-  # hashes
-  for ('nshares','quorum','width','working_dir') {
-    next if defined($scheme->{$_});
-    carp "raid missing required key $_\n";
-    $ok = 0;
-  }
-  next unless ($ok);
-  unless ($scheme->{nshares} >= $scheme->{quorum}) {
-    carp "raid nshares not >= quorum\n";
-    $ok = 0;
-  }
-  unless ($scheme->{nshares} == (@{$scheme->{share_stores}})) {
-    carp "raid nshares not equal to number of share_stores\n";
-    $ok = 0;
-  }
-
-
-  # Also check this scheme against all other schemes to ensure no
-  # conflicts
-
-
-  # Finally, copy valid values into $self and make working dirs/files
-  if ($ok) { }
-
-  $ok;
+  return 1;
 }
 
 # TODO: In future, it would be nice to have a generic object

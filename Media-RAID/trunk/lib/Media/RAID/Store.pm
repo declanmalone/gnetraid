@@ -47,7 +47,7 @@ sub new_drive_store {
     carp "path must begin with '/'\n";
     return undef;
   }
-  bless($self,'Media::RAID::Store');
+  bless $self,'Media::RAID::Store';
 }
 
 sub new_fixed_store {
@@ -60,7 +60,7 @@ sub new_fixed_store {
     carp "path must begin with '/'\n";
     return undef;
   }
-  bless($self,'Media::RAID::Store');
+  bless $self,'Media::RAID::Store';
 }
 
 
