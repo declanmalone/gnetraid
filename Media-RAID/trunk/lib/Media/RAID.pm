@@ -3,7 +3,7 @@ package Media::RAID;
 use warnings;
 use strict;
 use Carp;
-use YAML::Any qw(LoadFile);
+use YAML::Any qw(LoadFile Dump);
 
 
 =head1 NAME
@@ -84,7 +84,8 @@ our %required_options     = (local_mount => 1, clobber => 0,
 our %required_keys        = (options => 1, schemes =>1, hosts => 0);
 our %required_scheme_keys = (nshares => 1, quorum => 1, width => 1,
 			     share_stores => 1, master_stores => 1,
-			     working_dir => 1);
+			     working_dir => 1, description => 0,
+			     scan_others => 0);
 
 # encapsulate defaults so they're the same everywhere they're needed
 our @default_options = (
@@ -129,7 +130,7 @@ sub validate_scheme {
   my ($self,$schemekey) =(shift,shift);
 
   unless (defined ($schemekey) and exists $self->{schemes}->{$schemekey}) {
-    carp "validate_scheme called on non-existant scheme\n";
+    carp "validate_scheme called on nonexistent scheme\n";
     return 0;
   }
 
@@ -147,112 +148,76 @@ sub validate_scheme {
   # first delete all unknown keys
   for my $key (keys %{$scheme}) {
     unless (exists($required_scheme_keys {$key}) or $key =~ /^_/) {
-      carp "deleting unknown scheme option '$key'\n";
+      carp "scheme $schemekey: deleting unknown scheme option '$key'\n";
       delete $self->{option}->{$key};
     }
   }
 
   # do we have all required options?
   for my $key (%required_scheme_keys) {
-    next unless $required_scheme_keys{$key}; # skip if not actually required
-    unless (exists $self->{schemes}->{$key}) {
+    next unless $required_scheme_keys{$key}; # skip if not required
+    unless (exists $scheme->{$key}) {
       carp "Required scheme option '$key' not set\n";
       return 0;
     }
   }
 
-  while (my ($key,$value) = each %$scheme) {
+  unless (ref($scheme->{master_stores}) eq "HASH") {
+    carp "scheme $schemekey: master_stores not a hash ref ({...})\n";
+    return 0;
+  }
 
-    if ($key eq "master_stores") {
-      unless (ref($value) eq "HASH") {
-	carp "master_stores must be a hash ref ({...})\n";
-	$ok = 0;
-	next;
-      }
-
-      while (my ($group,$storeref) = each(%$value)) {
-	unless (ref($storeref) =~ /^Media::RAID::Store/) {
-	  carp "Directory group '$group' not a Media::RAID::Store object\n";
-	  next;
-	}
-	$scheme->{master_stores}->{$group} = $storeref;
-      }
-
-      unless (keys %{$scheme->{master_stores}}) {
-	carp "No valid groups found in master_stores\n";
-	$ok = 0;
-	next;
-      }
-
-    } elsif ($key eq "nshares") {
-      if ($value >= 1) {
-	$scheme->{nshares} = $value;
-      } else {
-	carp "raid nshares ($value) not a positive integer\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "quorum") {
-      if ($value >= 1) {
-	$scheme->{quorum} = $value;
-      } else {
-	carp "raid quorum ($value) not a positive integer\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "width") {
-      if ($value == 1 or $value == 2 or $value == 4) {
-	$scheme->{width} = $value;
-      } else {
-	carp "raid width ($value) not 1, 2 or 4\n";
-	$ok = 0;
-	next;
-      }
-    } elsif ($key eq "working_dir") {
-      $scheme->{working_dir} = $value;
-
-      # } elsif ($key eq "share_root") {
-      # share_root replaced by putting path => into silo definitions
-
-    } elsif ($key eq "share_stores") {
-      unless (ref($value) eq "ARRAY") {
-	carp "raid share_stores not an array ref ([...])\n";
-	$ok = 0;
-	next;
-      }
-
-      my $silo=0;		# incrementing silo number
-      for my $siloref (@$value) {
-	unless (ref($siloref) =~ /^Media::RAID::Store/) {
-	  carp "raid silo $silo not a Media::RAID::Store object\n";
-	  $ok=0;		# for safety's sake
-	  next;
-	}
-	++$silo;
-	push @{$scheme->{share_stores}}, $siloref;
-      }
-
-      unless (@{$scheme->{share_stores}}) {
-	carp "No valid share_stores found in raid\n";
-	$ok = 0;
-      }
-
-    } else {			# unknown method parameter
-
-      carp "Ignored unknown option passed to add_scheme: $key\n";
-      # no need to set $ok
+  while (my ($group,$storeref) = each(%{$scheme->{master_stores}})) {
+    unless (ref($storeref) =~ /^Media::RAID::Store/) {
+      carp "scheme $schemekey: Directory group '$group' " .
+	"not a Media::RAID::Store object\n";
+      next;
     }
+  }
 
+  unless (keys %{$scheme->{master_stores}}) {
+    carp "scheme $schemekey: No valid groups found in master_stores\n";
+    return 0;
+  }
+
+  unless ($scheme->{nshares} >= 1) {
+    carp "scheme $schemekey: nshares not a positive integer\n";
+    return 0;
+    next;
+  }
+
+  unless ($scheme->{quorum} >= 1) {
+    carp "scheme $schemekey: raid quorum not a positive integer\n";
+    return 0;
+  }
+
+  unless ($scheme->{width} == 1 or $scheme->{width} == 2 or
+	  $scheme->{width} == 4) {
+    carp "scheme $schemekey: raid width not 1, 2 or 4\n";
+    return 0;
+  }
+
+  unless (ref($scheme->{share_stores}) eq "ARRAY") {
+    carp "scheme $schemekey: raid share_stores not an array ref ([...])\n";
+    return 0;
+  }
+
+  my $silo=0;		# incrementing silo number
+  for my $siloref (@{$scheme->{share_stores}}) {
+    unless (ref($siloref) =~ /^Media::RAID::Store/) {
+      carp "scheme $schemekey: silo $silo not a Media::RAID::Store object\n";
+      return 0;
+    }
+    ++$silo;
+  }
+
+  unless (@{$scheme->{share_stores}}) {
+    carp "scheme $schemekey: No valid share_stores found in raid\n";
+    return 0;
   }
 
   # Some checks that can only be done after all values are in our
   # hashes
-  for ('nshares','quorum','width','working_dir') {
-    next if defined($scheme->{$_});
-    carp "raid missing required key $_\n";
-    $ok = 0;
-  }
-  return 0 unless ($ok);
   unless ($scheme->{nshares} >= $scheme->{quorum}) {
     carp "raid nshares not >= quorum\n";
     $ok = 0;
@@ -261,7 +226,6 @@ sub validate_scheme {
     carp "raid nshares not equal to number of share_stores\n";
     $ok = 0;
   }
-
 
   return $ok;
 }
@@ -281,9 +245,13 @@ sub new_from_yaml {
     return undef;
   }
 
-  
+}
 
 
+sub dumpconfig {
+  my $self = shift;
+
+  Dump($self);
 }
 
 =head2 Defining RAID schemes
@@ -476,7 +444,6 @@ sub add_scheme {
      working_dir   => undef,
      @_				# bring in args
     };
-
 
   $self->{schemes}->{$name} = $scheme;
   unless ($self->validate_scheme($name)) {
