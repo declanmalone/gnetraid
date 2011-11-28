@@ -1,14 +1,21 @@
 package Media::RAID::Store;
 
+use strict;
+use warnings;
+
 use Carp;
 use Exporter;
 
+use vars qw(@ISA @EXPORT @EXPORT_OK $VERSION);
+
+$VERSION = '0.01';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(new_drive_store new_fixed_store);
 
-# Generic constructor method (use Classname::new)
+# Generic constructor method (use Classname->new)
 sub new {
   my $class = shift;
+
   my $self  = { path => undef, mount_root => "", @_ };
 
   unless (defined($self->{path})) {
@@ -23,15 +30,15 @@ sub new {
     $self->{type}       = "drive";
     $self->{id}         = $self->{drive};
     delete $self->{drive};
-    return bless $self, 'Media::RAID::Store';
+    return bless $self, $class;
   }
   if (exists($self->{fixed})) {
     $self->{type} = "fixed";
-    $self->{id}   = $self->{dixed};
+    $self->{id}   = $self->{fixed};
     delete $self->{fixed};
-    return bless $self, 'Media::RAID::Store';
+    return bless $self, $class;
   }
-  carp "Media::RAID::Store::new requires a drive or fixed key\n";
+  carp "${class}->new requires a drive or fixed key\n";
   return undef;
 }
 
@@ -65,7 +72,8 @@ sub new_fixed_store {
 
 
 # simple accessors
-sub type      { my $self = shift; $shift->{type}; }
+sub id        { my $self = shift; $self->{id}; }
+sub type      { my $self = shift; $self->{type}; }
 sub mountable { my $self = shift; $self->{type} eq "drive" ? 1 : 0 }
 
 # get/update mount_root

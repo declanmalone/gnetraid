@@ -3,7 +3,7 @@ package Media::RAID;
 use warnings;
 use strict;
 use Carp;
-use YAML::Any qw(LoadFile Dump);
+use YAML::Any qw(Load LoadFile Dump);
 
 
 =head1 NAME

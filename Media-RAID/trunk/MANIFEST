@@ -7,6 +7,7 @@ lib/Media/RAID/Config.pm
 lib/Media/RAID/FUSE.pm
 lib/Media/RAID/Store.pm
 t/00-load.t
+t/01-Store.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
