@@ -7,7 +7,7 @@ BEGIN {
     || print "Bail out!\n";
 }
 
-diag("Testing Media::RAID::Store $Media::RAID::Store::VERSION, Perl $]" );
+diag("Testing Media::RAID::Store" );
 
 #
 # constructor tests

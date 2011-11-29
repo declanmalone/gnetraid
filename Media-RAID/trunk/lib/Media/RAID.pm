@@ -6,72 +6,7 @@ use Carp;
 use YAML::Any qw(Load LoadFile Dump);
 
 
-=head1 NAME
-
-Media::RAID - Implement a RAID-like backup system using Crypt::IDA::*
-
-=head1 VERSION
-
-Version 0.01
-
-=cut
-
 our $VERSION = '0.01';
-
-
-=head1 SYNOPSIS
-
-This module uses L<Crypt::IDA::ShareFile> to implement a flexible,
-high-level RAID-like backup system. This is primarily designed for
-working with removable hard drives, but can also be configured to
-manage redundant backups on internal hard drives or network-accessible
-mounts.
-
-End users will probably want to use the media-raid script that comes
-with this distribution instead of using this module directly, although
-they may find some sections of this manual to be of some use in
-understanding the overall design philosophy or creating configuration
-files.
-
-The general outline of using the module is outlined below:
-
-   use Media::RAID;
-   use Media::RAID::Store qw(new_drive_store new_fixed_store);
-
-   # initialise object and configure a RAID scheme
-   my $raid = Media::RAID->new(global_opt => value, ...);
-   $raid->add_scheme( <details of RAID scheme> );
-   ...
-
-   # various operations on files/backups
-   $raid->scan(...); 	 # scan for 100% and RAID copies
-   $raid->split(...); 	 # split files into RAID backup files
-   $raid->compare(...);  # compare master files with RAID backup
-   $raid->lint(...); 	 # report on orphaned files in RAID dirs
-   $raid->delint(...);   # delete orphaned RAID files in dir
-   $raid->move(...)      # move/rename original and RAID files
-   ...
-
-=head1 Setup Stage
-
-=head2 Constructor
-
-The constructor uses name => value pairs to set up any global options
-that are effective across all RAID schemes. All options have default
-values, as shown below:
-
-   my $raid = Media::RAID->new
-     (
-       local_mount => "/media", # mount point for removable disks
-       clobber     => 1,        # overwrite existing files?
-       verbosity   => 0,        # level of verbosity
-       dryrun      => 0,        # if set, warn instead of doing
-                                # potentially destructive file ops
-     );
-
-On success, returns a Media::RAID object, or undef otherwise.
-
-=cut
 
 # forward declarations
 sub validate_scheme;
@@ -206,6 +141,7 @@ sub validate_scheme {
   for my $siloref (@{$scheme->{share_stores}}) {
     unless (ref($siloref) =~ /^Media::RAID::Store/) {
       carp "scheme $schemekey: silo $silo not a Media::RAID::Store object\n";
+      carp "(It's actually a " . ref($siloref) . "\n";
       return 0;
     }
     ++$silo;
@@ -229,8 +165,6 @@ sub validate_scheme {
 
   return $ok;
 }
-
-
 
 sub new_from_yaml {
 
@@ -306,12 +240,189 @@ sub new_from_yaml {
 
 }
 
-
 sub dumpconfig {
   my $self = shift;
 
   Dump($self);
 }
+
+sub validate_schemes;
+
+sub add_scheme {
+  my $self = shift;
+  my $name;
+
+  unless (defined($name=shift)) {
+    carp "add_scheme needs scheme name as first argument\n";
+    return 0;
+  }
+
+  if (exists($self->{schemes}->{$name})) {
+    carp "Cannot add scheme '$name'; that name already exists\n";
+    return 0;
+  }
+
+  # check for even number of args
+  if ((0 + @_) & 1) {
+    carp "Odd number of args passed to new; expected key => value args\n";
+    return 0;			# failure
+  }
+
+  # list of valid keys, including default values
+  my $scheme =
+    {
+     description   => undef,
+     master_stores => { },
+     scan_others   => 1,
+     share_stores  => [ ],
+     nshares       => undef,
+     quorum        => undef,
+     width         => 1,
+     working_dir   => undef,
+     @_				# bring in args
+    };
+
+  $self->{schemes}->{$name} = $scheme;
+  unless ($self->validate_scheme($name)) {
+    carp "deleted invalid scheme $name\n";
+    delete $self->{schemes}->{$name};
+    return 0;
+  }
+
+  # TODO: Also check this scheme against all other schemes to ensure
+  # no conflicts.
+
+  return 1;
+}
+
+#
+# Some simple accessors to allow access to internal data
+#
+
+sub option {
+  my $self = shift;
+  my $option_name = shift;
+
+  unless (defined($option_name)) {
+    carp "option method requires an option name\n";
+    return undef;
+  }
+
+  if (exists($self->{options}->{$option_name})) {
+    return $self->{options}->{$option_name};
+  }
+
+  return undef;
+}
+
+sub scheme_names {
+  my $self = shift;
+
+  return keys %{$self->{schemes}};
+}
+
+sub master_names {
+  my $self   = shift;
+  my $scheme = shift;
+
+  unless (exists($self->{schemes}->{$scheme})) {
+    $scheme = "(undef)" unless defined $scheme;
+    carp "Unknown scheme $scheme\n";
+    return undef;
+  }
+
+  return keys %{$self->{schemes}->{$scheme}->{master_stores}};
+}
+
+sub master_store {
+  my ($self,$scheme,$master) = @_;
+
+  unless (@_ == 3) {
+    carp "master_store requires (scheme,master name) as parameters\n";
+    return undef;
+  }
+
+  unless (exists($self->{schemes}->{$scheme})) {
+    $scheme = "(undef)" unless defined $scheme;
+    carp "Unknown scheme $scheme\n";
+    return undef;
+  }
+
+  unless (exists($self->{schemes}->{$scheme}->{master_stores}->{$master})) {
+    carp "master store $master is not in scheme $scheme\n";
+    return undef;
+  }
+
+  return $self->{schemes}->{$scheme}->{master_stores}->{$master};
+
+}
+
+
+
+# Just POD hereafter
+
+=head1 NAME
+
+Media::RAID - Implement a RAID-like backup system using Crypt::IDA::*
+
+=head1 VERSION
+
+Version 0.01
+
+=cut
+
+
+=head1 SYNOPSIS
+
+This module uses L<Crypt::IDA::ShareFile> to implement a flexible,
+high-level RAID-like backup system. This is primarily designed for
+working with removable hard drives, but can also be configured to
+manage redundant backups on internal hard drives or network-accessible
+mounts.
+
+End users will probably want to use the media-raid script that comes
+with this distribution instead of using this module directly, although
+they may find some sections of this manual to be of some use in
+understanding the overall design philosophy or creating configuration
+files.
+
+The general outline of using the module is outlined below:
+
+   use Media::RAID;
+   use Media::RAID::Store qw(new_drive_store new_fixed_store);
+
+   # initialise object and configure a RAID scheme
+   my $raid = Media::RAID->new(global_opt => value, ...);
+   $raid->add_scheme( <details of RAID scheme> );
+   ...
+
+   # various operations on files/backups
+   $raid->scan(...); 	 # scan for 100% and RAID copies
+   $raid->split(...); 	 # split files into RAID backup files
+   $raid->compare(...);  # compare master files with RAID backup
+   $raid->lint(...); 	 # report on orphaned files in RAID dirs
+   $raid->delint(...);   # delete orphaned RAID files in dir
+   $raid->move(...)      # move/rename original and RAID files
+   ...
+
+=head1 Setup Stage
+
+=head2 Constructor
+
+The constructor uses name => value pairs to set up any global options
+that are effective across all RAID schemes. All options have default
+values, as shown below:
+
+   my $raid = Media::RAID->new
+     (
+       local_mount => "/media", # mount point for removable disks
+       clobber     => 1,        # overwrite existing files?
+       verbosity   => 0,        # level of verbosity
+       dryrun      => 0,        # if set, warn instead of doing
+                                # potentially destructive file ops
+     );
+
+On success, returns a Media::RAID object, or undef otherwise.
 
 =head2 Defining RAID schemes
 
@@ -466,73 +577,7 @@ should be distinct across all schemes.
 
 =back
 
-=cut
-
-sub validate_schemes;
-
-sub add_scheme {
-  my $self = shift;
-  my $name;
-
-  unless (defined($name=shift)) {
-    carp "add_scheme needs scheme name as first argument\n";
-    return 0;
-  }
-
-  if (exists($self->{schemes}->{$name})) {
-    carp "Cannot add scheme '$name'; that name already exists\n";
-    return 0;
-  }
-
-  # check for even number of args
-  if ((0 + @_) & 1) {
-    carp "Odd number of args passed to new; expected key => value args\n";
-    return 0;			# failure
-  }
-
-  # list of valid keys, including default values
-  my $scheme =
-    {
-     description   => undef,
-     master_stores => { },
-     scan_others   => 1,
-     share_stores  => [ ],
-     nshares       => undef,
-     quorum        => undef,
-     width         => 1,
-     working_dir   => undef,
-     @_				# bring in args
-    };
-
-  $self->{schemes}->{$name} = $scheme;
-  unless ($self->validate_scheme($name)) {
-    carp "deleted invalid scheme $name\n";
-    delete $self->{schemes}->{$name};
-    return 0;
-  }
-
-  # TODO: Also check this scheme against all other schemes to ensure
-  # no conflicts.
-
-  return 1;
-}
-
 =head1 SUBROUTINES/METHODS
-
-=head2 function1
-
-=cut
-
-
-sub function1 {
-}
-
-=head2 function2
-
-=cut
-
-sub function2 {
-}
 
 =head1 AUTHOR
 
@@ -543,7 +588,6 @@ Declan Malone, C<< <idablack at sourceforge.net> >>
 Please report any bugs or feature requests to C<bug-media-raid at rt.cpan.org>, or through
 the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Media-RAID>.  I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
-
 
 
 
