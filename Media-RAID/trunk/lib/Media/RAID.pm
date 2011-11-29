@@ -245,6 +245,65 @@ sub new_from_yaml {
     return undef;
   }
 
+  my $self;
+  $self = ($type eq "string") ? Load($value) : LoadFile($value);
+
+  unless (ref($self) eq "$class") {
+    if (ref($self) eq "HASH") {
+      carp "Blessing incoming YAML data structure\n";
+      bless $self,$class;
+    } else {
+      carp "Loaded YAML file didn't yield a hashref\n";
+      return undef;
+    }
+  }
+
+  # validate data (some bits copied from constructor)
+
+  unless (ref($self->{options}) eq "HASH") {
+    carp "options in loaded data not a hashref ({...})\n";
+    return undef;
+  }
+
+  # put in default options if not set
+  $self->{options} = { @default_options, %{$self->{options}} };
+
+  # do we have all required options?
+  for my $key (%required_options) {
+    next unless $required_options{$key}; # skip if not actually required
+    unless (exists $self->{options}->{$key}) {
+      carp "Required option '$key' not set\n";
+      return undef;
+    }
+  }
+
+  # do we know about all options passed in?  Allow user to set unknown
+  # options beginning with '_' (to aid extensions), but delete all
+  # others.
+  for my $key (keys %{$self->{options}}) {
+    unless (exists($required_options{$key}) or $key =~ /^_/) {
+      carp "Unknown global option '$key'\n";
+      delete $self->{option}->{$key};
+    }
+  }
+
+  unless (ref($self->{schemes}) eq "HASH") {
+    carp "schemes in loaded data not a hashref ({...})\n";
+    return undef;
+  }
+
+  foreach (keys %{$self->{schemes}}) {
+    unless ($self->validate_scheme($_)) {
+      carp "Deleted invalid scheme $_\n";
+      delete $self->{schemes}->{$_};
+    }
+  }
+
+  # TODO: Add check to make sure of no conflicts within/between
+  # schemes
+
+  return $self;
+
 }
 
 
@@ -336,8 +395,8 @@ special mount commands or the need to physically attach a disk:
       master_stores => {
         "movies" =>
           {
-            fixed => "/home/ida/Video", # absolute path
-            path  => "/movies"          # relative to above path
+            fixed => "/home/ida",     # absolute path
+            path  => "/Video/movies"  # relative to above path
           },
           ...			# other dirs in this scheme
         }.
@@ -457,16 +516,6 @@ sub add_scheme {
 
   return 1;
 }
-
-# TODO: In future, it would be nice to have a generic object
-# Media::Raid::Path encapsulating data such as { drive => foo, path =>
-# foo}, and to allow this object to be passed into the add_scheme
-# method. This would allow users to extend the basic class to
-# implement other types of mountable shares. The code for this module
-# would then interrogate the object to call the specific methods for,
-# eg, checking whether the medium is mounted, mounting and unmounting
-# it, and perhaps for things such as finding the amount of space used
-# or available free space
 
 =head1 SUBROUTINES/METHODS
 
