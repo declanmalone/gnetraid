@@ -1076,19 +1076,11 @@ die $help_text if $need_help;
 # New way of configuring via Media::RAID module
 my $raid;
 
-# load in the config from a YAML file
-$raid = Media::RAID->
-  new_from_yaml("file","$ENV{HOME}/.media-raid/config");
-
-# now ignore that and build RAID manually
-
 $raid = Media::RAID->new(local_mount => '/media',
 			 verbosity => $verbose,
 			 clobber => $clobber,
 			)
   or die "Failed to make Media::RAID object\n";
-
-# My actual media files
 
 $raid->add_scheme
   (
@@ -1113,27 +1105,10 @@ $raid->add_scheme
    working_dir => "$ENV{HOME}/.media-raid",
   ) or die "Problem creating RAID scheme for 'media'\n";
 
+# Alternatively, load in the config from a YAML file
+$raid = Media::RAID->
+  new_from_yaml("file","$ENV{HOME}/.media-raid/config");
 
-# Add a scheme that will allow me to test this script and the new
-# module as I make changes/move functionality in there
-my $home = "$ENV{HOME}/raidtest"; # store all files here
-
-$raid->add_scheme
-  (
-   "test",
-   description => "test scheme",
-   master_stores =>
-   {
-    "test_master" => new_fixed_store ($home, "/master"),
-   },
-   # choose different IDA parameters to get better test coverage
-   nshares => 8, quorum => 5, width => 2,
-   share_stores =>
-   [
-    map { new_fixed_store("$home/shares", "/$_") } (0..7)
-   ],
-   working_dir => "$home/config",
-  ) or die "Problem creating RAID scheme for 'test'\n";
 
 # we can't use abs_path when moving files
 # @ARGV = map { abs_path $_ } @ARGV;

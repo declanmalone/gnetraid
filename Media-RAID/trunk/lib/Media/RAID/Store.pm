@@ -74,6 +74,7 @@ sub new_fixed_store {
 # simple accessors
 sub id        { my $self = shift; $self->{id}; }
 sub type      { my $self = shift; $self->{type}; }
+sub path      { my $self = shift; $self->{path}; }
 sub mountable { my $self = shift; $self->{type} eq "drive" ? 1 : 0 }
 
 # get/update mount_root

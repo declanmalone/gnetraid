@@ -5,6 +5,7 @@ use strict;
 use Carp;
 use YAML::Any qw(Load LoadFile Dump);
 
+use Cwd qw(getcwd abs_path);
 
 our $VERSION = '0.01';
 
@@ -355,6 +356,79 @@ sub master_store {
 
   return $self->{schemes}->{$scheme}->{master_stores}->{$master};
 
+}
+
+
+#
+# look up a file/dir in the schemes; return a hash with info about it
+# if found, or undef otherwise.
+#
+
+sub lookup {
+
+  my ($in_drive,$in_archive,$in_root) = (("") x 3);
+
+  my ($self,$file,$scheme) = @_;
+
+  unless (defined($file)) {
+    carp "Expected lookup_file(filename,[scheme])\n";
+    return undef;
+  }
+
+  # values will be returned in this hashref
+  my $hash  = {};
+  my $found = 0;
+
+  # if no scheme name given, search all schemes
+  my @schemes = defined($scheme) ? ($scheme) : ( $self->scheme_names );
+
+  $file= abs_path($file);
+
+  foreach $scheme (@schemes) {
+
+    my $hashrec = {
+		   archive   => undef,
+		   store     => undef,
+		   storeid   => undef,
+		   storeroot => undef,
+		   storepath => undef,
+		  };
+
+    foreach my $archive ($self->master_names($scheme)) {
+      my $store   = $self->{master_stores}->{$archive};
+      my $storeid = $store->id;
+      unless ($store->check_mount) {
+	#carp "Store '$id' is not mounted\n";
+	next;
+      }
+      my $store_root = $store->mountable ?
+	$store->mount_root . "/" . $storeid :
+	$storeid;
+      my $store_path = $store->as_path;
+      # appending '/' below ensures we don't get false matches on
+      # directory names that partially match, eg 'foobar' =~ m/^foo/
+      if ("$file/" =~ m|^$store_path/|) {
+	$hashrec->{archive}   = $archive;
+	$hashrec->{store}     = $store;
+	$hashrec->{storeid}   = $storeid;
+	$hashrec->{storeroot} = $store_root;
+	$hashrec->{path}      = $store->path;
+	$hash->{$scheme} = $hashrec;
+	# at this point, there is no point in checking for other
+	# matches since earlier checks guarantee that each as_path
+	# result is unique and not a subdir or parent dir of any other
+	# as_path result
+	last;
+      }
+    }
+  }
+
+  unless ((keys %$hash) > 0) {
+    # warn "File '$file' not fount in any scheme\n";
+    return undef;
+  }
+
+  return $hash;
 }
 
 
