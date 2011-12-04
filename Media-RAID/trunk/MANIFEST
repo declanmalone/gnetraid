@@ -13,3 +13,5 @@ t/pod-coverage.t
 t/pod.t
 bin/media-fuse
 bin/media-raid
+Makefile.PL
+META.yml

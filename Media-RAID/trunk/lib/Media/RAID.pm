@@ -366,8 +366,6 @@ sub master_store {
 
 sub lookup {
 
-  my ($in_drive,$in_archive,$in_root) = (("") x 3);
-
   my ($self,$file,$scheme) = @_;
 
   unless (defined($file)) {
@@ -382,7 +380,9 @@ sub lookup {
   # if no scheme name given, search all schemes
   my @schemes = defined($scheme) ? ($scheme) : ( $self->scheme_names );
 
+  # warn "\$file was '$file'\n";
   $file= abs_path($file);
+  # warn "\$file is now '$file'\n";
 
   foreach $scheme (@schemes) {
 
@@ -395,7 +395,7 @@ sub lookup {
 		  };
 
     foreach my $archive ($self->master_names($scheme)) {
-      my $store   = $self->{master_stores}->{$archive};
+      my $store   = $self->{schemes}->{$scheme}->{master_stores}->{$archive};
       my $storeid = $store->id;
       unless ($store->check_mount) {
 	#carp "Store '$id' is not mounted\n";
@@ -413,22 +413,28 @@ sub lookup {
 	$hashrec->{storeid}   = $storeid;
 	$hashrec->{storeroot} = $store_root;
 	$hashrec->{path}      = $store->path;
+	$hashrec->{relative}  = $file;
+	$hashrec->{relative}  =~ s|^$store_path/?|/|;	
+
+	# warn "matched $file in scheme $scheme, archive $archive\n";
 	$hash->{$scheme} = $hashrec;
+
 	# at this point, there is no point in checking for other
 	# matches since earlier checks guarantee that each as_path
 	# result is unique and not a subdir or parent dir of any other
 	# as_path result
+	++$found;
 	last;
       }
     }
   }
 
-  unless ((keys %$hash) > 0) {
-    # warn "File '$file' not fount in any scheme\n";
-    return undef;
-  }
+  #  unless ((keys %$hash) > 0) {
+  #    # warn "File '$file' not fount in any scheme\n";
+  #    return undef;
+  #  }
 
-  return $hash;
+  return $found ? $hash : undef;
 }
 
 
