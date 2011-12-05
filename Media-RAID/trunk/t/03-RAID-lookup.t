@@ -167,8 +167,6 @@ SKIP: {
 
 
 
-
-
 exit 0;
 
 # The tests below are conditional on having the build script called
