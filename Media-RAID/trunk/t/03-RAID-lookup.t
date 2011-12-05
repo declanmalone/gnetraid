@@ -128,7 +128,6 @@ for (0..2) {
 	"lookup returned incorrect relative path: ".
 	$lookup_info->{raid_1}->{relative});
   }
-
 }
 
 #
@@ -145,8 +144,8 @@ SKIP: {
   skip "Can't test sharefile names", 3 unless 3 == @sharefiles;
 
   for (0..2) {
-    my $expected = "$sroot_1$spaths_1[$_]/file.sf";
-    ok ($sharefiles[$_] eq $expected, "expected sharefile name $expected");
+    my $expected = "$sroot_1$spaths_1[$_]$mpath_1/file.sf";
+    is ($sharefiles[$_], $expected, "wrong sharefile name");
   }
 }
 
@@ -160,8 +159,8 @@ SKIP: {
   skip "Can't test sharefile names", 3 unless 3 == @sharefiles;
 
   for (0..2) {
-    my $expected = "$sroot_1$spaths_1[$_]/file.sf";
-    ok ($sharefiles[$_] eq $expected, "expected sharefile name $expected");
+    my $expected = "$sroot_1$spaths_1[$_]$mpath_1/file.sf";
+    is ($sharefiles[$_], $expected, "wrong sharefile name");
   }
 }
 

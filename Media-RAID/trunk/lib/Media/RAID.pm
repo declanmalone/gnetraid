@@ -7,6 +7,8 @@ use YAML::Any qw(Load LoadFile Dump);
 
 use Cwd qw(getcwd abs_path);
 
+use Crypt::IDA::ShareFile ":all";
+
 our $VERSION = '0.01';
 
 # forward declarations
@@ -462,7 +464,7 @@ sub sharefile_names {
 
   if (defined($lhash)) {
     unless (ref($lhash) eq "HASH") {
-      carp "sharefile_info optional arg should be a hashref\n";
+      carp "sharefile_names optional arg should be a hashref\n";
       return ();
     }
   } else {
@@ -492,7 +494,8 @@ sub sharefile_names {
   foreach (@{$self->{schemes}->{$scheme}->{share_stores}}) {
     my $as_path = $_->as_path;
     next unless defined $as_path;
-    my $sharefile = $as_path . $lhash->{$scheme}->{relative} . ".sf";
+    my $sharefile = $as_path . $lhash->{$scheme}->{path} .
+      $lhash->{$scheme}->{relative} . ".sf";
     #warn "sharefile: $sharefile\n";
     push @list, $sharefile;
   }
@@ -515,7 +518,7 @@ sub sharefile_names {
 
 sub sharefile_info {
 
-  my ($self,$original_file,$scheme,$lhash) = @_;
+  my ($self,$original_file,$scheme,$lhash,@junk) = @_;
 
   unless (defined($original_file)) {
     carp "sharefile_info method needs a file to check\n";
@@ -526,13 +529,16 @@ sub sharefile_info {
     return undef;
   }
 
+  return undef unless -f $original_file;
+
   my $original_size = (stat $original_file)[7];
 
   # we can be passed in the saved results of a lookup call, or we can
   # generate one now.
   if (defined($lhash)) {
     unless (ref($lhash) eq "HASH") {
-      carp "sharefile_info optional arg should be a hashref\n";
+      carp "sharefile_info optional arg should be a hashref\n".
+	"Got $lhash (". ref($lhash). ") instead\n";
       return undef;
     }
   } else {
@@ -547,112 +553,121 @@ sub sharefile_info {
     return undef;
   }
 
-  foreach $scheme (keys %$lhash) {
+  my $archive = $lhash->{$scheme}->{archive};
+  my $share_size;
+  my $sharedata = {
+		   nshares     => 0,
+		   quorum      => 0,
+		   viable      => 0,
+		   perfect     => 0,
+		   headers     => [ ],
+		   file_names  => [ ],
+		   file_length => undef,
+		  };
+  my $file_length = undef;
 
-    my $archive = $lhash->{$scheme}->{archive};
-    my $share_size;
-    my $sharedata = {
-		     nshares     => 0,
-		     viable      => 0,
-		     perfect     => 0,
-		     headers     => { },
-		     file_names  => [ ],
-		     file_length => undef,
-		    };
-    my $file_length = undef;
+  # values read from lookup result
+  #my ($share_root,$in_root,$in_archive);
+  #$share_root = undef;	# ???
 
-    # values read from lookup result
-    #my ($share_root,$in_root,$in_archive);
-    #$share_root = undef;	# ???
+  # values read from scheme
+  my $quorum  = $self->{schemes}->{$scheme}->{quorum};
+  my $nshares = $self->{schemes}->{$scheme}->{nshares};
 
-    # values read from scheme
-    my $quorum  = $self->{schemes}->{$scheme}->{quorum};
-    my $nshares = $self->{schemes}->{$scheme}->{nshares};
+  # values read from sharefile headers
+  my ($k,$w) = (undef,undef);
+  my ($chunk_start,$chunk_next,$header_size) = (undef,undef,undef);
 
-    # values read from sharefile headers
-    my ($k,$w) = (undef,undef);
-    my ($chunk_start,$chunk_next,$header_size) = (undef,undef,undef);
+  my $header_info;
 
-    my $header_info;
+  #my $relative_file = $original_file;
+  #$relative_file =~ s|/media/\w+||;
+  my $relative_file = $lhash->{$scheme}->{relative};
 
-    #my $relative_file = $original_file;
-    #$relative_file =~ s|/media/\w+||;
-    my $relative_file = $lhash->{$scheme}->{relative};
+  #my $archive_path = $archives{$archive}->{path};
+  #$relative_file =~ s|^$archive_path||;
+  my $archive_path = $lhash->{$scheme}->{store_path};
 
-    #my $archive_path = $archives{$archive}->{path};
-    #$relative_file =~ s|^$archive_path||;
-    my $archive_path = $lhash->{$scheme}->{store_path};
+  #    foreach my $drive (@drive_list) {
+  #foreach my $store ($self->{schemes}->{$scheme}->{share_stores}) {
+  my @sharefiles=$self->sharefile_names($original_file,$scheme,$lhash);
 
-    #    foreach my $drive (@drive_list) {
-    #foreach my $store ($self->{schemes}->{$scheme}->{share_stores}) {
-    my $sharefile;
-    for $sharefile ($self->sharefile_names($original_file,$lhash,$scheme)) {
+  unless (@sharefiles > 0) {
+    #carp "No sharefiles\n";
+    return undef;
+  }
 
-      # first some basic file checks to see if the file exists
-      #$sharefile = "/media/$drive$share_root" .
-      #	"$archive_path/$relative_file.sf";
-      #    warn "$sharefile\n";
-      #    next unless (-e $sharefile);
+  for my $sharefile (@sharefiles) {
 
-      # We must use functions internal to Crypt::IDA::ShareFile to
-      # open the file and read its headers
-      my $istream = Crypt::IDA::ShareFile::sf_mk_file_istream($sharefile);
+    # first some basic file checks to see if the file exists
+    #$sharefile = "/media/$drive$share_root" .
+    #	"$archive_path/$relative_file.sf";
+    #    warn "$sharefile\n";
+    #    next unless (-e $sharefile);
 
-      unless (defined $istream) {
-	#warn "failed to open istream '$sharefile'\n";
-	next;
-      }
+    #carp "Trying to open sharefile $sharefile\n";
 
-      $header_info=
-	Crypt::IDA::ShareFile::sf_read_ida_header($istream,
-						  $k,$w,
-						  $chunk_start,
-						  $chunk_next,
-						  $header_size);
-      $k           = $header_info->{k};
-      $w           = $header_info->{w};
-      $chunk_start = $header_info->{chunk_start};
-      $chunk_next  = $header_info->{chunk_next};
-      $header_size = $header_info->{header_size};
+    # We must use functions internal to Crypt::IDA::ShareFile to
+    # open the file and read its headers
+    my $istream = Crypt::IDA::ShareFile::sf_mk_file_istream($sharefile);
 
-      $share_size = $chunk_next - $chunk_start;
-      $istream->{CLOSE}->();
-
-      # Errors are raised if there's a mismatch between sharefile
-      # parameters as found in the headers. If that's the case, the
-      # shares are unusable so we return straight away.
-      if ($header_info -> {error}) {
-	warn $header_info->{error_message};
-	return undef;
-      }
-
-      # warn "Actual size: " . ((stat $sharefile)[7]) . "\n";
-      # warn "\$share_size: $share_size\n";
-      # warn "\$header_size: $header_size\n";
-
-      if ((stat $sharefile)[7] >= ($share_size / $k) + $header_size) {
-	#     warn "share file size OK\n";
-	push @{$sharedata->{file_names}}, $sharefile;
-	$sharedata->{headers}->{$archive} = $header_info;
-	$sharedata->{nshares}++;
-      }
+    unless (defined $istream) {
+      # don't be noisy if file is managed, but there are no shares
+      # carp "failed to open istream '$sharefile'\n";
+      next;
     }
 
-    $sharedata->{file_length}=$share_size;
-    $sharedata->{viable}    = 0;
-    $sharedata->{perfect}   = 0;
+    $header_info=
+      Crypt::IDA::ShareFile::sf_read_ida_header($istream,
+						$k,$w,
+						$chunk_start,
+						$chunk_next,
+						$header_size);
+    $k           = $header_info->{k};
+    $w           = $header_info->{w};
+    $chunk_start = $header_info->{chunk_start};
+    $chunk_next  = $header_info->{chunk_next};
+    $header_size = $header_info->{header_size};
 
-    if ($sharedata->{nshares} >= $quorum and $original_size == $share_size) {
-      #warn "viable/perfect\n";
-      $sharedata->{viable}  = 1;
-      $sharedata->{perfect} = 1 if $sharedata->{nshares} == $nshares;
-    }
+    $share_size = $chunk_next - $chunk_start;
+    $istream->{CLOSE}->();
 
-    if ($sharedata->{nshares}) {
-      return $sharedata;
-    } else {
+    # Errors are raised if there's a mismatch between sharefile
+    # parameters as found in the headers. If that's the case, the
+    # shares are unusable so we return straight away.
+    if ($header_info -> {error}) {
+      carp $header_info->{error_message};
       return undef;
     }
+
+    # warn "Actual size: " . ((stat $sharefile)[7]) . "\n";
+    # warn "\$share_size: $share_size\n";
+    # warn "\$header_size: $header_size\n";
+
+    if ((stat $sharefile)[7] >= ($share_size / $k) + $header_size) {
+      #     warn "share file size OK\n";
+      push @{$sharedata->{file_names}}, $sharefile;
+      push @{$sharedata->{headers}},    $header_info;
+      $sharedata->{quorum} = $k;
+      $sharedata->{nshares}++;
+    }
+  }
+
+  $sharedata->{file_length}=$share_size;
+  $sharedata->{viable}    = 0;
+  $sharedata->{perfect}   = 0;
+
+  if ($sharedata->{nshares} >= $quorum and $original_size == $share_size) {
+    #warn "viable/perfect\n";
+    $sharedata->{viable}  = 1;
+    $sharedata->{perfect} = 1 if $sharedata->{nshares} == $nshares;
+  }
+
+  if ($sharedata->{nshares}) {
+    return $sharedata;
+  } else {
+    # carp "no shares\n";
+    return undef;
   }
 }
 

@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 46;
+use Test::More tests => 71;
 
 BEGIN {
   use_ok('Media::RAID::Store',qw(new_drive_store new_fixed_store))
@@ -52,9 +52,9 @@ my $gozu_file = "$tmpdir/master_drives/drive_1/video/movies/Gozu/gozu.mpeg";
 ok (-f $gozu_file,
     "Couldn't find gozu.mpeg after file extraction") || BAIL_OUT;
 
-my $drwhofile="$tmpdir/master_drives/drive_2/video/tv/Doctor Who/" .
-  "2009/S04E15.avi";
-ok (-f $gozu_file,
+my $drwhofile="$tmpdir/master_drives/drive_2/video/tv/Doctor Who" .
+  "/2009/S04E15.avi";
+ok (-f $drwhofile,
     "Couldn't find S04E15.avi after file extraction") || BAIL_OUT;
 
 # add the schemes
@@ -131,6 +131,10 @@ ok (@sharefile_names == 8, "Wrong number of shares for gozu.mpeg");
 @sharefile_names = $raid->sharefile_names($drwhofile,undef,$ldrwho);
 ok (@sharefile_names == 3, "Wrong number of shares for S04E15.avi");
 
+is ($sharefile_names[0],
+    "$tmpdir/shares/regular/0/video/tv/Doctor Who/2009/S04E15.avi.sf",
+    "Wrong name for share of S04E15.avi");
+
 # expect call to fail for gozu.mpeg if we don't specify a scheme
 FAIL: {
   local $SIG{__WARN__} = sub { die $_[0] };
@@ -156,4 +160,165 @@ FAIL: {
 #
 # Now, the testing of sharefile_info proper
 #
+
+# Ensure the shares we're going to test for actually exist, so that we
+# can sanity-check any later failures along those lines.
+map {
+  ok(-f "$tmpdir/shares/regular/$_/video/movies/Gozu/gozu.mpeg.sf",
+    "Failed sanity check: gozu.mpeg share $_ missing (check Testfiles.pm)")
+} (0..2);
+
+my $info = undef;
+my $nsharefiles = 0;
+my @goodsharefiles =();
+
+SKIP: {
+
+  $info = $raid->sharefile_info($gozu_file,"regular",$lgozu);
+
+  is(ref($info), "HASH", "no sharefile_info for gozu.mpeg") ||
+    skip "no tests on undefined return value", 13;
+
+  is ($info->{nshares}, 3, "wrong number of shares reported");
+  is ($info->{quorum} , 2, "wrong quorum value reported");
+
+  eq_array(@{$info->{file_names}},
+	   $raid->sharefile_names($gozu_file,"regular",$lgozu),
+	   "filenames differ between sharefile_names and sharefile_info");
+
+  is ($info->{file_length},(stat $gozu_file)[7],
+      "wrong file length reported");
+
+  ok ($info->{viable},  "gozu.mpeg reported as NOT viable");
+  ok ($info->{perfect}, "gozu.mpeg reported as NOT perfect");
+  is (ref($info->{headers}),"ARRAY", "gozu.mpeg headers not right type");
+
+  map {
+    my $not_ok=0;
+    # this is a bit paranoid, but it stops us deleting a wrong file by
+    # mistake
+    ok (-f $info->{file_names}->[$_], "! -f returned gozu.mpeg share $_")
+      or ++$not_ok;
+    my $match = $info->{file_names}->[$_];
+    $match =~ m|^($tmpdir/shares/regular/$_/video/movies/Gozu/gozu.mpeg.sf)|;
+    $match = $1;		# also untaints so we can later unlink
+    is ($match,
+	"$tmpdir/shares/regular/$_/video/movies/Gozu/gozu.mpeg.sf",
+	"Wrong name for sharefile $_")
+      or ++$not_ok;
+    push @goodsharefiles, $match unless $not_ok;
+  } (0..2);
+}
+
+#
+# Now delete sharefiles and see what happens. I will skip one or more
+# of the following blocks if the above tests failed to execute or
+# found fewer than 3 sharefiles.
+#
+
+SKIP: {
+
+  skip "Expected 3 valid shares here", 10 if @goodsharefiles < 3;
+
+  # something is seriously wrong if we can't unlink a tmp file
+  BAIL_OUT unless unlink shift @goodsharefiles;
+  --$nsharefiles;
+
+  # now that we've delete a file, our cached lookup results are
+  # invalid and we have to look them up again.
+  $lgozu = $raid->lookup($gozu_file);
+  is(ref($lgozu),"HASH","lookup failed after deleting a share") ||
+    skip "dubious lookup result", 9;
+
+  $info  = $raid->sharefile_info($gozu_file,"regular",$lgozu);
+
+  is(ref($info), "HASH", "no sharefile_info for gozu.mpeg") ||
+    skip "no tests on undefined return value", 8;
+
+  is ($info->{nshares}, 2, "wrong number of shares reported");
+  is ($info->{quorum} , 2, "wrong quorum value reported");
+
+  eq_array(@{$info->{file_names}},
+	   $raid->sharefile_names($gozu_file,"regular",$lgozu),
+	   "filenames differ between sharefile_names and sharefile_info");
+
+  ok ($info->{viable},   "gozu.mpeg reported as NOT viable");
+  ok (!$info->{perfect}, "gozu.mpeg reported as PERFECT");
+  is (ref($info->{headers}),"ARRAY", "gozu.mpeg headers not right type");
+
+  map {
+    ok (-f $info->{file_names}->[$_], "! -f returned gozu.mpeg share $_")
+  } (0..1);
+}
+
+SKIP: {
+
+  skip "Expected 2 valid shares here", 9 if @goodsharefiles < 2;
+
+  unlink shift @goodsharefiles;
+  --$nsharefiles;
+
+  # now that we've delete a file, our cached lookup results are
+  # invalid and we have to look them up again.
+  $lgozu = $raid->lookup($gozu_file);
+  is(ref($lgozu),"HASH","lookup failed after deleting a share") ||
+    skip "dubious lookup result", 8;
+
+  $info  = $raid->sharefile_info($gozu_file,"regular",$lgozu);
+
+  is(ref($info), "HASH", "no sharefile_info for gozu.mpeg") ||
+    skip "no tests on undefined return value", 7;
+
+  is ($info->{nshares}, 1, "wrong number of shares reported");
+  is ($info->{quorum} , 2, "wrong quorum value reported");
+
+  eq_array(@{$info->{file_names}},
+	   $raid->sharefile_names($gozu_file,"regular",$lgozu),
+	   "filenames differ between sharefile_names and sharefile_info");
+
+  ok (!$info->{viable},   "gozu.mpeg reported as VIABLE");
+  ok (!$info->{perfect}, "gozu.mpeg reported as PERFECT");
+  is (ref($info->{headers}),"ARRAY", "gozu.mpeg headers not right type");
+
+  map {
+    ok (-f $info->{file_names}->[$_], "! -f returned gozu.mpeg share $_")
+  } (0);
+}
+
+SKIP: {
+
+  ok (@goodsharefiles == 1,"We should have one share left!") ||
+    skip "Expected 1 valid share here", 2;
+
+  # delete the last share
+  unlink shift @goodsharefiles;
+  --$nsharefiles;
+
+  # lookup should still return something even if we have no shares
+  $lgozu = $raid->lookup($gozu_file);
+  is(ref($lgozu),"HASH","lookup failed after deleting a share") ||
+    skip "dubious lookup result", 1;
+
+  $info  = $raid->sharefile_info($gozu_file,"regular",$lgozu);
+
+  is($info,undef, "gozu.mpeg shouldn't have any sharefile_info now");
+}
+
+
+
+
+FAIL: {
+  local $SIG{__WARN__} = sub { die $_[0] };
+
+  # Calling sharefile_info on a file that is managed, but that has no
+  # sharefiles should simply return undef and not emit any warnings.
+
+  my $info;
+
+  eval {$info = $raid->sharefile_info($drwhofile,"regular",$ldrwho)};
+
+  is ($@,"", "sharefile_info too noisy");
+  is ($info, undef, "sharefile_info found nonexistent shares");
+
+}
 
