@@ -289,8 +289,8 @@ sub tf_extra_scheme {
      nshares => 8, quorum => 5, width => 1,
      master_stores =>
      {
-      tv2 => new_fixed_store("$dir/master_drives/drive_2",
-			     "/video/tv"),
+      movies2 => new_fixed_store("$dir/master_drives/drive_1",
+				 "/video/movies"),
      },
      share_stores =>
      [

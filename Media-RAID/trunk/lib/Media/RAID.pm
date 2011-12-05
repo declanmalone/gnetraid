@@ -448,6 +448,10 @@ sub lookup {
 # given file, but if you already have a cached copy of the lookup
 # results, you can pass it in.
 
+# sharefile_names just generates the filenames of the shares
+# corresponding to a particular file. It doesn't check that they
+# exist. While passing a scheme name is optional here, it is probably
+# a good idea to always set it.
 sub sharefile_names {
   my ($self,$original_file,$scheme,$lhash) = @_;
 
@@ -495,19 +499,30 @@ sub sharefile_names {
   @list;
 }
 
-=begin comment
-
 #
 # sharefile_info checks for the existence of sharefiles corresponding
 # to a managed file, as well as extracting data from the file headers.
 #
+# whereas lookup returns all matching results from all schemes, and
+# some other methods (eg, scan) can operate on all matched schemes,
+# sharefile_info won't work if there are multiple matching schemes and
+# you don't tell it which one you want to operate on. This is done
+# partly to cut down on the complexity of the returned data structure,
+# but also to prevent calling functions from doing too much damage if
+# they have any coding errors: at worst, only one set of shares will
+# be damaged/deleted/etc.
+#
 
 sub sharefile_info {
 
-  my ($self,$original_file,$lhash,$scheme) = @_;
+  my ($self,$original_file,$scheme,$lhash) = @_;
 
   unless (defined($original_file)) {
     carp "sharefile_info method needs a file to check\n";
+    return undef;
+  }
+  unless (defined($scheme)) {
+    carp "sharefile_info method needs a scheme parameter\n";
     return undef;
   }
 
@@ -520,9 +535,6 @@ sub sharefile_info {
       carp "sharefile_info optional arg should be a hashref\n";
       return undef;
     }
-    # we could do more checking on the hash here, but we'll just let
-    # later warnings about undefined keys/values alert the user to any
-    # problem.
   } else {
     $lhash = $self->lookup($original_file,$scheme);
     unless (defined($lhash)) {
@@ -530,25 +542,32 @@ sub sharefile_info {
       return undef;
     }
   }
+  unless (exists $lhash->{$scheme}) {
+    carp "File not found in scheme $scheme\n";
+    return undef;
+  }
 
   foreach $scheme (keys %$lhash) {
 
     my $archive = $lhash->{$scheme}->{archive};
     my $share_size;
     my $sharedata = {
-		     nshares => 0,
-		     viable => 0,
-		     headers => { },
+		     nshares     => 0,
+		     viable      => 0,
+		     perfect     => 0,
+		     headers     => { },
+		     file_names  => [ ],
 		     file_length => undef,
 		    };
     my $file_length = undef;
 
     # values read from lookup result
-    my ($share_root,$in_root,$in_archive);
-    $share_root = undef;	# ???
+    #my ($share_root,$in_root,$in_archive);
+    #$share_root = undef;	# ???
 
     # values read from scheme
-    
+    my $quorum  = $self->{schemes}->{$scheme}->{quorum};
+    my $nshares = $self->{schemes}->{$scheme}->{nshares};
 
     # values read from sharefile headers
     my ($k,$w) = (undef,undef);
@@ -565,22 +584,19 @@ sub sharefile_info {
     my $archive_path = $lhash->{$scheme}->{store_path};
 
     #    foreach my $drive (@drive_list) {
-    foreach my $store ($self->{schemes}->{$scheme}->{share_stores}) {
+    #foreach my $store ($self->{schemes}->{$scheme}->{share_stores}) {
+    my $sharefile;
+    for $sharefile ($self->sharefile_names($original_file,$lhash,$scheme)) {
 
       # first some basic file checks to see if the file exists
-      my $sharefile;
-      $sharefile = "/media/$drive$share_root" .
-	"$archive_path/$relative_file.sf";
-
+      #$sharefile = "/media/$drive$share_root" .
+      #	"$archive_path/$relative_file.sf";
       #    warn "$sharefile\n";
-
       #    next unless (-e $sharefile);
 
-      # must use functions internal to Crypt::IDA::ShareFile to
+      # We must use functions internal to Crypt::IDA::ShareFile to
       # open the file and read its headers
-      my $istream;
-      $istream =
-	Crypt::IDA::ShareFile::sf_mk_file_istream($sharefile);
+      my $istream = Crypt::IDA::ShareFile::sf_mk_file_istream($sharefile);
 
       unless (defined $istream) {
 	#warn "failed to open istream '$sharefile'\n";
@@ -602,6 +618,9 @@ sub sharefile_info {
       $share_size = $chunk_next - $chunk_start;
       $istream->{CLOSE}->();
 
+      # Errors are raised if there's a mismatch between sharefile
+      # parameters as found in the headers. If that's the case, the
+      # shares are unusable so we return straight away.
       if ($header_info -> {error}) {
 	warn $header_info->{error_message};
 	return undef;
@@ -613,7 +632,8 @@ sub sharefile_info {
 
       if ((stat $sharefile)[7] >= ($share_size / $k) + $header_size) {
 	#     warn "share file size OK\n";
-	$sharedata->{headers}->{$drive} = $header_info;
+	push @{$sharedata->{file_names}}, $sharefile;
+	$sharedata->{headers}->{$archive} = $header_info;
 	$sharedata->{nshares}++;
       }
     }
@@ -635,6 +655,9 @@ sub sharefile_info {
     }
   }
 }
+
+=begin comment
+
 
 ##
 ## scan method
