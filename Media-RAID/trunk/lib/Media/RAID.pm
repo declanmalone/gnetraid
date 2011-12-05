@@ -359,10 +359,12 @@ sub master_store {
 }
 
 
-#
-# look up a file/dir in the schemes; return a hash with info about it
-# if found, or undef otherwise.
-#
+##
+## look up a file/dir in the schemes; return a hash with info about it
+## if found, or undef otherwise. This doesn't test that the file
+## actually exists, though it may return undef if the base directory
+## doesn't exist, thanks to the way that abs_path works.
+##
 
 sub lookup {
 
@@ -392,6 +394,7 @@ sub lookup {
 		   storeid   => undef,
 		   storeroot => undef,
 		   storepath => undef,
+		   relative  => undef,
 		  };
 
     foreach my $archive ($self->master_names($scheme)) {
@@ -412,7 +415,7 @@ sub lookup {
 	$hashrec->{store}     = $store;
 	$hashrec->{storeid}   = $storeid;
 	$hashrec->{storeroot} = $store_root;
-	$hashrec->{path}      = $store->path;
+	$hashrec->{path}      = $store->{path};
 	$hashrec->{relative}  = $file;
 	$hashrec->{relative}  =~ s|^$store_path/?|/|;	
 
@@ -437,7 +440,354 @@ sub lookup {
   return $found ? $hash : undef;
 }
 
+#
+# Encapsulate some useful nontrivial accessors
+#
 
+# a few methods (such as sharefile_names below) do a lookup on the
+# given file, but if you already have a cached copy of the lookup
+# results, you can pass it in.
+
+sub sharefile_names {
+  my ($self,$original_file,$scheme,$lhash) = @_;
+
+  unless (defined($original_file)) {
+    carp "sharefile_names method needs a file to check\n";
+    return ();
+  }
+
+  if (defined($lhash)) {
+    unless (ref($lhash) eq "HASH") {
+      carp "sharefile_info optional arg should be a hashref\n";
+      return ();
+    }
+  } else {
+    $lhash = $self->lookup($original_file,$scheme);
+    unless (defined($lhash)) {
+      carp "No information on master file $original_file\n";
+      return ();
+    }
+  }
+
+  if (defined($scheme)) {
+    unless (exists($lhash->{$scheme})) {
+      carp "File $original_file not in scheme $scheme\n" .
+	"(found in scheme: " . (join ", ", (keys %$lhash)) . "\n";
+      return ();
+    }
+  } else {
+    if ((keys %$lhash) != 1) {
+      carp "File $original_file exists in several schemes;\n" .
+	"pass in scheme parameter to sharefile_names to disambiguate\n";
+      return ();
+    }
+    ($scheme) = keys %$lhash;
+  }
+
+  my @list = ();
+  foreach (@{$self->{schemes}->{$scheme}->{share_stores}}) {
+    my $as_path = $_->as_path;
+    next unless defined $as_path;
+    my $sharefile = $as_path . $lhash->{$scheme}->{relative} . ".sf";
+    #warn "sharefile: $sharefile\n";
+    push @list, $sharefile;
+  }
+  @list;
+}
+
+=begin comment
+
+#
+# sharefile_info checks for the existence of sharefiles corresponding
+# to a managed file, as well as extracting data from the file headers.
+#
+
+sub sharefile_info {
+
+  my ($self,$original_file,$lhash,$scheme) = @_;
+
+  unless (defined($original_file)) {
+    carp "sharefile_info method needs a file to check\n";
+    return undef;
+  }
+
+  my $original_size = (stat $original_file)[7];
+
+  # we can be passed in the saved results of a lookup call, or we can
+  # generate one now.
+  if (defined($lhash)) {
+    unless (ref($lhash) eq "HASH") {
+      carp "sharefile_info optional arg should be a hashref\n";
+      return undef;
+    }
+    # we could do more checking on the hash here, but we'll just let
+    # later warnings about undefined keys/values alert the user to any
+    # problem.
+  } else {
+    $lhash = $self->lookup($original_file,$scheme);
+    unless (defined($lhash)) {
+      carp "No information on master file $original_file\n";
+      return undef;
+    }
+  }
+
+  foreach $scheme (keys %$lhash) {
+
+    my $archive = $lhash->{$scheme}->{archive};
+    my $share_size;
+    my $sharedata = {
+		     nshares => 0,
+		     viable => 0,
+		     headers => { },
+		     file_length => undef,
+		    };
+    my $file_length = undef;
+
+    # values read from lookup result
+    my ($share_root,$in_root,$in_archive);
+    $share_root = undef;	# ???
+
+    # values read from scheme
+    
+
+    # values read from sharefile headers
+    my ($k,$w) = (undef,undef);
+    my ($chunk_start,$chunk_next,$header_size) = (undef,undef,undef);
+
+    my $header_info;
+
+    #my $relative_file = $original_file;
+    #$relative_file =~ s|/media/\w+||;
+    my $relative_file = $lhash->{$scheme}->{relative};
+
+    #my $archive_path = $archives{$archive}->{path};
+    #$relative_file =~ s|^$archive_path||;
+    my $archive_path = $lhash->{$scheme}->{store_path};
+
+    #    foreach my $drive (@drive_list) {
+    foreach my $store ($self->{schemes}->{$scheme}->{share_stores}) {
+
+      # first some basic file checks to see if the file exists
+      my $sharefile;
+      $sharefile = "/media/$drive$share_root" .
+	"$archive_path/$relative_file.sf";
+
+      #    warn "$sharefile\n";
+
+      #    next unless (-e $sharefile);
+
+      # must use functions internal to Crypt::IDA::ShareFile to
+      # open the file and read its headers
+      my $istream;
+      $istream =
+	Crypt::IDA::ShareFile::sf_mk_file_istream($sharefile);
+
+      unless (defined $istream) {
+	#warn "failed to open istream '$sharefile'\n";
+	next;
+      }
+
+      $header_info=
+	Crypt::IDA::ShareFile::sf_read_ida_header($istream,
+						  $k,$w,
+						  $chunk_start,
+						  $chunk_next,
+						  $header_size);
+      $k           = $header_info->{k};
+      $w           = $header_info->{w};
+      $chunk_start = $header_info->{chunk_start};
+      $chunk_next  = $header_info->{chunk_next};
+      $header_size = $header_info->{header_size};
+
+      $share_size = $chunk_next - $chunk_start;
+      $istream->{CLOSE}->();
+
+      if ($header_info -> {error}) {
+	warn $header_info->{error_message};
+	return undef;
+      }
+
+      # warn "Actual size: " . ((stat $sharefile)[7]) . "\n";
+      # warn "\$share_size: $share_size\n";
+      # warn "\$header_size: $header_size\n";
+
+      if ((stat $sharefile)[7] >= ($share_size / $k) + $header_size) {
+	#     warn "share file size OK\n";
+	$sharedata->{headers}->{$drive} = $header_info;
+	$sharedata->{nshares}++;
+      }
+    }
+
+    $sharedata->{file_length}=$share_size;
+    $sharedata->{viable}    = 0;
+    $sharedata->{perfect}   = 0;
+
+    if ($sharedata->{nshares} >= $quorum and $original_size == $share_size) {
+      #warn "viable/perfect\n";
+      $sharedata->{viable}  = 1;
+      $sharedata->{perfect} = 1 if $sharedata->{nshares} == $nshares;
+    }
+
+    if ($sharedata->{nshares}) {
+      return $sharedata;
+    } else {
+      return undef;
+    }
+  }
+}
+
+##
+## scan method
+##
+
+
+sub scan {
+  my $self=shift;
+  my ($dir, $canonical_dir);
+  # my $cwd = getcwd; # abs_path removes need for this
+
+  if ($#_ < 0) {
+    carp "No args supplied to scan method\n";
+    return 0;
+  }
+
+  # print some headers
+  print "+-- shares\n";
+  for my $i (0 .. $#drive_list) {
+    print "|" x ($i + 1);
+    print "+";
+    print "-- " . $drive_list[$i] . "\n";
+  }
+  print "|" x ($#drive_list +2) . "\n";
+  print "v" x ($#drive_list +2) . "  Copies  Archive      File\n";
+  my $dashes = "-" x ($#drive_list +2) . "  ------  -----------  ";
+  print $dashes . ("-" x (79 - length $dashes)) . "\n";
+
+  # Use a local sub to process each file via File::Find. This can
+  # access our local variables so that we avoid calling lookup on each
+  # single file visited.
+
+  sub scan_file_or_dir {
+
+    my $absfile  = abs_path($File::Find::name);
+    my $filename = $absfile;
+
+    # modify filename to make it suitable for printing relative to
+    # archive root (keeping absfile as original absolute filename)
+    $filename =~ s|^/media/$in_drive||;
+    $filename =~ s|^$in_root/?||;
+
+    my $copies = 100;
+
+    my ($ticks,$good_tick) = ("-", "?");
+
+    my ($share_copy,$other_copy);
+    my @statinfo;
+
+    # First ticks determine if we have working shared copies (one tick
+    # for each scheme)
+    my $sharecount = 0;
+    if (-d) {
+      $good_tick = "d";
+      foreach my $drive (@drive_list) {
+	$share_copy = "/media/$drive$share_root/$in_root/$filename";
+	if (-d $share_copy) {
+	  ++$sharecount;
+	}
+      }
+    } else {
+
+      # We have to examine the headers of the share files ...
+      my $sharehash = find_sharefile_info($absfile,$in_archive);
+
+      $good_tick = "X";		# actually not good at all
+      if (defined($sharehash)) {
+
+	if ($sharehash->{viable}) {
+	  $good_tick = "!";
+	  $good_tick = "*" if $sharehash->{perfect};
+	}
+	$sharecount = $sharehash->{nshares};
+
+      } else {
+	$sharecount = 0;
+      }
+    }
+
+    $ticks = (
+	      $sharecount ?
+	      ( ($sharecount == $nshares) ? $good_tick : "X" )
+	      : "-"
+	     );
+    if ($ticks ne "-" and $sharecount >= $quorum) {
+      $copies += (100 * $sharecount / $quorum);
+    }
+
+    # checking for other (unsplit) 100% copies is easy...
+
+    if (-d) {
+
+      foreach my $drive (@drive_list) {
+	$other_copy = "/media/$drive/$in_root/$filename";
+	if ($in_drive eq $drive) {
+	  $ticks .= "D";
+	} else {
+	  if (-d $other_copy) {
+	    $ticks .= "d";
+	    $copies+=100;
+	  } elsif (-f $other_copy) {
+	    $ticks .= "X";
+	  } else {
+	    $ticks .= "-";
+	  }
+	}
+      }
+
+    } else { # regular file
+
+      foreach my $drive (@drive_list) {
+	$other_copy = "/media/$drive/$in_root/$filename";
+	if ($in_drive eq $drive) {
+	  $ticks .= "1";
+	} else {
+	  if (-d $other_copy) {
+	    $ticks .= "X";
+	  } elsif (-f $other_copy) {
+	    my $our_size = (stat $absfile)[7];
+	    my $other_size = (stat $other_copy)[7];
+	    if ($our_size == $other_size) {
+	      $ticks .= "*";
+	      $copies+=100;
+	    } else {
+	      $ticks .= "X";
+	    }
+	  } else {
+	    $ticks .= "-";
+	  }
+	}
+      }
+
+    }
+
+    print "$ticks  ";
+    $copies = int($copies);
+    print "$copies\%" . (" " x (5 - (length "$copies"))) . "  ";
+    print "$in_archive" . (" " x (length("documentary") - length($in_archive)));
+    print "  $filename\n";
+  }
+
+  foreach my $dir (map { abs_path $_ } @_) {
+    next unless find_archive_info($dir);
+    find({
+	  wanted => \&scan_file_or_dir,
+	  no_chdir => 1,
+	  preprocess => sub { sort { (lc $a) cmp (lc $b) } @_ },
+	 }, $dir);
+  }
+  1;
+}
+
+=cut
 
 # Just POD hereafter
 
