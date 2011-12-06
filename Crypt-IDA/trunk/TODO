@@ -22,3 +22,28 @@ TODO items
 
 * allow passing in specific filenames to sf_split as an alternative to
   using the existing filespec-based naming scheme.
+
+* write a guess_keys routine to take a transform matrix (such as taken
+  from a set of sharefiles) and search for a set of x1..xn,y1..yk key
+  values that is a Cauchy-form matrix equal to the input transform
+  matrix. The point of this is that my existing applications (especially
+  Crypt::IDA::ShareFile) throw away the key information and only keep
+  the transform matrix. If I want to add a new, redundant share to
+  my existing shares my only choice at the moment is to combine the
+  file (or work with the original, unsplit file) and set up a new
+  scheme with a higher n-value, and discarding all existing shares. It
+  would be nicer to be able to regenerate a valid set of keys, then
+  simply generate the new share from the original file.
+
+  This would be called guess_keys because there are many potential sets
+  of keys that map to the same transform matrix and the chance of hitting
+  on the same set of keys that were originally used is fairly low.
+
+* export a few more methods/functions from Crypt::IDA::ShareFile, 
+  especially the method/function for parsing sharefile headers.
+
+* investigate increasing the upper limit on file size when creating
+  sharefiles. I can't remember why I settled on the current limit, but
+  I do remember doing some investigation before settling on 4Gb as
+  a "reasonable" value at the time. Perhaps it's not so reasonable
+  after all.
