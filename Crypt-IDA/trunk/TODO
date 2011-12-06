@@ -1,0 +1,24 @@
+TODO items
+
+* investigate bug calculating chunk sizes when width parameter != 1
+  (this is clearly evident when called from ida_split script, but
+  may not always arise when calling sf_split method)
+
+* extend file format to enable storage of SHA-1 hashes for both shares
+  (excluding header data) and original file. The easiest place to put
+  these hashes is at the end of the file since it can be fairly easily
+  incorporated into the {CLOSE} callbacks for stream handlers, it 
+  doesn't require seeking backwards in the file, and it breaks less
+  of the existing code since it shouldn't require extending the header.
+
+* ideally the above would employ threads to enable asynchronous calc-
+  ulation of hashes so that throughput is not too badly affected.
+
+* update scripts/modules to use '-' as an alias for stdin/stdout
+  if there isn't already an analogous way of doing this (I want this
+  for quicker comparison of the results of sf_combine with an existing
+  file; at present I have to extract the file and then compare two files
+  as separate steps, meaning I have to read one file twice).
+
+* allow passing in specific filenames to sf_split as an alternative to
+  using the existing filespec-based naming scheme.
