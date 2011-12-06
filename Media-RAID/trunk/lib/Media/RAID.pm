@@ -338,10 +338,10 @@ sub master_names {
 }
 
 sub master_store {
-  my ($self,$scheme,$master) = @_;
+  my ($self,$scheme,$archive,@junk) = @_;
 
   unless (@_ == 3) {
-    carp "master_store requires (scheme,master name) as parameters\n";
+    carp "master_store requires (scheme,archive name) as parameters\n";
     return undef;
   }
 
@@ -351,15 +351,36 @@ sub master_store {
     return undef;
   }
 
-  unless (exists($self->{schemes}->{$scheme}->{master_stores}->{$master})) {
+  unless (exists($self->{schemes}->{$scheme}->{master_stores}->{$archive})) {
     carp "master store $master is not in scheme $scheme\n";
     return undef;
   }
 
-  return $self->{schemes}->{$scheme}->{master_stores}->{$master};
-
+  return $self->{schemes}->{$scheme}->{master_stores}->{$archive};
 }
 
+sub master_store_names {
+  my ($self,$scheme,@junk) = @_;
+
+  unless (@_ == 2) {
+    carp "master_store_names requires scheme parameter\n";
+    return undef;
+  }
+
+  unless (exists($self->{schemes}->{$scheme})) {
+    $scheme = "(undef)" unless defined $scheme;
+    carp "Unknown scheme $scheme\n";
+    return undef;
+  }
+
+  return keys %{$self->{schemes}->{$scheme}->{master_stores}};
+}
+
+# alias for the above method
+sub archive_names {
+  my $self=shift;
+  return $self->master_store_names(@_);
+}
 
 ##
 ## look up a file/dir in the schemes; return a hash with info about it
@@ -671,16 +692,13 @@ sub sharefile_info {
   }
 }
 
-=begin comment
-
-
 ##
 ## scan method
 ##
 
-
 sub scan {
   my $self=shift;
+
   my ($dir, $canonical_dir);
   # my $cwd = getcwd; # abs_path removes need for this
 
@@ -689,17 +707,22 @@ sub scan {
     return 0;
   }
 
-  # print some headers
-  print "+-- shares\n";
-  for my $i (0 .. $#drive_list) {
-    print "|" x ($i + 1);
-    print "+";
-    print "-- " . $drive_list[$i] . "\n";
+  my $lhash;
+  my @matching_schemes;
+  my @other_archives;
+  my $scan_others = $self->option("scan_others");
+
+  my $screen_width;
+
+ SYSTEM: {
+    # run with a restricted PATH so that we (a) lessen the possibility
+    # of security problems and (b) pass taint checks during testing.
+    local $ENV{PATH} = '/usr/bin';
+    $screen_width = `tput cols`;
+    if ($? or !($screen_width=~m/^d+/)) {
+      $screen_width = 80;		# reasonable default value
+    }
   }
-  print "|" x ($#drive_list +2) . "\n";
-  print "v" x ($#drive_list +2) . "  Copies  Archive      File\n";
-  my $dashes = "-" x ($#drive_list +2) . "  ------  -----------  ";
-  print $dashes . ("-" x (79 - length $dashes)) . "\n";
 
   # Use a local sub to process each file via File::Find. This can
   # access our local variables so that we avoid calling lookup on each
@@ -814,8 +837,88 @@ sub scan {
     print "  $filename\n";
   }
 
-  foreach my $dir (map { abs_path $_ } @_) {
-    next unless find_archive_info($dir);
+  # iterate over all files so that we know what schemes and archives
+  # we will be scanning. We must do this before printing headers. We
+  # also save some information that will be useful in scanning
+  # individual files.
+  my %info_cache       = ();
+  my %matching_schemes = ();
+  my %other_archives   = ();
+
+  # a note on %other_archives: I want to use it to sort a list of
+  # stores, which are references to objects, but the problem is that
+  # Perl stringifies the object when it goes in (which is fine), but
+  # it won't let me use it as an object when it comes out (which isn't
+  # fine). The simple solution is to sort on values rather than keys,
+  # since values don't get stringified.
+
+  foreach my $dir (@_) {
+    unless (defined($lhash = $self->lookup($dir))) {
+      carp "File $dir not managed in any scheme\n";
+      next;
+    }
+    next if exists ($info_cache{$dir});
+    $info_cache->{$dir}->{lhash}=$lhash;
+
+    my @schemes = keys %$lhash;
+    map { $matching_schemes{$_} = 1 } @schemes;
+
+    if ($scan_others) {
+      map {
+	my $scheme = $_;
+	my $others = {};
+	map {
+	  my $other = $self->master_store($scheme,$_);
+	  $other_archives{$other} = $other;
+	  # also save a copy for when we're scanning in individual dir
+	  $others->{$other} = $other;
+	} $self->archive_names($scheme);
+	# list of other dirs needs to be per-scheme when scanning
+	$info_cache->{$dir}->{others}->{$scheme} =
+	  [ sort {(lc $a->id) cmp (lc $b->id)} values %$others ];
+      } @schemes;
+    } else {
+      map {
+	my $other = $lhash->{$_}->{store};
+	# Even if this store isn't really an "other" store, I add it
+	# to the hash for the purpose of printing the correct
+	# headers. It's skipped over when doing the actual scan.
+	$other_archives{$other} = $other;
+      } @schemes;
+    }
+  }
+
+  @matching_schemes = sort {(lc $a) cmp (lc $b)} keys %matching_schemes;
+
+  # sort object references on values rather than keys (see above note)
+  @other_archives =
+    sort {(lc $a->id) cmp (lc $b->id)} values %matching_schemes;
+
+  my @tick_columns = (@matching_schemes, @other_archives);
+
+  # Print the headers
+  print "+-- shares\n";
+  for my $i (0 .. $#tick_columns) {
+    my $label;
+    if (ref($tick_columns[$i]) =~ /^Media::RAID::Store/) {
+      $label = $tick_columns[$i]->id;
+    } else {
+      $label = "scheme: $tick_columns[$i]";
+    }
+    print ("|" x $i) . "+-- $label\n";
+  }
+  print "|" x ($#tick_columns +2) . "\n";
+  print "v" x ($#tick_columns +2) .        "  Copies  Archive      File\n";
+  my $dashes = "-" x ($#tick_columns +2) . "  ------  -----------  ";
+  print $dashes . ("-" x ($screen_width -1 -length $dashes)) . "\n";
+
+
+  # Now go over the list of files again and call File::Find on them,
+  # setting local variables from %info_cache as appropriate to each
+  # dir
+  foreach my $dir (@_) {
+    next unless defined($lhash = $self->lookup($dir));
+
     find({
 	  wanted => \&scan_file_or_dir,
 	  no_chdir => 1,
@@ -823,6 +926,120 @@ sub scan {
 	 }, $dir);
   }
   1;
+}
+
+=begin comment
+
+sub cmp_function {
+
+  # Print codes based on testing original file vs shares:
+  #
+  # --  No shares to compare with
+  # ==  Shares exist and is equal to original
+  # !#  Bad number of shares (< quorum)
+  # !=  File != shares
+  # !<  Shares exist, but is smaller than original
+  # !E  Some error with comparison
+  #
+
+
+  my ($dir, $canonical_dir);
+
+  sub cmp_file_or_dir {
+
+    my $infile=$File::Find::name;
+    my $dir = $File::Find::dir;
+
+    my $filespec;
+
+    my $shortname = $infile;
+    $shortname =~ s|^/media/$in_drive||;
+    $shortname =~ s|^$in_root||;
+
+    # warn "Comparing $infile\n";
+
+    # return if directory
+    if (-d) {
+      if ($verbose > 2) {
+	warn "Split entering directory $infile\n";
+      }
+      return;
+    }
+
+    # calculate filespec via our symbolic links
+    $filespec = $infile;
+    $filespec =~ s|^/media/\w+/|$link_dir/\%s/|;
+    # $filespec =~ s|$|.sf-\%s|; # sf_split doesn't globally replace %s
+    $filespec .= ".sf";
+
+    # warn "Filespec is $filespec\n";
+
+    # make a list of up to $quorum share filenames
+    my @infiles=();
+    for my $i (0..$nshares-1) {	# share numbers count from zero
+      my $sharefile = sf_sprintf_filename($filespec,$infile,0,$i);
+      # warn "Adding share $sharefile\n";
+      if (-f $sharefile) {
+	push @infiles,$sharefile;
+	last if $#infiles == $quorum - 1;
+      }
+    }
+
+    # do we have non-viable number of shares?
+    if ($#infiles < $quorum - 1) {
+      if ($#infiles > -1) {
+	warn " !# $infile $shortname\n";
+	return;
+      }
+      warn " -- $in_archive $shortname\n";
+      return;
+    }
+
+    # we have shares, so extract to temp file and compare
+    my ($fh, $tmpfile) = tempfile() or die "Can't make temp file\n";
+    #close($fh);			# don't need
+
+    #  warn "Writing tmp file $tmpfile\n";
+
+    my $bytes=
+      sf_combine(
+		 infiles => [@infiles],
+		 outfile => $tmpfile,
+		);
+
+    if ((stat($infile))[7] > $bytes) {
+      warn " !< $in_archive $shortname\n";
+      return;
+    }
+
+    # do the compare
+    my $rc=compare($tmpfile,$infile);
+    if ($rc == 0) {
+      warn " == $in_archive: $shortname\n";
+    } elsif ($rc == -1) {
+      warn " !E $in_archive: $shortname\n";
+    } else {
+      warn " != $in_archive: $shortname\n";
+    }
+
+    unlink $tmpfile;
+
+  }
+
+
+  if ($#_ < 0) {
+    warn "no args supplied to cmp_function\n";
+    return;
+  }
+
+  foreach my $dir (map { abs_path $_ } @_) {
+    next unless find_archive_info($dir);
+    find({
+	  wanted => \&cmp_file_or_dir,
+	  no_chdir => 1,
+	  preprocess => sub { sort { (lc $a) cmp (lc $b) } @_ },
+	 }, $dir);
+  }
 }
 
 =cut
