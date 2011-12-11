@@ -2,6 +2,9 @@ package Media::RAID;
 
 use warnings;
 use strict;
+use diagnostics;
+
+
 use Carp;
 use YAML::Any qw(Load LoadFile Dump);
 
@@ -352,7 +355,7 @@ sub master_store {
   }
 
   unless (exists($self->{schemes}->{$scheme}->{master_stores}->{$archive})) {
-    carp "master store $master is not in scheme $scheme\n";
+    carp "master store $archive is not in scheme $scheme\n";
     return undef;
   }
 
@@ -381,6 +384,24 @@ sub archive_names {
   my $self=shift;
   return $self->master_store_names(@_);
 }
+
+#
+sub share_stores {
+  my ($self,$scheme,@junk) = @_;
+
+  unless (defined ($scheme)) {
+    carp "Need to pass a scheme parameter to share_stores\n";
+    return ();
+  }
+
+  unless (exists ($self->{schemes}->{$scheme})) {
+    carp "Scheme '$scheme' does not exist\n";
+    return ();
+  }
+
+  @{ $self->{schemes}->{$scheme}->{share_stores} };
+}
+
 
 ##
 ## look up a file/dir in the schemes; return a hash with info about it
@@ -444,6 +465,11 @@ sub lookup {
 
 	# warn "matched $file in scheme $scheme, archive $archive\n";
 	$hash->{$scheme} = $hashrec;
+
+	# save a regular expression that can be used to match a
+	# filename in a master archive (mainly for quick conversion to
+	# a sharefile name with s/$re/$share_path$2$3.sf/)
+	$hashrec->{regexp} = qr|^($store_root)($store->{path})(.*)|;
 
 	# at this point, there is no point in checking for other
 	# matches since earlier checks guarantee that each as_path
@@ -700,20 +726,20 @@ sub scan {
   my $self=shift;
 
   my ($dir, $canonical_dir);
-  # my $cwd = getcwd; # abs_path removes need for this
 
   if ($#_ < 0) {
     carp "No args supplied to scan method\n";
     return 0;
   }
 
+  # map { abs_path $_ } @_;
+
   my $lhash;
   my @matching_schemes;
-  my @other_archives;
+  my @other_stores;
   my $scan_others = $self->option("scan_others");
 
   my $screen_width;
-
  SYSTEM: {
     # run with a restricted PATH so that we (a) lessen the possibility
     # of security problems and (b) pass taint checks during testing.
@@ -728,124 +754,168 @@ sub scan {
   # access our local variables so that we avoid calling lookup on each
   # single file visited.
 
-  sub scan_file_or_dir {
+  my %info_cache       = ();	# populated outside sub before calling
+  my $tree_root;
+
+  my $scan_file_or_dir = sub {
 
     my $absfile  = abs_path($File::Find::name);
     my $filename = $absfile;
 
-    # modify filename to make it suitable for printing relative to
-    # archive root (keeping absfile as original absolute filename)
-    $filename =~ s|^/media/$in_drive||;
-    $filename =~ s|^$in_root/?||;
-
-    my $copies = 100;
-
+    my $copies = 100;		# count as percentage
     my ($ticks,$good_tick) = ("-", "?");
-
     my ($share_copy,$other_copy);
     my @statinfo;
+    my $this_archive  = $lhash->{archive};
+    my $this_root     = $lhash->{store_root};
+    my $re            = $lhash->{regexp};
 
-    # First ticks determine if we have working shared copies (one tick
-    # for each scheme)
-    my $sharecount = 0;
-    if (-d) {
-      $good_tick = "d";
-      foreach my $drive (@drive_list) {
-	$share_copy = "/media/$drive$share_root/$in_root/$filename";
-	if (-d $share_copy) {
-	  ++$sharecount;
+    # modify filename to make it suitable for printing relative to
+    # archive root (keeping absfile as original absolute filename)
+    $filename =~ s|$re|$3|;
+
+
+    # The first ticks determine if we have working shared copies (one
+    # tick to calculate for each scheme)
+    my $shareticks = "";
+    foreach my $scheme (@matching_schemes) {
+
+      unless (exists $lhash->{$scheme}) {
+	$shareticks .= " ";	# not managed in this scheme
+	next;
+      } else {
+	($ticks,$good_tick) = ("-", "?");
+      }
+
+      # values read from scheme
+      my $quorum  = $self->{schemes}->{$scheme}->{quorum};
+      my $nshares = $self->{schemes}->{$scheme}->{nshares};
+
+      my $sharecount = 0;
+      if (-d $absfile) {
+	$good_tick = "d";
+	# calling share_names is too expensive here, and our lookup
+	# hash result is only valid for the root where File::Find was
+	# found. So we use the stored regular expression to create it.
+	my $re = $lhash->{$scheme}->{regexp};
+	foreach my $store ($self->share_stores($scheme)) {
+	  my $share_root = $store->as_path;
+	  $share_copy = $absfile;
+	  $share_copy =~ s/$re/$share_root$3/;
+
+	  if (-d $share_copy) {
+	    ++$sharecount;
+	  }
+	}
+      } else {
+	# We have to examine the headers of the share files, but we
+	# can't use the cached lhash.
+	my $sharehash = $self->sharefile_info($absfile,$scheme);
+
+	$good_tick = "X";		# actually not good at all
+	if (defined($sharehash)) {
+
+	  if ($sharehash->{viable}) {
+	    $good_tick = "!";
+	    $good_tick = "*" if $sharehash->{perfect};
+	  }
+	  $sharecount = $sharehash->{nshares};
+	} else {
+	  $sharecount = 0;
+	}
+      }
+
+      $ticks = (
+		$sharecount ?
+		( ($sharecount == $nshares) ? $good_tick : "X" )
+		: "-"
+	       );
+      if ($ticks ne "-" and $sharecount >= $quorum) {
+	$copies += (100 * $sharecount / $quorum);
+      }
+
+      $shareticks .= $ticks;
+    }
+
+    $ticks = $shareticks;
+
+    # checking for other (unsplit) 100% copies is relatively easy...
+    if ($scan_others) {
+      foreach my $scheme (@matching_schemes) {
+	my @archive_names = $self->archive_names($scheme);
+	unless (exists $lhash->{$scheme}) {
+	  # not managed in this scheme
+	  $ticks .= " " x @archive_names;
+	  next;
+	}
+
+	if (-d $absfile) {
+	  foreach my $archive (@archive_names) {
+	    if ($archive eq $this_archive) {
+	      $ticks .= "D";
+	    } else {
+	      my $other_store = $self->{schemes}->{$scheme}->{$archive};
+	      my $other_root  = $other_store->mount_root . $other_store->id;
+	      $other_copy = $absfile;
+	      $other_copy =~ s/$re/$other_root$2$3/;
+	      if (-d $other_copy) {
+		$ticks .= "d";
+		$copies+=100;
+	      } elsif (-f $other_copy) {
+		$ticks .= "X";
+	      } else {
+		$ticks .= "-";
+	      }
+	    }
+	  }
+	} else { # regular file
+	  foreach my $archive (@archive_names) {
+	    if ($archive eq $this_archive) {
+	      $ticks .= "1";
+	    } else {
+	      my $other_store = $self->{schemes}->{$scheme}->{$archive};
+	      my $other_root  = $other_store->mount_root . $other_store->id;
+	      $other_copy = $absfile;
+	      $other_copy =~ s/$re/$other_root$2$3/;
+	      if (-d $other_copy) {
+		$ticks .= "X";
+	      } elsif (-f $other_copy) {
+		my $our_size   = (stat $absfile)[7];
+		my $other_size = (stat $other_copy)[7];
+		if ($our_size == $other_size) {
+		  $ticks .= "*";
+		  $copies+=100;
+		} else {
+		  $ticks .= "X";
+		}
+	      } else {
+		$ticks .= "-";
+	      }
+	    }
+	  }
 	}
       }
     } else {
-
-      # We have to examine the headers of the share files ...
-      my $sharehash = find_sharefile_info($absfile,$in_archive);
-
-      $good_tick = "X";		# actually not good at all
-      if (defined($sharehash)) {
-
-	if ($sharehash->{viable}) {
-	  $good_tick = "!";
-	  $good_tick = "*" if $sharehash->{perfect};
-	}
-	$sharecount = $sharehash->{nshares};
-
-      } else {
-	$sharecount = 0;
-      }
-    }
-
-    $ticks = (
-	      $sharecount ?
-	      ( ($sharecount == $nshares) ? $good_tick : "X" )
-	      : "-"
-	     );
-    if ($ticks ne "-" and $sharecount >= $quorum) {
-      $copies += (100 * $sharecount / $quorum);
-    }
-
-    # checking for other (unsplit) 100% copies is easy...
-
-    if (-d) {
-
-      foreach my $drive (@drive_list) {
-	$other_copy = "/media/$drive/$in_root/$filename";
-	if ($in_drive eq $drive) {
-	  $ticks .= "D";
-	} else {
-	  if (-d $other_copy) {
-	    $ticks .= "d";
-	    $copies+=100;
-	  } elsif (-f $other_copy) {
-	    $ticks .= "X";
-	  } else {
-	    $ticks .= "-";
-	  }
-	}
-      }
-
-    } else { # regular file
-
-      foreach my $drive (@drive_list) {
-	$other_copy = "/media/$drive/$in_root/$filename";
-	if ($in_drive eq $drive) {
-	  $ticks .= "1";
-	} else {
-	  if (-d $other_copy) {
-	    $ticks .= "X";
-	  } elsif (-f $other_copy) {
-	    my $our_size = (stat $absfile)[7];
-	    my $other_size = (stat $other_copy)[7];
-	    if ($our_size == $other_size) {
-	      $ticks .= "*";
-	      $copies+=100;
-	    } else {
-	      $ticks .= "X";
-	    }
-	  } else {
-	    $ticks .= "-";
-	  }
-	}
-      }
-
+      $ticks .= "";
     }
 
     print "$ticks  ";
     $copies = int($copies);
     print "$copies\%" . (" " x (5 - (length "$copies"))) . "  ";
-    print "$in_archive" . (" " x (length("documentary") - length($in_archive)));
+    print "$this_archive" . 
+      (" " x (length("documentary") - length($this_archive)));
     print "  $filename\n";
-  }
+  };
 
   # iterate over all files so that we know what schemes and archives
   # we will be scanning. We must do this before printing headers. We
   # also save some information that will be useful in scanning
-  # individual files.
-  my %info_cache       = ();
-  my %matching_schemes = ();
-  my %other_archives   = ();
+  # individual files and make the find more effecient since we won't
+  # have to calculate the same information multiple times
+  my %matching_schemes = ();	# matches across all input files
+  my %other_stores     = ();
 
-  # a note on %other_archives: I want to use it to sort a list of
+  # a note on %other_stores: I want to use it to sort a list of
   # stores, which are references to objects, but the problem is that
   # Perl stringifies the object when it goes in (which is fine), but
   # it won't let me use it as an object when it comes out (which isn't
@@ -858,7 +928,8 @@ sub scan {
       next;
     }
     next if exists ($info_cache{$dir});
-    $info_cache->{$dir}->{lhash}=$lhash;
+    $info_cache{$dir}= {};
+    $info_cache{$dir}->{lhash}=$lhash;
 
     my @schemes = keys %$lhash;
     map { $matching_schemes{$_} = 1 } @schemes;
@@ -869,12 +940,12 @@ sub scan {
 	my $others = {};
 	map {
 	  my $other = $self->master_store($scheme,$_);
-	  $other_archives{$other} = $other;
+	  $other_stores{$other} = $other;
 	  # also save a copy for when we're scanning in individual dir
 	  $others->{$other} = $other;
 	} $self->archive_names($scheme);
 	# list of other dirs needs to be per-scheme when scanning
-	$info_cache->{$dir}->{others}->{$scheme} =
+	$info_cache{$dir}->{others}->{$scheme} =
 	  [ sort {(lc $a->id) cmp (lc $b->id)} values %$others ];
       } @schemes;
     } else {
@@ -883,7 +954,7 @@ sub scan {
 	# Even if this store isn't really an "other" store, I add it
 	# to the hash for the purpose of printing the correct
 	# headers. It's skipped over when doing the actual scan.
-	$other_archives{$other} = $other;
+	$other_stores{$other} = $other;
       } @schemes;
     }
   }
@@ -891,10 +962,10 @@ sub scan {
   @matching_schemes = sort {(lc $a) cmp (lc $b)} keys %matching_schemes;
 
   # sort object references on values rather than keys (see above note)
-  @other_archives =
-    sort {(lc $a->id) cmp (lc $b->id)} values %matching_schemes;
+  @other_stores =
+    sort {(lc $a->id) cmp (lc $b->id)} values %other_stores;
 
-  my @tick_columns = (@matching_schemes, @other_archives);
+  my @tick_columns = (@matching_schemes, @other_stores);
 
   # Print the headers
   print "+-- shares\n";
@@ -905,7 +976,7 @@ sub scan {
     } else {
       $label = "scheme: $tick_columns[$i]";
     }
-    print ("|" x $i) . "+-- $label\n";
+    print (("|" x $i) . "+-- $label\n");
   }
   print "|" x ($#tick_columns +2) . "\n";
   print "v" x ($#tick_columns +2) .        "  Copies  Archive      File\n";
@@ -919,8 +990,12 @@ sub scan {
   foreach my $dir (@_) {
     next unless defined($lhash = $self->lookup($dir));
 
+    # set up the variables local to this file
+    $lhash            = $info_cache{$dir}->{lhash};
+    $tree_root        = $dir;
+
     find({
-	  wanted => \&scan_file_or_dir,
+	  wanted => $scan_file_or_dir,
 	  no_chdir => 1,
 	  preprocess => sub { sort { (lc $a) cmp (lc $b) } @_ },
 	 }, $dir);
