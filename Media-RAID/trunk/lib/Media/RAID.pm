@@ -768,12 +768,11 @@ sub scan {
     my @statinfo;
     my $this_archive  = $lhash->{archive};
     my $this_root     = $lhash->{store_root};
-    my $re            = $lhash->{regexp};
+    #    my $re            = $lhash->{regexp};
 
     # modify filename to make it suitable for printing relative to
     # archive root (keeping absfile as original absolute filename)
-    $filename =~ s|$re|$3|;
-
+    $filename = $lhash->{relative};
 
     # The first ticks determine if we have working shared copies (one
     # tick to calculate for each scheme)
@@ -905,7 +904,7 @@ sub scan {
     print "$this_archive" . 
       (" " x (length("documentary") - length($this_archive)));
     print "  $filename\n";
-  };
+  };				# end sub
 
   # iterate over all files so that we know what schemes and archives
   # we will be scanning. We must do this before printing headers. We
