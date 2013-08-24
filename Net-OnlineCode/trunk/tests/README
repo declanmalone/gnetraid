@@ -1,0 +1,13 @@
+Extended Tests for Net::OnlineCode packages
+
+These tests are not that well suited for the regular Perl installation
+tests, so I'm splittng them out here. These scripts are set up to be
+run from this directory. If you want to run them from elsewhere and
+have not yet installed the packages, you will need to use perl's -I
+flag to tell it where to find the libraries, eg:
+
+ $ perl -I/path/to/Net/OnlineCode/lib <scriptname>
+
+
+
+
