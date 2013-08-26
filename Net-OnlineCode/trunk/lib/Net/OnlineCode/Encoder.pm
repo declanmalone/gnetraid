@@ -53,7 +53,8 @@ sub create_check_block {
   # expansion: once for an explicit mention in the checkblock, and
   # potentially several times in the expansion of auxiliary blocks. We
   # eliminate any message blocks that appear an even number of times
-  # in the expansion since xoring by "A xor A" is a null operation.
+  # in the expansion since xoring by the same thing twice is a null
+  # operation.
   #
   # Note that although we use the same option name (expand_aux) in the
   # encoder and decoder, the implementations are different. Here we
@@ -72,7 +73,7 @@ sub create_check_block {
 	}
       } else {
 	# aux block : push all message blocks it's composed of
-	push @xor_list, @{$self->{aux_mapping}->[$_ - $self->{mblocks}]};
+	push @$xor_list, @{$self->{aux_mapping}->[$_ - $self->{mblocks}]};
       }
     }
     $xor_list = [ keys %blocks ];

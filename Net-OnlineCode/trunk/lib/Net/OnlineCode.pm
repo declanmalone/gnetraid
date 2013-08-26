@@ -504,19 +504,8 @@ sub xor_strings      { safe_xor_strings(@_) }
 sub fast_xor_strings { safe_xor_strings(@_) }
 
 
-### Tidy up
-#
-# The code that recalculates epsilon and F in
-# get_probability_distribution should be bubbled up to a higher level.
-#
-# Likewise, we should only need to call the
-# get_probability_distribution routine once since it is fixed for
-# particular values of e, q and nblocks.
-#
-# As a result of these two points, checkblock_mapping should be
-# changed to accept the probability distribution array as a parameter
-# (passed by reference, since it can be so large).
-#
-
 1;
+
+__END__
+
 
