@@ -122,7 +122,9 @@ sub seed {
 
   $seed = "\0" x 20 unless defined($seed);
   $self->{seed} = $seed;
-  $self->{current} = sha1($seed);
+  # $self->{current} = sha1($seed);
+  # we can save a call to sha1:
+  $self->{current} = $seed;
   return $seed;
 }
 

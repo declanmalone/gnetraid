@@ -27,6 +27,8 @@ sub new {
 
   my $self = $class->SUPER::new(@_);
 
+  print "encoder mblocks: $self->{mblocks}\n";
+
   croak "Failed to create superclass\n" unless ref($self);
 
   $self->{aux_mapping} = $self->auxiliary_mapping($opts{initial_rng});
@@ -73,7 +75,7 @@ sub create_check_block {
 	}
       } else {
 	# aux block : push all message blocks it's composed of
-	push @$xor_list, @{$self->{aux_mapping}->[$_ - $self->{mblocks}]};
+	push @$xor_list, @{$self->{aux_mapping}->[$entry - $self->{mblocks}]};
       }
     }
     $xor_list = [ keys %blocks ];
@@ -103,10 +105,10 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
                  (0.. $blocks -1);
 
   my $initial_rng = Net::OnlineCode::RNG->new;
-  my $msg_id      = $initial_rng->seed_random;
+  my $msg_id      = $rng->seed_random;
   my $encoder     = Net::OnlineCode::Encoder->new(
     mblocks     => $blocks,
-    initial_rng => $initial_rng,
+    initial_rng => $rng,
     # ...
   );
 
@@ -115,8 +117,7 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
 
   # Send an infinite stream of packets to receiver
   while (1) {
-    my $rng      = Net::OnlineCode::RNG->new;
-    my $block_id = Net::OnlineCode::RNG->seed_random;
+    my $block_id = $rng->seed_random;
     my @xor_list = $encoder->create_check_block($rng);
 
     # XOR all blocks in xor_list together

@@ -5,7 +5,7 @@ use warnings;
 
 use Carp;
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -26,7 +26,7 @@ sub new {
   my $class = shift;
 
   # constructor starts off knowing only about auxiliary block mappings
-  my ($mblocks, $ablocks, $auxlist) = @_;
+  my ($mblocks, $ablocks, $auxlist, $expand_aux) = @_;
 
   unless ($mblocks >= 1) {
     carp "$class->new: argument 1 (mblocks) invalid\n";
@@ -48,11 +48,14 @@ sub new {
     return undef;
   }
 
+  $expand_aux = 1 unless defined($expand_aux);
+
   my $self =
     {
-     mblocks  => $mblocks,
-     ablocks  => $ablocks,
-     coblocks => $mblocks + $ablocks, # "composite"
+     mblocks    => $mblocks,
+     ablocks    => $ablocks,
+     coblocks   => $mblocks + $ablocks, # "composite"
+     expand_aux => $expand_aux,
      neighbours     => [],
      solved         => [],
      unsolved_count => $mblocks,
@@ -191,8 +194,14 @@ sub resolve {
 	# solved before using it to solve component blocks.
 	next unless $self->{solved}->[$solved];
 
-	my $href= $self->{xor_hash}->[$start];
-	$self->merge_xor_hash($solved, $href);
+	if ($self->{expand_aux}) {
+	  my $href= $self->{xor_hash}->[$start];
+	  $self->merge_xor_hash($solved, $href);
+	} else {
+	  croak "resolve: expand_aux of 0 not implemented yet\n";
+	  # should be as simple as:
+	  # $self->toggle_xor($solved,$start)
+	}
       } else {
 	croak "resolve: BUG! solved a block at the same level\n";
       }
@@ -266,7 +275,7 @@ sub toggle_xor {
   if ($solved >= $self->{coblocks}) {
     carp "Asked to toggle the XOR value of a check block!\n";
   }
-  print "Toggling $i into $solved\n";
+  print "Toggling $i into $solved\n" if DEBUG;
 
   if (exists($self->{xor_hash}->[$solved]->{$i})) {
     delete $self->{xor_hash}->[$solved]->{$i};
@@ -286,9 +295,9 @@ sub merge_xor_hash {
     return;
   }
 
-  print "expanded terms: " . (join ",", keys %$href) . "\n";
+  print "expanded terms: " . (join ",", keys %$href) . "\n" if DEBUG;
   foreach (keys %$href) {
-    print "toggling term: $_\n";
+    print "toggling term: $_\n" if DEBUG;
     $self->toggle_xor($solved,$_);
   }
 

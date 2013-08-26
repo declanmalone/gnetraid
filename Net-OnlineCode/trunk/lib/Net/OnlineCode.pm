@@ -10,11 +10,13 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 require Exporter;
 
+our @ISA = qw(Exporter);
+
 our @export_xor = qw (xor_strings safe_xor_strings fast_xor_strings);
 our @export_default = qw();
 
-%EXPORT_TAGS = ( 'all' => [ @export_default, @export_xor ],
-		 'xor' => [ @export_xor ],
+%EXPORT_TAGS = ( all => [ @export_default, @export_xor ],
+		 xor => [ @export_xor ],
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = ();
@@ -22,7 +24,7 @@ $VERSION = '0.01';
 
 # on to our stuff ...
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 
 
 # Codec parameters
@@ -74,7 +76,7 @@ sub new {
 	      q           => 3,
 	      mblocks     => undef,
 	      expand_aux  => 1,
-	      e_warning   => 1,
+	      e_warning   => 0,
 
 	      # We don't use or store any RNG parameter that's been
 	      # passed into the constructor.
@@ -88,6 +90,8 @@ sub new {
     carp __PACKAGE__ . ": mblocks => (# message blocks) must be set\n";
     return undef;
   }
+
+  print "Net::OnlineCode mblocks = $mblocks\n";
 
   my $P = undef;
   my $e_changed = 0;
@@ -135,11 +139,13 @@ sub new {
       }
     }
 
+    # update e and ablocks
     $epsilon = 1/(1 + exp(-$r));
     $f       = eval_f($r);
     carp __PACKAGE__ . ": increased epsilon value from $e to $epsilon\n"
       if $args{e_warning};
     $e = $epsilon;
+    $ablocks =  _count_auxiliary($q,$e,$mblocks);
 
     if ($args{e_warning}) {
 
@@ -149,7 +155,10 @@ sub new {
 
   }
 
+  # how many auxiliary blocks would this scheme need?
+
   # calculate the probability distribution
+  print "new: mblocks=$mblocks, ablocks=$ablocks, q=$q\n";
   $P = _probability_distribution($mblocks + $ablocks,$e);
 
   my $self = { q => $q, e => $e, f => $f, P => $P,

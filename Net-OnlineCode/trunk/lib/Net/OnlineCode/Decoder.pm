@@ -39,11 +39,14 @@ sub new {
 
   # This sub-class needs to use the rng to generate the initial graph
 
+  print "decoder mblocks: $self->{mblocks}\n";
+
   my $graph = Net::OnlineCode::GraphDecoder->new
     (
      $self->{mblocks},
      $self->{ablocks},
-     $self->auxiliary_mapping($opts{initial_rng})
+     $self->auxiliary_mapping($opts{initial_rng}),
+     $self->{expand_aux},
     );
 
   $self->{graph} = $graph;
@@ -67,8 +70,8 @@ sub xor_list {
 
   # the graph object assigns check blocks indexes after the composite
   # blocks, but the user would prefer to count them from zero:
-  my $coblocks = $self->coblocks;
-  return map { $_ - $coblocks } ($self->{graph}->xor_list);
+  my $coblocks = $self->get_coblocks;
+  return map { $_ - $coblocks } ($self->{graph}->xor_list($i));
 }
 
 1;
@@ -115,7 +118,7 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
           (0 .. $blocksize-1);
       }
       # save contents of decoded block
-      substr($message, $decoded_block * $blocksize, $decoded_block) = $block;
+      substr($message, $decoded_block * $blocksize, $blocksize) = $block;
     }
   }
   $message = substr($message, 0, $msg_size);  # truncate to correct size
