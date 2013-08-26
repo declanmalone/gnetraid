@@ -624,7 +624,7 @@ sub ida_fisher_yates_shuffle {	# based on recipe 4.15 from the
     defined($picks) and $picks >=0 and $picks<scalar(@$array);
 
   my $i=scalar(@$array);
-  while (--$i > $picks - scalar(@$array)) {
+  while (--$i >= scalar(@$array) - $picks) {
     my $j=int rand ($i + 1);	# random int from [0,$i]
     next if $i==$j;		# don't swap element with itself
     @$array[$i,$j]=@$array[$j,$i]
