@@ -177,7 +177,8 @@ sub resolve {
 
       # Note that by expanding each block's derivation in terms only
       # of check blocks, the decoder does not need to allocate any
-      # space for storing auxiliary blocks.
+      # space for storing auxiliary blocks. It does generally require
+      # more XORs, though.
 
       # The solution to the newly solved message or auxiliary block is
       # the XOR of the start node (or its expansion) and the expansion
@@ -195,12 +196,10 @@ sub resolve {
       } else {
 	croak "resolve: BUG! solved a block at the same level\n";
       }
-
       for my $i (@solved) {
 	my $href= $self->{xor_hash}->[$i];
 	$self->merge_xor_hash($solved, $href);
       }
-
 
       $self->{solved}->[$solved] = 1;
       push @newly_solved, $solved;

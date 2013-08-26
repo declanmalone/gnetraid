@@ -73,6 +73,7 @@ sub new {
 	      e           => 0.01,
 	      q           => 3,
 	      mblocks     => undef,
+	      expand_aux  => 1,
 	      e_warning   => 1,
 
 	      # We don't use or store any RNG parameter that's been
@@ -153,6 +154,7 @@ sub new {
 
   my $self = { q => $q, e => $e, f => $f, P => $P,
 	       mblocks => $mblocks, ablocks => $ablocks,
+               chblocks => 0, expand_aux=> $args{expand_aux},
 	       e_changed => $e_changed };
 
   bless $self, $class;
@@ -181,6 +183,11 @@ sub get_coblocks {		# count composite blocks
   return $self->{mblocks} + $self->{ablocks};
 }
 
+# count checkblocks
+sub get_chblocks {
+  return shift->{chblocks}
+}
+
 sub get_q {			# q == reliability factor
   return shift -> {q};
 }
@@ -190,7 +197,7 @@ sub get_e {			# e == suboptimality factor
 }
 
 sub get_epsilon {		# epsilon == e, as above
-  return shift -> get_e();
+  return shift -> {e};
 }
 
 sub get_f {			# f == max (check block) degree
@@ -370,7 +377,7 @@ sub fisher_yates_shuffle {
   die "fisher_yates_shuffle: 1st arg not an RNG object\n"
     unless ref($array);
 
-  die "fisher_yates_shuffle: 2nd arg not an array ref\n" 
+  die "fisher_yates_shuffle: 2nd arg not an array ref\n"
     unless ref($array) eq "ARRAY";
 
   # Change recipe to pick subset of list
@@ -448,13 +455,15 @@ sub checkblock_mapping {
   ++$i while($r > $P->[$i]);	# terminates since r < P[last]
   ++$i;
 
-  print "picked $i values for checkblock (from $coblocks)\n";
+  #print "picked $i values for checkblock (from $coblocks)\n";
 
   # select i composite blocks uniformly
   my $check_mapping = [ (0 .. $coblocks-1) ];
   fisher_yates_shuffle($rng, $check_mapping, $i);
 
-  die "fisher_yates_shuffle problem" unless @$check_mapping == $i;
+  #die "fisher_yates_shuffle problem" unless @$check_mapping == $i;
+
+  ++($self->{chblocks});
 
   return $check_mapping;
 

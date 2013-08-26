@@ -146,7 +146,7 @@ sub rand {
   $max += 0.0;			# ensure max is a float
 
   while(1) {
-    $self->{current} = sha1("" . $self->{current}); # advance to next rand
+    $self->{current} = sha1($self->{current}); # advance to next rand
 
     # unpack 5 32-bit words from the 160-bit SHA sum
     my @uints = unpack "N5", $self->{current};

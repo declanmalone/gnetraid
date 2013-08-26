@@ -3,6 +3,8 @@ package Net::OnlineCode::Encoder;
 use strict;
 use warnings;
 
+use Carp;
+
 use Net::OnlineCode;
 
 use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
@@ -17,18 +19,66 @@ sub new {
 
   my $class = shift;
 
-  print "class is $class " . ref($class) . "\n";
-  print "args are " . (join " ", @_) . "\n";
-
   my %opts = (
 	      # include any encoder-specific arguments here
+	      initial_rng      => undef,
 	      @_
 	     );
 
   my $self = $class->SUPER::new(@_);
 
-  print "Subclass returned obj of type " . ref($self) ."\n";
+  croak "Failed to create superclass\n" unless ref($self);
 
+  $self->{aux_mapping} = $self->auxiliary_mapping($opts{initial_rng});
+
+  return $self;
+}
+
+
+# to create check blocks, call the parent's checkblock_mapping method
+# to find the mapping, then optionally expand any auxiliary block
+# numbers with the message blocks they're composed of.
+
+sub create_check_block {
+
+  my ($self, $rng) = @_;
+
+  # already tested by parent method:
+  # croak "rng parameter must be an object ref" unless ref($rng);
+
+  my $xor_list  = $self->checkblock_mapping($rng);
+
+  # Optionally replace auxiliary indices with a list of message
+  # indices.  Message blocks may appear multiple times in the
+  # expansion: once for an explicit mention in the checkblock, and
+  # potentially several times in the expansion of auxiliary blocks. We
+  # eliminate any message blocks that appear an even number of times
+  # in the expansion since xoring by "A xor A" is a null operation.
+  #
+  # Note that although we use the same option name (expand_aux) in the
+  # encoder and decoder, the implementations are different. Here we
+  # expand aux blocks indices into message indexes, whereas in the
+  # decoder, we expand them into check block indices.
+  if ($self->{expand_aux}) {
+    my %blocks;
+    while (@$xor_list) {
+      my $entry = shift(@$xor_list);
+      if ($entry < $self->{mblocks}) { # is it a message block index?
+	# toggle entry in the hash
+	if (exists($blocks{$entry})) {
+	  delete $blocks{$entry};
+	} else {
+	  $blocks{$entry}=1;
+	}
+      } else {
+	# aux block : push all message blocks it's composed of
+	push @xor_list, @{$self->{aux_mapping}->[$_ - $self->{mblocks}]};
+      }
+    }
+    $xor_list = [ keys %blocks ];
+  }
+
+  return $xor_list;
 }
 
 1;
