@@ -202,15 +202,15 @@ sub resolve {
       $self->{solved}->[$solved] = 1;
       push @newly_solved, $solved;
 
+      # what other nodes become pending based on solving this start node?
       if ($self->is_message($solved)) {
-
 	unless (--($self->{unsolved_count})) {
 	  $finished = 1;
 	  @pending = ();	# no need to search any more nodes
 	}
+      }
 
-      } else {
-
+      unless ($finished) {
 	# continue graph search to include newly solved auxiliary node
 	# and all neighbouring check blocks
 	push @pending, $solved;
