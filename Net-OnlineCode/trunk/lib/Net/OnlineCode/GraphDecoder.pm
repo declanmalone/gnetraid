@@ -305,6 +305,12 @@ sub xor_hash {
   }
 }
 
-
+# return the keys of xor_hash as a list
+sub xor_list {
+  my ($self,$i) = @_;
+  croak "xor_list requires a numeric argument (message block index)\n" 
+    unless defined($i);
+  return keys ($self->{xor_hash}->[$i]);
+}
 
 1;

@@ -34,7 +34,7 @@ sub new {
 1;
 
 
-__END_
+__END__
 
 =head1 NAME
 
@@ -71,7 +71,7 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
     # XOR all blocks in xor_list together
     my $block = $blocks[shift @xor_list];
     foreach my $xor_block (@xor_list) {
-      map { substr $block, $_, 1 ^= substr $blocks[$xor_block], $_, 1 }
+      map { substr($block, $_, 1) ^= substr($blocks[$xor_block], $_, 1) }
         (0 .. $blocksize-1);
     }
 

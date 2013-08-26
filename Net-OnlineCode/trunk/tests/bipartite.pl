@@ -1,8 +1,6 @@
 #!/usr/bin/perl -w
 
-# Exercise Net::OnlineCode with different values for e, q and mblocks
-# Prints out any changes to epsilon value, as well as the probability
-# distribution table (in truncated form)
+# say no to copypasta!
 
 use lib '../lib';
 use Net::OnlineCode::GraphDecoder;

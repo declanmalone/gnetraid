@@ -69,7 +69,7 @@ my $hostname = `hostname`;
 chomp $hostname;
 open RANDOM, ">random.$hostname" or die "couldn't create test file: $!\n";
 
-$rng1->seed;
+$rng1->seed_random;
 for (1..$nkeys) {
   my ($r1) = $rng1->rand;
 
