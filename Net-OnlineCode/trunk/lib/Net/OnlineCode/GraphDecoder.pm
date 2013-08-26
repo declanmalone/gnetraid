@@ -5,7 +5,7 @@ use warnings;
 
 use Carp;
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -142,11 +142,13 @@ sub resolve {
 
   return (1) unless $self->{unsolved_count};
 
-  do {
+  while (@pending) {
 
-    my $start  = pop @pending;
+    my $start  = shift @pending;
     my $solved = undef;		# we can solve at most one unknown per
                                 # iteration
+
+    print "Resolving node $start\n" if DEBUG;
 
     # check for unsolved lower neighbours
     my @unsolved = grep { $_ < $start and !$self->{solved}->[$_]
@@ -160,6 +162,8 @@ sub resolve {
       my @solved = grep {	 # previously solved
 	$_ < $start and $_ != $solved
       } @{$self->{neighbours}->[$start]};
+
+      print "Start node $start can solve node $solved\n";
 
       # If I was doing the XORs here directly, I'd just XOR each
       # previously solved neighbour into the start node and store the
@@ -176,28 +180,27 @@ sub resolve {
       # space for storing auxiliary blocks.
 
       # The solution to the newly solved message or auxiliary block is
-      # the XOR of the start node ...
+      # the XOR of the start node (or its expansion) and the expansion
+      # of all the start node's previously solved neighbours
       if ($self->is_check($start)) {
 	print "toggling check node $start into $solved\n" if DEBUG;
 	$self->toggle_xor($solved,$start);
       } elsif ($self->is_auxiliary($start)) {
-	# ... or its expansion, if it's an auxiliary node
+	# for auxiliary blocks, we must make sure that it is actually
+	# solved before using it to solve component blocks.
+	next unless $self->{solved}->[$solved];
+
 	my $href= $self->{xor_hash}->[$start];
-	if (DEBUG) {
-	  print "toggling expansion for starting auxiliary $start into $solved\n";
-	  print "(keys: " . (join ",", keys %$href) . ")\n";
-	}
 	$self->merge_xor_hash($solved, $href);
       } else {
-	  croak "resolve: BUG! solved a block at the same level\n";
+	croak "resolve: BUG! solved a block at the same level\n";
       }
 
-      # ... and the expansion of all the start node's previously
-      # solved neighbours ...
       for my $i (@solved) {
-	  print "toggling expansion for dependent auxiliary $i into $solved\n" if DEBUG;
-	  $self->merge_xor_hash($solved, $self->{xor_hash}->[$i]);
+	my $href= $self->{xor_hash}->[$i];
+	$self->merge_xor_hash($solved, $href);
       }
+
 
       $self->{solved}->[$solved] = 1;
       push @newly_solved, $solved;
@@ -211,12 +214,12 @@ sub resolve {
 
       unless ($finished) {
 	# queue up the newly solved node and all its higher neighbouring nodes
-	push @pending, $solved;
+	push @pending, $solved unless $self->is_message($solved);
 	push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};
       }
     }
 
-  } while (@pending);
+  }
 
 
   return ($finished, @newly_solved);
