@@ -166,6 +166,8 @@ sub new {
                chblocks => 0, expand_aux=> $args{expand_aux},
 	       e_changed => $e_changed };
 
+  print "expand_aux => $self->{expand_aux}\n";
+
   bless $self, $class;
 
 }

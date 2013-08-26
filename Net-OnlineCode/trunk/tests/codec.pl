@@ -65,7 +65,7 @@ die "Failed to create decoder. Quitting\n" unless ref($dec);
 
 # substr won't allow us to write to portions outside the string, so
 # zero it out
-$ostring = "\0" x (2 * length($istring));
+$ostring = "x" x (1 * length($istring));
 
 print "Entering main loop\n";
 

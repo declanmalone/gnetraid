@@ -61,7 +61,12 @@ sub accept_check_block {
   my $composite_blocks = $self->checkblock_mapping($rng);
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
 
-  return ($self->{graph}->resolve($check_node));
+  my ($done, @which) = ($self->{graph}->resolve($check_node));
+
+  return ($done, @which) unless $self->{expand_aux};
+
+  # user doesn't care about aux blocks if expand_aux is on
+  return ($done, grep { $_ < $self->{mblocks} } @which );
 }
 
 sub xor_list {

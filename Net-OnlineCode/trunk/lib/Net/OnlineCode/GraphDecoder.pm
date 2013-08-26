@@ -50,6 +50,8 @@ sub new {
 
   $expand_aux = 1 unless defined($expand_aux);
 
+  print "graph: expand_aux => $expand_aux\n";
+
   my $self =
     {
      mblocks    => $mblocks,
@@ -317,8 +319,12 @@ sub xor_hash {
 # return the keys of xor_hash as a list
 sub xor_list {
   my ($self,$i) = @_;
-  croak "xor_list requires a numeric argument (message block index)\n" 
+  croak "xor_list requires a numeric argument (message block index)\n"
     unless defined($i);
+  foreach (keys ($self->{xor_hash}->[$i])) {
+    die "graph: xor_list block $i has non-check index $_\n"
+      if $_ < $self->{coblocks};
+  }
   return keys ($self->{xor_hash}->[$i]);
 }
 
