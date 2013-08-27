@@ -385,7 +385,7 @@ sub fisher_yates_shuffle {
 
   my ($rng, $array, $picks) = @_;
 
-  print "picks is $picks\n";
+  #print "picks is $picks\n";
 
   die "fisher_yates_shuffle: 1st arg not an RNG object\n"
     unless ref($array);
@@ -400,7 +400,7 @@ sub fisher_yates_shuffle {
   # algorithm fills picks into the end of the array
   my $i=scalar(@$array);
   while (--$i >= scalar(@$array) - $picks) {
-    print "i: $i, picks - array_size = " . ($picks - scalar(@$array)) . "\n";
+    #print "i: $i, array_size - picks = " . (scalar(@$array) - $picks) . "\n";
     my $j=int($rng->rand($i + 1)); # range [0,$i]
     next if $i==$j;
     @$array[$i,$j]=@$array[$j,$i]

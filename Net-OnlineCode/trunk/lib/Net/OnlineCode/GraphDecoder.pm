@@ -279,11 +279,15 @@ sub toggle_xor {
   }
   print "Toggling $i into $solved\n" if DEBUG;
 
-  if (exists($self->{xor_hash}->[$solved]->{$i})) {
-    delete $self->{xor_hash}->[$solved]->{$i};
+  # Profiling indicates that this is a very heavily-used sub, so a
+  # simple change to avoid various object dereferences should help:
+  my $href=$self->{xor_hash}->[$solved];
+
+  if (exists($href->{$i})) {
+    delete $href->{$i};
     #warn "Key $i unset\n";
   } else {
-    $self->{xor_hash}->[$solved]->{$i} = 1;
+    $href->{$i} = 1;
     #warn "Key $i set\n";
   }
 }
