@@ -143,7 +143,7 @@ sub resolve {
 
   my $finished = 0;
   my @newly_solved = ();
-  my @pending = ($node);
+  my @pending= ($node);
 
   return (1) unless $self->{unsolved_count};
 
@@ -168,7 +168,7 @@ sub resolve {
 	$_ < $start and $_ != $solved
       } @{$self->{neighbours}->[$start]};
 
-      print "Start node $start can solve node $solved\n";
+      #print "Start node $start can solve node $solved\n";
 
       # If I was doing the XORs here directly, I'd just XOR each
       # previously solved neighbour into the start node and store the
@@ -189,7 +189,7 @@ sub resolve {
       # the XOR of the start node (or its expansion) and the expansion
       # of all the start node's previously solved neighbours
       if ($self->is_check($start)) {
-	print "toggling check node $start into $solved\n" if DEBUG;
+	#print "toggling check node $start into $solved\n" if DEBUG;
 	$self->toggle_xor($solved,$start);
       } elsif ($self->is_auxiliary($start)) {
 	# for auxiliary blocks, we must make sure that it is actually
@@ -223,14 +223,17 @@ sub resolve {
       }
 
       unless ($finished) {
-	# queue up the newly solved node and all its higher neighbouring nodes
-	push @pending, $solved unless $self->is_message($solved);
-	push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};
+	if (0) {
+	  # queue *everything* to debug this part
+	  @pending = (0..@{$self->{neighbours}});
+	} else {
+	  # queue up the newly solved node and all its higher neighbouring nodes
+	  push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};
+	  push @pending, $solved unless $self->is_message($solved);
+	}
       }
     }
-
   }
-
 
   return ($finished, @newly_solved);
 

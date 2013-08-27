@@ -142,6 +142,7 @@ sub new {
     # update e and ablocks
     $epsilon = 1/(1 + exp(-$r));
     $f       = eval_f($r);
+    #$f=_max_degree($epsilon);
     carp __PACKAGE__ . ": increased epsilon value from $e to $epsilon\n"
       if $args{e_warning};
     $e = $epsilon;
@@ -160,6 +161,10 @@ sub new {
   # calculate the probability distribution
   print "new: mblocks=$mblocks, ablocks=$ablocks, q=$q\n";
   $P = _probability_distribution($mblocks + $ablocks,$e);
+
+  die "Wrong number of elements in probability distribution (got " 
+    . scalar(@$P) . ", expecting $f)\n"
+      unless @$P == $f;
 
   my $self = { q => $q, e => $e, f => $f, P => $P,
 	       mblocks => $mblocks, ablocks => $ablocks,
@@ -227,7 +232,12 @@ sub get_P {			# P == probability distribution
 sub _count_auxiliary {
   my ($q, $e, $n) = @_;
 
-  return int(ceil(0.55 * $q * $e * $n));
+  my $count = int(ceil(0.55 * $q * $e * $n));
+  if ($count < $q) {
+    #$count = $q;		# ???
+    #warn "updated _count_auxiliary output value to $q\n";
+  }
+  return $count;
 }
 
 # The max degree specifies the maximum number of blocks to be XORed
@@ -345,7 +355,7 @@ sub _probability_distribution {
   my @P     = ($sum);
 
   my $i = 2;
-  while ($i < $f) {		
+  while ($i < $f) {
     my $iterm = $i * $i - $i;
     my $p_i   = $pfterm / $iterm;
 
@@ -388,9 +398,9 @@ sub fisher_yates_shuffle {
   #print "picks is $picks\n";
 
   die "fisher_yates_shuffle: 1st arg not an RNG object\n"
-    unless ref($array);
+    unless ref($rng);
 
-  die "fisher_yates_shuffle: 2nd arg not an array ref\n"
+  die "fisher_yates_shuffle: 2nd arg not a listref\n"
     unless ref($array) eq "ARRAY";
 
   # Change recipe to pick subset of list
@@ -400,7 +410,6 @@ sub fisher_yates_shuffle {
   # algorithm fills picks into the end of the array
   my $i=scalar(@$array);
   while (--$i >= scalar(@$array) - $picks) {
-    #print "i: $i, array_size - picks = " . (scalar(@$array) - $picks) . "\n";
     my $j=int($rng->rand($i + 1)); # range [0,$i]
     next if $i==$j;
     @$array[$i,$j]=@$array[$j,$i]
@@ -408,7 +417,7 @@ sub fisher_yates_shuffle {
 
   # delete unpicked elements from the front of the array
   # (does nothing if picks == length of the array)
-  splice @$array, 0, scalar @$array - $picks
+  splice @$array, 0, (scalar @$array - $picks);
 }
 
 #
@@ -427,26 +436,53 @@ sub auxiliary_mapping {
   croak "auxiliary_mapping: rng is not a reference\n" unless ref($rng);
 
   # hash slices: powerful, but syntax is sometimes confusing
-  my ($nblocks,$aux_blocks) = @{$self}{"mblocks","ablocks"};
+  my ($mblocks,$aux_blocks) = @{$self}{"mblocks","ablocks"};
 
   # make sure hash(ref) slice above actually did something sensible:
   # die "weird mblocks/ablocks" unless $nblocks + $aux_blocks >= 2;
 
-  my @message_blocks = (0 .. $nblocks -1);
+  # I made a big mistake when reading the description for creating aux
+  # blocks. What I implemented first (in the commented-out section
+  # below) was to link each of the auxiliary blocks to q message
+  # blocks. What I should have done was to link each *message block*
+  # to q auxiliary blocks. As a result, it was taking much more than
+  # the expected number of check blocks to decode the message.
+
+  # as a result of the new algorithm, it makes sense to work out
+  # reciprocal links between message blocks and auxiliary blocks
+  # within the base class. Storing them here won't work out very well,
+  # though: the encoder doesn't care about the message block to aux
+  # block mapping, so it would be a waste of memory, but more
+  # importantly, the decoder object stores all mappings in a private
+  # GraphDecoder object (so duplicating the structure here would be a
+  # waste).
+
+  # I will make one change to the output, though: instead of just
+  # returning the mappings for the 0.55qen auxiliary blocks, I will
+  # return a list of message block *and* auxiliary block mappings. The
+  # encoder and decoder will have to be changed: encoder immediately
+  # splices the array to remove unwanted message block mappings, while
+  # the decoder will be simplified by only having to pass the full
+  # list to the graph decoder (which will have to be modified
+  # appropriately).
+
   my $aux_mapping = [];
 
   for (1 .. $aux_blocks) {
 
     # My Fisher-Yates shuffle truncates the input array, so initialise
     # it with the full list of message blocks each iteration.
-    my $mb = [@message_blocks];
+    my $mb = [0 .. $mblocks -1 ];
 
     # uniformly select q message blocks for this auxiliary block
     fisher_yates_shuffle($rng, $mb, $self->{q});
+    # die "aux_mapping doesn't have $self->{q} elements (got " .scalar(@$mb). ")"
+    #  unless $self->{q} == scalar(@$mb);
     push @$aux_mapping, $mb;
   }
 
-  return $aux_mapping;
+  # save and return aux_mapping
+  $self->{aux_mapping} = $aux_mapping;
 }
 
 # Calculate the composition of a single check block based on the
@@ -463,19 +499,65 @@ sub checkblock_mapping {
   my $coblocks = $self->get_coblocks;
   my $P        = $self->{P};
 
-  # use weighted distribution to find how many blocks to link
-  my $i = 0;
-  my $r = $rng->rand;
-  ++$i while($r > $P->[$i]);	# terminates since r < P[last]
-  ++$i;
+  my $check_mapping;
 
-  #print "picked $i values for checkblock (from $coblocks)\n";
+  # It's possible to generate a check block that is empty. If it only
+  # includes message blocks, then there's no problem. However, if the
+  # expansion of all the auxiliary blocks is equal to the list of
+  # message blocks then two two cancel out. Besides being inefficient
+  # to transmit effectively empty check blocks, it can also cause a
+  # bug in the decoder where it assumes that the expanded list of
+  # blocks is not empty. The solution is the same for both encoder and
+  # decoder (loop until expansion is not empty), so I'm implementing
+  # it here in the base class.
+  #
+  # Note that although this involves expanding auxiliary blocks, for
+  # the moment, I'm ignoring "expand_aux" option and will just return
+  # the unexpanded list. This may change in future once I've had a
+  # chance to look at the problem more closely.
 
-  # select i composite blocks uniformly
-  my $check_mapping = [ (0 .. $coblocks-1) ];
-  fisher_yates_shuffle($rng, $check_mapping, $i);
+  my $mblocks = $self->{mblocks}; # quicker than calling is_message
+  my %expanded=();
+  my $tries = 0;
+  until (keys %expanded) {
 
-  #die "fisher_yates_shuffle problem" unless @$check_mapping == $i;
+    ++$tries;
+
+    # use weighted distribution to find how many blocks to link
+    my $i = 0;
+    my $r = $rng->rand;
+    ++$i while($r > $P->[$i]);	# terminates since r < P[last]
+    ++$i;
+
+    #print "picked $i values for checkblock (from $coblocks)\n";
+
+    # select i composite blocks uniformly
+    $check_mapping = [ (0 .. $coblocks-1) ];
+    fisher_yates_shuffle($rng, $check_mapping, $i);
+
+    # check expanded list
+    my @xor_list = @$check_mapping;
+    while (@xor_list) {
+      my $entry = shift @xor_list;
+      if ($entry < $mblocks) { # is it a message block index?
+	# toggle entry
+	if (exists($expanded{$entry})) {
+	  delete $expanded{$entry};
+	} else {
+	  $expanded{$entry}=1;
+	}
+      } else {
+	# aux block : push all message blocks it's composed of
+	push @xor_list, @{$self->{aux_mapping}->[$entry - $mblocks]};
+      }
+    }
+  }
+
+  warn "Created non-empty checkblock on try $tries\n" if $tries>1;
+
+
+  die "fisher_yates_shuffle: created empty check block\n!" unless @$check_mapping;
+
 
   ++($self->{chblocks});
 

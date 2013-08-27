@@ -21,8 +21,12 @@ print "e = $e\n";
 print "q = $q\n";
 
 print "Expected number of check blocks: " .
-  int (.5 + ($mblocks * (1 + $e * $q))) .  "\n";
+  int (0.5 + ($mblocks * (1 + $e * $q))) .  "\n";
 print "Failure probability: " . (($e/2)**($q + 1)) . "\n";
+
+print "Alt. check block count: " .
+  int (0.5 + (1 + $e) * $coblocks) . "\n";
+
 print "1-epsilon/2 times composite = " . ($coblocks * (1-$e/2)) . "\n";
 
 my $done = 0;

@@ -23,6 +23,7 @@ print "Test string: $test\n";
 
 my $blksiz = shift @ARGV || 4;
 
+print "Length: " . length($test) . "\n";
 print "Block size: $blksiz\n";
 
 # Common Setup
@@ -32,10 +33,13 @@ my $msg_size = length($test);
 my $ostring  = "";
 
 # pad input string up to a multiple of blksiz in length
-$istring .= "x" x ($blksiz - (length($istring) % $blksiz));
+my $padding = ($blksiz - $msg_size) % $blksiz;
+print "Padding length: $padding\n";
+$istring .= "x" x $padding;
 
 my $mblocks = length($istring) / $blksiz;
 
+print "Padded string: $istring\n";
 print "Message blocks: $mblocks\n";
 
 # Set up encoder, decoder
@@ -54,6 +58,12 @@ die "Failed to create encoder. Quitting\n" unless ref($enc);
 # extract parameters from encoder
 my $e = $enc->get_e;
 my $q = $enc->get_q;
+my $f = $enc->get_f;
+
+print "Encoder parameters:\ne= $e, q = $q, f=$f\n";
+print "Expected number of check blocks: " .
+  int (0.5 + ($mblocks * (1 + $e * $q))) .  "\n";
+print "Failure probability: " . (($e/2)**($q + 1)) . "\n";
 
 print "Setting up decoder with e=$e, q=$q, mblocks=$mblocks\n";
 
@@ -71,6 +81,7 @@ print "Entering main loop\n";
 
 # main loop
 my @check_blocks = ();
+my $check_count = 0;
 my $done = 0;
 until ($done) {
 
@@ -78,7 +89,8 @@ until ($done) {
 
   die "encoder random seed != block_id\n" unless $block_id eq $erng->get_seed;
 
-  print "\nENCODE Block " . $erng->as_hex . "\n";
+  ++$check_count;
+  print "\nENCODE Block #$check_count " . $erng->as_hex . "\n";
 
   my $enc_xor_list = $enc->create_check_block($erng);
 
@@ -92,7 +104,8 @@ until ($done) {
 
   # synchronise decoder rng with same seed as encoder
   $drng->seed($block_id);
-  print "\nDECODE Block " . $drng->as_hex . "\n";
+  print "\nDECODE Block #$check_count " . $drng->as_hex . "\n";
+
 
   # save contents of checkblock
   push @check_blocks, $contents;
