@@ -39,7 +39,7 @@ sub new {
 
   # This sub-class needs to use the rng to generate the initial graph
 
-  print "decoder mblocks: $self->{mblocks}\n";
+  # print "decoder mblocks: $self->{mblocks}\n";
 
   my $graph = Net::OnlineCode::GraphDecoder->new
     (
@@ -48,8 +48,9 @@ sub new {
      $self->auxiliary_mapping($opts{initial_rng}),
      $self->{expand_aux},
     );
-
   $self->{graph} = $graph;
+
+  # print "Decoder: returning from constructor\n";
   return $self;
 
 }
@@ -58,15 +59,23 @@ sub accept_check_block {
   my $self = shift;
   my $rng  = shift;
 
+  # print "Decoder: calling checkblock_mapping\n";
   my $composite_blocks = $self->checkblock_mapping($rng);
+
+  # print "Decoder: Adding check block to graph\n";
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
 
+  # print "Decoder: Resolving graph\n";
   my ($done, @which) = ($self->{graph}->resolve($check_node));
 
-  return ($done, @which) unless $self->{expand_aux};
-
-  # user doesn't care about aux blocks if expand_aux is on
-  return ($done, grep { $_ < $self->{mblocks} } @which );
+  # print "Decoder: Returning from accept_check_block\n";
+  if ($self->{expand_aux}) {
+    # user doesn't care about aux blocks if expand_aux is on
+    #print "decoder: expanding aux blocks\n";
+    return ($done, grep { $_ < $self->{mblocks} } @which );
+  } else {
+    return ($done, @which);
+  }
 }
 
 sub xor_list {

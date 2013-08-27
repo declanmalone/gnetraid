@@ -33,6 +33,7 @@ my $done = 0;
 my $i = 0;
 until ($done) {
   ($done,@A) =$o->accept_check_block($rng);
-  print ++$i . " ($done): " . (join " ", @A) . "\n";
+  ++$i;
+  print $i . " ($done): " . (join " ", @A) . "\n" if @A;
 }
 

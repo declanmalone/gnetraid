@@ -31,7 +31,10 @@ sub new {
 
   croak "Failed to create superclass\n" unless ref($self);
 
-  $self->{aux_mapping} = $self->auxiliary_mapping($opts{initial_rng});
+  $self->auxiliary_mapping($opts{initial_rng});
+
+  # delete unwanted mblocks elements from aux_mapping
+  #splice $self->{aux_mapping}, 0, $self->{mblocks};
 
   return $self;
 }
@@ -75,7 +78,7 @@ sub create_check_block {
 	}
       } else {
 	# aux block : push all message blocks it's composed of
-	push @$xor_list, @{$self->{aux_mapping}->[$entry - $self->{mblocks}]};
+	push @$xor_list, @{$self->{aux_mapping}->[$entry]};
       }
     }
     $xor_list = [ keys %blocks ];

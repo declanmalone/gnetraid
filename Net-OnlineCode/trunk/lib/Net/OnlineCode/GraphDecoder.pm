@@ -43,8 +43,8 @@ sub new {
     return undef;
   }
 
-  unless (@$auxlist ==$ablocks) {
-    carp "$class->new: auxlist does not have $ablocks entries\n";
+  unless (@$auxlist == $mblocks + $ablocks) {
+    carp "$class->new: auxlist does not have $mblocks + $ablocks entries\n";
     return undef;
   }
 
@@ -58,36 +58,14 @@ sub new {
      ablocks    => $ablocks,
      coblocks   => $mblocks + $ablocks, # "composite"
      expand_aux => $expand_aux,
-     neighbours     => [],
+     neighbours     => undef,
      solved         => [],
      unsolved_count => $mblocks,
      xor_hash       => [],
     };
 
-  # set up nodes, edges
-  for (1..$mblocks) {
-    push $self->{neighbours}, []; # message blocks
-  }
-  my $aux = $mblocks;		  # first aux node
-
-  for my $msg_list (@$auxlist) {
-    unless (ref($msg_list) eq "ARRAY") {
-      carp "$class->new: argument 3 not a list of lists!\n";
-      return undef;
-    }
-
-    $self->{neighbours}->[$aux] = [];
-    for my $msg (@$msg_list) {
-      # warn "linking aux block $aux to message $msg\n";
-      if ($msg >= $mblocks) {
-	carp "$class->new: Auxiliary block link '$msg' out of range\n";
-	return undef;
-      }
-      push $self->{neighbours}->[$aux], $msg;
-      push $self->{neighbours}->[$msg], $aux; # msg block -> aux block
-    }
-    ++$aux;
-  }
+  # work already done in auxiliary_mapping in Decoder
+  $self->{neighbours} = $auxlist;
 
   # mark all message and auxiliary blocks as unsolved and not xored
   for my $i (0..$mblocks + $ablocks - 1) {
@@ -137,8 +115,8 @@ sub resolve {
   my $self = shift;
   my $node = shift;		# start node
 
-  if ($node < $self->{coblocks}) {
-    croak ref($self) . "->resolve: node '$node' is not a check block!\n";
+  if ($node < $self->{mblocks}) {
+    croak ref($self) . "->resolve: start node '$node' is a message block!\n";
   }
 
   my $finished = 0;
@@ -169,6 +147,8 @@ sub resolve {
       } @{$self->{neighbours}->[$start]};
 
       #print "Start node $start can solve node $solved\n";
+      # $self->{solved}->[$solved] = 1;
+      # push @newly_solved, $solved;
 
       # If I was doing the XORs here directly, I'd just XOR each
       # previously solved neighbour into the start node and store the
@@ -192,9 +172,13 @@ sub resolve {
 	#print "toggling check node $start into $solved\n" if DEBUG;
 	$self->toggle_xor($solved,$start);
       } elsif ($self->is_auxiliary($start)) {
-	# for auxiliary blocks, we must make sure that it is actually
-	# solved before using it to solve component blocks.
-	next unless $self->{solved}->[$solved];
+
+	# for dependent auxiliary blocks, we must make sure that it is
+	# actually solved before using it to solve component blocks.
+	unless ($self->{solved}->[$solved]) {
+	  push @pending, $solved;
+	  next;
+	}
 
 	if ($self->{expand_aux}) {
 	  my $href= $self->{xor_hash}->[$start];
@@ -205,15 +189,12 @@ sub resolve {
 	  # $self->toggle_xor($solved,$start)
 	}
       } else {
-	croak "resolve: BUG! solved a block at the same level\n";
+	croak "resolve: BUG! checkblocks don't solve checkblocks\n";
       }
       for my $i (@solved) {
 	my $href= $self->{xor_hash}->[$i];
 	$self->merge_xor_hash($solved, $href);
       }
-
-      $self->{solved}->[$solved] = 1;
-      push @newly_solved, $solved;
 
       if ($self->is_message($solved)) {
 	unless (--($self->{unsolved_count})) {
@@ -221,6 +202,10 @@ sub resolve {
 	  @pending = ();	# no need to search any more nodes
 	}
       }
+
+      $self->{solved}->[$solved] = 1;
+      push @newly_solved, $solved;
+
 
       unless ($finished) {
 	if (0) {

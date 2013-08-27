@@ -436,7 +436,7 @@ sub auxiliary_mapping {
   croak "auxiliary_mapping: rng is not a reference\n" unless ref($rng);
 
   # hash slices: powerful, but syntax is sometimes confusing
-  my ($mblocks,$aux_blocks) = @{$self}{"mblocks","ablocks"};
+  my ($mblocks,$ablocks,$q) = @{$self}{"mblocks","ablocks","q"};
 
   # make sure hash(ref) slice above actually did something sensible:
   # die "weird mblocks/ablocks" unless $nblocks + $aux_blocks >= 2;
@@ -467,22 +467,59 @@ sub auxiliary_mapping {
   # appropriately).
 
   my $aux_mapping = [];
+  if (0) {			# DOING IT WRONG!!!
+    for (1 .. $ablocks) {
 
-  for (1 .. $aux_blocks) {
+      # My Fisher-Yates shuffle truncates the input array, so initialise
+      # it with the full list of message blocks each iteration.
+      my $mb = [0 .. $mblocks -1 ];
 
-    # My Fisher-Yates shuffle truncates the input array, so initialise
-    # it with the full list of message blocks each iteration.
-    my $mb = [0 .. $mblocks -1 ];
+      # uniformly select q message blocks for this auxiliary block
+      fisher_yates_shuffle($rng, $mb, $self->{q});
+      # die "aux_mapping doesn't have $self->{q} elements (got " .scalar(@$mb). ")"
+      #  unless $self->{q} == scalar(@$mb);
+      push @$aux_mapping, $mb;
+    }
 
-    # uniformly select q message blocks for this auxiliary block
-    fisher_yates_shuffle($rng, $mb, $self->{q});
-    # die "aux_mapping doesn't have $self->{q} elements (got " .scalar(@$mb). ")"
-    #  unless $self->{q} == scalar(@$mb);
-    push @$aux_mapping, $mb;
+  } else {			# Do it the right way
+
+    # list of empty hashes
+    my @hashes;
+    for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
+
+    for my $msg (0 .. $mblocks - 1) {
+      # list of all aux block indices
+      my $ab = [$mblocks .. $mblocks + $ablocks -1];
+
+      fisher_yates_shuffle($rng, $ab, $q);
+
+      foreach my $aux (@$ab) {
+	$hashes[$aux]->{$msg}=1;
+	$hashes[$msg]->{$aux}=1;
+      }
+    }
+
+    # convert list of hashes into a list of lists
+    for (0 .. $mblocks + $ablocks -1) {
+      print "map $_: " . (join " ", keys %{$hashes[$_]}) . "\n";
+      push @$aux_mapping, [ keys %{$hashes[$_]} ];
+    }
   }
 
   # save and return aux_mapping
   $self->{aux_mapping} = $aux_mapping;
+}
+
+# non-method sub to toggle a key in a hash
+sub toggle_key {
+  my $href = shift;
+  my $key  = shift;
+
+  if (exists($href->{$key})) {
+    delete $href->{$key};
+  } else {
+    $href->{$key}=1;
+  }
 }
 
 # Calculate the composition of a single check block based on the
@@ -535,29 +572,32 @@ sub checkblock_mapping {
     $check_mapping = [ (0 .. $coblocks-1) ];
     fisher_yates_shuffle($rng, $check_mapping, $i);
 
+    # print "check_mapping: raw composite block list: ", 
+    #  (join " ", @$check_mapping), "\n";
+
     # check expanded list
     my @xor_list = @$check_mapping;
     while (@xor_list) {
       my $entry = shift @xor_list;
       if ($entry < $mblocks) { # is it a message block index?
 	# toggle entry
-	if (exists($expanded{$entry})) {
-	  delete $expanded{$entry};
-	} else {
-	  $expanded{$entry}=1;
-	}
+	toggle_key (\%expanded, $entry);
       } else {
-	# aux block : push all message blocks it's composed of
-	push @xor_list, @{$self->{aux_mapping}->[$entry - $mblocks]};
+	# aux block : push all message blocks it's composed of. Since
+	# we're sharing the aux_mapping structure with the decoder, we
+	# have to filter out any entries it's putting in (ie,
+	# composite blocks) or we can get into an infinite loop
+	my @expanded = grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]};
+	#print "check_mapping: expanding aux block $entry to ", 
+	#  (join " ", @expanded), "\n";
+	push @xor_list, @expanded;
       }
     }
   }
 
   warn "Created non-empty checkblock on try $tries\n" if $tries>1;
 
-
   die "fisher_yates_shuffle: created empty check block\n!" unless @$check_mapping;
-
 
   ++($self->{chblocks});
 
