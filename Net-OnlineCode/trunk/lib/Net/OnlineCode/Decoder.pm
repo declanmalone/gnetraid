@@ -78,13 +78,15 @@ sub accept_check_block {
   }
 }
 
+# expand_aux already handled in graph object
 sub xor_list {
   my $self = shift;
   my $i = shift;
 
+  my $coblocks = $self->get_coblocks;
+
   # the graph object assigns check blocks indexes after the composite
   # blocks, but the user would prefer to count them from zero:
-  my $coblocks = $self->get_coblocks;
   return map { $_ - $coblocks } ($self->{graph}->xor_list($i));
 }
 

@@ -5,7 +5,7 @@ use warnings;
 
 use Carp;
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -122,6 +122,8 @@ sub resolve {
   my $finished = 0;
   my @newly_solved = ();
   my @pending= ($node);
+  my $mblocks = $self->{mblocks};
+  my $ablocks = $self->{ablocks};
 
   return (1) unless $self->{unsolved_count};
 
@@ -137,64 +139,75 @@ sub resolve {
     my @unsolved = grep { $_ < $start and !$self->{solved}->[$_]
 		     } @{$self->{neighbours}->[$start]};
 
-    # if we have exactly one unsolved lower neighbour then we can
-    # solve that node
-    if (@unsolved == 1) {
+    if (@unsolved == 0) {	# bubble up solution for auxiliary block
+
+      next unless $self->is_auxiliary($start);
+      next if     $self->{solved}->[$start];
+
+      print "Can bubble up aux block $start\n";
+      next;
+
+      # previously solved message blocks
+      my @solved = grep { $_ < $start } @{$self->{neighbours}->[$start]};
+
+      for my $i (@solved) {
+	my $href= $self->{xor_hash}->[$i];
+	$self->merge_xor_hash($start, $href);
+      }
+
+      $self->{solved}->[$start] = 1;
+
+      if (0) {
+	# queue *everything* to debug this part
+	@pending = (0..@{$self->{neighbours}});
+      } else {
+	push @pending, grep { $_ > $start } @{$self->{neighbours}->[$start]};
+      }
+
+    } elsif (@unsolved == 1) {
+
+      # if we have exactly one unsolved lower neighbour then we can
+      # solve that node
 
       $solved = shift @unsolved; # newly solved
-      my @solved = grep {	 # previously solved
+      my @solved = grep {		# previously solved
 	$_ < $start and $_ != $solved
       } @{$self->{neighbours}->[$start]};
 
-      #print "Start node $start can solve node $solved\n";
+      print "Start node $start can solve node $solved\n";
+
       # $self->{solved}->[$solved] = 1;
       # push @newly_solved, $solved;
-
-      # If I was doing the XORs here directly, I'd just XOR each
-      # previously solved neighbour into the start node and store the
-      # result in the newly-solved node. Since I'm deferring XORs, I
-      # have to associate a list of blocks that each /message node/
-      # needs to be xor'd with instead. Also, since the caller can
-      # choose to do the XORs in a random order and they might forget
-      # or choose not to XOR auxiliary blocks first, I include the
-      # expansion of each auxiliary block instead of just its block
-      # number.
-
-      # Note that by expanding each block's derivation in terms only
-      # of check blocks, the decoder does not need to allocate any
-      # space for storing auxiliary blocks. It does generally require
-      # more XORs, though.
 
       # The solution to the newly solved message or auxiliary block is
       # the XOR of the start node (or its expansion) and the expansion
       # of all the start node's previously solved neighbours
-      if ($self->is_check($start)) {
+
+      if ($solved < $mblocks + $ablocks) {	# composite  block
 	#print "toggling check node $start into $solved\n" if DEBUG;
 	$self->toggle_xor($solved,$start);
-      } elsif ($self->is_auxiliary($start)) {
 
-	# for dependent auxiliary blocks, we must make sure that it is
-	# actually solved before using it to solve component blocks.
-	unless ($self->{solved}->[$solved]) {
-	  push @pending, $solved;
-	  next;
-	}
-
-	if ($self->{expand_aux}) {
-	  my $href= $self->{xor_hash}->[$start];
+        for my $i (@solved) {
+	  my $href= $self->{xor_hash}->[$i];
 	  $self->merge_xor_hash($solved, $href);
-	} else {
-	  croak "resolve: expand_aux of 0 not implemented yet\n";
-	  # should be as simple as:
-	  # $self->toggle_xor($solved,$start)
 	}
+
+      } elsif ($solved < $mblocks + $ablocks) {
+
+	next;
+	next unless $self->{solved}->[$start];
+
+        for my $i (@solved, $start) {
+	  my $href= $self->{xor_hash}->[$i];
+	  $self->merge_xor_hash($solved, $href);
+	}
+
       } else {
-	croak "resolve: BUG! checkblocks don't solve checkblocks\n";
+	croak "resolve: BUG! check $start can't solve checkblocks\n";
       }
-      for my $i (@solved) {
-	my $href= $self->{xor_hash}->[$i];
-	$self->merge_xor_hash($solved, $href);
-      }
+
+      $self->{solved}->[$solved] = 1;
+      push @newly_solved, $solved;
 
       if ($self->is_message($solved)) {
 	unless (--($self->{unsolved_count})) {
@@ -203,19 +216,35 @@ sub resolve {
 	}
       }
 
-      $self->{solved}->[$solved] = 1;
-      push @newly_solved, $solved;
-
+      #die "Solved an auxiliary block\n" if $self->is_auxiliary($solved);
 
       unless ($finished) {
 	if (0) {
 	  # queue *everything* to debug this part
 	  @pending = (0..@{$self->{neighbours}});
 	} else {
-	  # queue up the newly solved node and all its higher neighbouring nodes
+	  # queue up the newly solved node and all its neighbouring check nodes
 	  push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};
 	  push @pending, $solved unless $self->is_message($solved);
 	}
+      }
+    }
+  }
+
+  # make sure that all edges that could be solved were
+
+  if (0 and !$finished) {
+    for my $left ($mblocks .. scalar($self->{neighbours})) {
+
+      my @unsolved = grep { $_ < $left and !$self->{solved}->[$_]
+			  } @{$self->{neighbours}->[$left]};
+      if (@unsolved == 1) {
+	warn "failed to solve block $left (one unsolved child)\n";
+      }
+      if (@unsolved == 0) {
+	next if $left >= $ablocks;
+	next if $self->{solved}->[$left];
+	die "failed to solve block $left (no unsolved messages)\n";
       }
     }
   }
@@ -273,10 +302,8 @@ sub toggle_xor {
 
   if (exists($href->{$i})) {
     delete $href->{$i};
-    #warn "Key $i unset\n";
   } else {
     $href->{$i} = 1;
-    #warn "Key $i set\n";
   }
 }
 
@@ -308,16 +335,61 @@ sub xor_hash {
   }
 }
 
-# return the keys of xor_hash as a list
+# return the keys of xor_hash as a list, honouring expand_aux flag
 sub xor_list {
   my ($self,$i) = @_;
+
   croak "xor_list requires a numeric argument (message block index)\n"
     unless defined($i);
-  foreach (keys ($self->{xor_hash}->[$i])) {
-    die "graph: xor_list block $i has non-check index $_\n"
-      if $_ < $self->{coblocks};
+
+  my $href   = $self->{xor_hash}->[$i];
+
+  if ($self->{expand_aux}) {
+
+    my $mblocks  = $self->{mblocks};
+    my $coblocks = $self->{coblocks};
+    my %xors = ();
+    my @queue = keys %$href;
+
+    while (@queue) {
+      my $block = shift @queue;
+      if ($block >= $coblocks) { # check block -> no expand
+	if (exists($xors{$block})) {
+	  delete $xors{$block};
+	} else {
+	  $xors{$block} = 1;
+	}
+      } elsif ($block >= $mblocks) { # aux block
+	push @queue, keys $self->{xor_hash}->[$block];
+      } else {
+	die "BUG: message block found in xor list!\n";
+      }
+    }
+	
+   return keys %xors;
+
+  } else {
+    # return unfiltered list
+    return (keys %$href);
   }
-  return keys ($self->{xor_hash}->[$i]);
 }
 
 1;
+
+__END__
+
+      # If I was doing the XORs here directly, I'd just XOR each
+      # previously solved neighbour into the start node and store the
+      # result in the newly-solved node. Since I'm deferring XORs, I
+      # have to associate a list of blocks that each /message node/
+      # needs to be xor'd with instead. Also, since the caller can
+      # choose to do the XORs in a random order and they might forget
+      # or choose not to XOR auxiliary blocks first, I include the
+      # expansion of each auxiliary block instead of just its block
+      # number.
+
+      # Note that by expanding each block's derivation in terms only
+      # of check blocks, the decoder does not need to allocate any
+      # space for storing auxiliary blocks. It does generally require
+      # more XORs, though.
+
