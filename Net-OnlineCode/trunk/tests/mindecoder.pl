@@ -9,6 +9,8 @@ use Net::OnlineCode::RNG;
 my $mblocks = shift @ARGV || 1;
 
 my $rng=Net::OnlineCode::RNG->new_random;
+print "RNG seed: ". $rng->as_hex() . "\n";
+
 my $o=Net::OnlineCode::Decoder->new(mblocks=>$mblocks,initial_rng=>$rng);
 
 my $e = $o->get_e;

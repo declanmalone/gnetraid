@@ -65,26 +65,12 @@ sub create_check_block {
   # encoder and decoder, the implementations are different. Here we
   # expand aux blocks indices into message indexes, whereas in the
   # decoder, we expand them into check block indices.
-  if ($self->{expand_aux}) {
-    my %blocks;
-    while (@$xor_list) {
-      my $entry = shift(@$xor_list);
-      if ($entry < $self->{mblocks}) { # is it a message block index?
-	# toggle entry in the hash
-	if (exists($blocks{$entry})) {
-	  delete $blocks{$entry};
-	} else {
-	  $blocks{$entry}=1;
-	}
-      } else {
-	# aux block : push all message blocks it's composed of
-	push @$xor_list, @{$self->{aux_mapping}->[$entry]};
-      }
-    }
-    $xor_list = [ keys %blocks ];
-  }
 
-  return $xor_list;
+  if ($self->{expand_aux}) {
+    return [ $self->blklist_to_msglist(@$xor_list) ];
+  } else {
+    return $xor_list;
+  }
 }
 
 1;

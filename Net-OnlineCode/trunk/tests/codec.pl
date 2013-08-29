@@ -94,7 +94,9 @@ until ($done) {
 
   my $enc_xor_list = $enc->create_check_block($erng);
 
-  print "check block contents: " . (join ", ", @$enc_xor_list) . "\n";
+  print "Encoder check block: " . (join ", ", @$enc_xor_list) . "\n";
+
+
   # xor check block
   my $contents = substr($istring,  $blksiz * shift @$enc_xor_list, $blksiz);
   foreach (@$enc_xor_list) {
@@ -117,7 +119,7 @@ until ($done) {
   # composed the same was as in the decoder. That information is
   # stored in the decoder's graph object, though.
 
-  print "This checkblock solves " . scalar(@decoded) . " message block(s)\n";
+  print "This checkblock solved " . scalar(@decoded) . " message block(s)\n";
   print "This solves the entire message\n" if $done;
 
   foreach my $decoded_block (@decoded) {

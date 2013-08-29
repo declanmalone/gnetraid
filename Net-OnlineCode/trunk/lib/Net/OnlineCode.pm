@@ -411,6 +411,7 @@ sub fisher_yates_shuffle {
   my $i=scalar(@$array);
   while (--$i >= scalar(@$array) - $picks) {
     my $j=int($rng->rand($i + 1)); # range [0,$i]
+    #rint "fisher: rand j = $j\n";
     next if $i==$j;
     @$array[$i,$j]=@$array[$j,$i]
   }
@@ -434,6 +435,8 @@ sub auxiliary_mapping {
   my $rng  = shift;
 
   croak "auxiliary_mapping: rng is not a reference\n" unless ref($rng);
+
+  #print "auxiliary_mapping: entering RNG value: " . ($rng->as_hex). "\n";
 
   # hash slices: powerful, but syntax is sometimes confusing
   my ($mblocks,$ablocks,$q) = @{$self}{"mblocks","ablocks","q"};
@@ -467,48 +470,68 @@ sub auxiliary_mapping {
   # appropriately).
 
   my $aux_mapping = [];
-  if (0) {			# DOING IT WRONG!!!
-    for (1 .. $ablocks) {
 
-      # My Fisher-Yates shuffle truncates the input array, so initialise
-      # it with the full list of message blocks each iteration.
-      my $mb = [0 .. $mblocks -1 ];
+  # list of empty hashes
+  my @hashes;
+  for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
 
-      # uniformly select q message blocks for this auxiliary block
-      fisher_yates_shuffle($rng, $mb, $self->{q});
-      # die "aux_mapping doesn't have $self->{q} elements (got " .scalar(@$mb). ")"
-      #  unless $self->{q} == scalar(@$mb);
-      push @$aux_mapping, $mb;
-    }
+  for my $msg (0 .. $mblocks - 1) {
+    # list of all aux block indices
+    my $ab = [$mblocks .. $mblocks + $ablocks -1];
 
-  } else {			# Do it the right way
+    fisher_yates_shuffle($rng, $ab, $q);
 
-    # list of empty hashes
-    my @hashes;
-    for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
+    #print "aux_mapping: shuffled list: " . (join " ", @$ab) . "\n";
 
-    for my $msg (0 .. $mblocks - 1) {
-      # list of all aux block indices
-      my $ab = [$mblocks .. $mblocks + $ablocks -1];
-
-      fisher_yates_shuffle($rng, $ab, $q);
-
-      foreach my $aux (@$ab) {
-	$hashes[$aux]->{$msg}=1;
-	$hashes[$msg]->{$aux}=1;
-      }
-    }
-
-    # convert list of hashes into a list of lists
-    for (0 .. $mblocks + $ablocks -1) {
-      print "map $_: " . (join " ", keys %{$hashes[$_]}) . "\n";
-      push @$aux_mapping, [ keys %{$hashes[$_]} ];
+    foreach my $aux (@$ab) {
+      $hashes[$aux]->{$msg}=1;
+      $hashes[$msg]->{$aux}=1;
     }
   }
+
+  # convert list of hashes into a list of lists
+  for my $i (0 .. $mblocks + $ablocks -1) {
+    print "map $i: " . (join " ", keys %{$hashes[$i]}) . "\n";
+    push @$aux_mapping, [ keys %{$hashes[$i]} ];
+  }
+
+  #print "auxiliary_mapping: leaving RNG value: " . ($rng->as_hex). "\n";
 
   # save and return aux_mapping
   $self->{aux_mapping} = $aux_mapping;
 }
+
+# Until I get the auto expand_aux working, this will have to do
+sub blklist_to_msglist {
+
+  my ($self,@xor_list) = @_;
+
+  my $mblocks = $self->{mblocks};
+
+  my %blocks;
+  while (@xor_list) {
+    my $entry = shift(@xor_list);
+    if ($entry < $mblocks) { # is it a message block index?
+      # toggle entry in the hash
+      if (exists($blocks{$entry})) {
+	delete $blocks{$entry};
+      } else {
+	$blocks{$entry}=1;
+      }
+    } else {
+      # aux block : push all message blocks it's composed of
+      push @xor_list, @{$self->{aux_mapping}->[$entry]};
+    }
+  }
+  return keys %blocks;
+}
+
+sub blklist_to_chklist  {
+
+  my $self = shift;
+  croak "This method only makes sense when called on a Decoder object!\n";
+}
+
 
 # non-method sub to toggle a key in a hash
 sub toggle_key {
@@ -595,7 +618,7 @@ sub checkblock_mapping {
     }
   }
 
-  warn "Created non-empty checkblock on try $tries\n" if $tries>1;
+  #warn "Created non-empty checkblock on try $tries\n" if $tries>1;
 
   die "fisher_yates_shuffle: created empty check block\n!" unless @$check_mapping;
 
