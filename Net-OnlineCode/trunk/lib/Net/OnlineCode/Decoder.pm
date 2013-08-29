@@ -71,7 +71,6 @@ sub accept_check_block {
   # print "Decoder: Returning from accept_check_block\n";
   if ($self->{expand_aux}) {
     # user doesn't care about aux blocks if expand_aux is on
-    #print "decoder: expanding aux blocks\n";
     return ($done, grep { $_ < $self->{mblocks} } @which );
   } else {
     return ($done, @which);

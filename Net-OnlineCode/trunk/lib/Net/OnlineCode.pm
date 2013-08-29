@@ -624,6 +624,9 @@ sub checkblock_mapping {
 
   ++($self->{chblocks});
 
+  print "CHECKblock mapping: " . (join " ", @$check_mapping) . "\n";
+
+
   return $check_mapping;
 
 }

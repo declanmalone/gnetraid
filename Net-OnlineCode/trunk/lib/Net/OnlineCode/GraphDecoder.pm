@@ -394,7 +394,7 @@ sub add_check_block {
   # it simplifies the algorithm if each check block is marked as
   # (trivially) being composed of only itself. (this way we don't have
   # to include separate cases for check and aux blocks)
-  $self->{xor_hash}->[$node]->{$node}=1;
+  push $self->{xor_hash}, { $node => 1};
   # likewise, we mark check blocks as solved (ie, having a known value)
   $self->{solved}->[$node]=1;
 
@@ -474,6 +474,8 @@ sub resolve {
     # as above)
     my ($from, $to) = (shift @pending);
 
+    next unless $self->{solved}->[$from];
+
     my @right_nodes = grep { $_ < $from } keys $self->{edges}->[$from];
 
     my $right_degree = scalar(@right_nodes);
@@ -481,12 +483,12 @@ sub resolve {
     print "Starting node: $from has right nodes: " . (join " ", @right_nodes) . "\n";
     print "(right degree $right_degree)\n";
 
+    my @merge_list =($self->{xor_hash}->[$from]);
+
     while ($right_degree--) {
-
       my $to = shift @right_nodes;
-
       if ($self->{solved}->[$to]) {
-	$self->delete_edge($from,$to);
+	push @merge_list, $self->{xor_hash}->[$to];
       } else {
 	push @right_nodes, $to;	# put it back in list
       }
@@ -494,15 +496,15 @@ sub resolve {
 
     if (@right_nodes == 1) {
 
-      next unless $self->{solved}->[$from];
-
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;
 
       print "Node $from solves node $to\n";
 
       $self->delete_edge($from,$to);
-      $self->merge_xor_hash($to, $self->{xor_hash}->[$from]);
+      foreach my $i (@merge_list) {
+	$self->merge_xor_hash($to, $i);
+      }
 
       # left nodes are to's left nodes
       my @left_nodes = grep { $_ > $to } keys $self->{edges}->[$to];
@@ -521,12 +523,41 @@ sub resolve {
 
 	# solving a message block can also let us eliminate aux blocks
 	# by the same propagation rule (going right to left)
+	#
+	# In this case, the rule is restated as "if a neighbouring
+	# unsolved auxiliary neighbour has no unsolved right
+	# neighbour, then it can be solved". The actual value is the
+	# XOR of all its children.
+	#
+	# If we don't do this, then it may take longer to decode. It
+	# doesn't help us immediately with solving any more message
+	# blocks (since by definition the aux block solved in this way
+	# has no other message blocks as neighbours), but it can allow
+	# check blocks further up to make progress.
 
 	foreach my $back (@left_nodes) {
-	  if ($self->is_auxiliary($back)) {
+
+	  # still slightly buggy
+	  next;
+
+	  next unless $self->is_auxiliary($back);
+	  next if     $self->{solved}->[$back];
+
+	  @right_nodes = grep { $_ < $back and !$self->{solved}->[$_] }
+	    keys $self->{edges}->[$back];
+
+	  if (@right_nodes == 0) {
 	    print "Back-propagating from $to to auxiliary $back\n";
-	    $self->merge_xor_hash($back, $self->{xor_hash}->[$to]);
+	    $self->{xor_hash}->[$back] = {};
+	    foreach my $child ($self->{neighbours}->[$back]) {
+	      next unless $child < $back;
+	      $self->merge_xor_hash($back, $self->{xor_hash}->[$child]);
+	    }
+
 	    $self->delete_edge($back,$to);
+	    $self->{solved}->[$back] = 1;
+	    push @newly_solved, $back;
+	    push @pending,  grep { $_ > $back } keys $self->{edges}->[$back];
 	  }
 	}
       } else {
