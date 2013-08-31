@@ -86,7 +86,12 @@ sub xor_list {
 
   # the graph object assigns check blocks indexes after the composite
   # blocks, but the user would prefer to count them from zero:
-  return map { $_ - $coblocks } ($self->{graph}->xor_list($i));
+
+  my @list = map { $_ - $coblocks } ($self->{graph}->xor_list($i));
+
+  foreach (@list) { die "xor_list: $_ is negative!\n" if $_ < 0; }
+
+  return @list;
 }
 
 1;

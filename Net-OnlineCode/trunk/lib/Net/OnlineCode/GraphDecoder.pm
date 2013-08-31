@@ -62,6 +62,7 @@ sub new {
      deleted        => [],
      unsolved_count => $mblocks,
      xor_hash       => [],
+     iter           => 0,	# debug use
     };
 
   # work already done in auxiliary_mapping in Decoder
@@ -110,6 +111,8 @@ sub old_add_check_block {
 
   # store this check block's neighbours
   $self->{neighbours}->[$node] = $nodelist;
+
+  $self->{deleted}   ->[$node] = 0;
 
   # store reciprocal links
   foreach my $i (@$nodelist) {
@@ -269,40 +272,31 @@ sub is_check {
 
 #
 sub toggle_xor {
-  my ($self, $solved, $i,@junk) = @_;
+  my ($self, $target, $value, @junk) = @_;
 
-  # since I don't do the XOR of check or auxiliary blocks immediately,
-  # I need a structure to store the deferred operations. This
-  # structure has to account for the property of the XOR operation,
-  # namely that XORing the same value twice is a null operation.  A
-  # simple list would work, but by working with a hash instead (as
-  # done here) we can efficiently eliminate pairs of XORs, potentially
-  # saving the calling program costly disk accesses.
-
-  # $solved is the block that has been solved, and $i is one term in
-  # the expansion.
+  # updates target by xoring value into it
 
   croak "toggle_xor got extra junk parameter" if @junk;
 
-  if ($solved >= $self->{coblocks}) {
-    carp "Asked to toggle the XOR value of a check block!\n";
-  }
-  print "Toggling $i into $solved\n" if DEBUG;
+  #  if ($solved >= $self->{coblocks}) {
+  #    carp "Asked to toggle the XOR value of a check block!\n";
+  #  }
+  print "Toggling $value into $target\n" if DEBUG;
 
   # Profiling indicates that this is a very heavily-used sub, so a
   # simple change to avoid various object dereferences should help:
-  my $href=$self->{xor_hash}->[$solved];
+  my $href=$self->{xor_hash}->[$target];
 
-  if (exists($href->{$i})) {
-    delete $href->{$i};
+  if (exists($href->{$value})) {
+    delete $href->{$value};
   } else {
-    $href->{$i} = 1;
+    $href->{$value} = 1;
   }
 }
 
 # toggle all keys from a hashref into a solved node
 sub merge_xor_hash {
-  my ($self, $solved, $href) = @_;
+  my ($self, $target, $href) = @_;
 
   unless (ref($href) eq 'HASH') {
     carp "merge_xor_hash: need a hashref as second argument\n";
@@ -312,7 +306,7 @@ sub merge_xor_hash {
   print "merging node numbers: " . (join ",", keys %$href) . "\n" if DEBUG;
   foreach (keys %$href) {
     print "toggling term: $_\n" if DEBUG;
-    $self->toggle_xor($solved,$_);
+    $self->toggle_xor($target,$_);
   }
 }
 
@@ -389,12 +383,13 @@ sub add_check_block {
   # reciprocally)
 
   my $new_hash = {};		# new edge hash for this check block
-  $self->{deleted}->[$node]=0;
 
   # it simplifies the algorithm if each check block is marked as
   # (trivially) being composed of only itself. (this way we don't have
   # to include separate cases for check and aux blocks)
   push $self->{xor_hash}, { $node => 1};
+
+
   # likewise, we mark check blocks as solved (ie, having a known value)
   $self->{solved}->[$node]=1;
 
@@ -404,6 +399,9 @@ sub add_check_block {
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
     push $self->{neighbours}->[$i], $node;
+
+    # !!!
+    #$self->{xor_hash}->[$node]->{$i}=1;
 
     $new_hash->{$i} = 1;
     $self->{edges}->[$i]->{$node} = 1;
@@ -443,11 +441,30 @@ sub delete_edge {
 # solved.
 #
 # There is one rule for propagating a known value from left to
-# right: when the right node has a left neighbour with exactly one
-# right edge.
+# right: when the left node has exactly one right neighbour
 #
 # We can also delete edges if both the left and right nodes are
 # solved (the edge being superflous in this case)
+
+sub rule1 {
+
+  my ($self,$from,$to) = @_;
+
+  if (!$self->{solved}->[$to]) {
+    croak "invalid application of rule1($from,$to)\n";
+  }
+
+  print "Applying rule 1 from $from to $to\n";
+  $self->merge_xor_hash($from, $self->{xor_hash}->[$to]);
+  $self->delete_edge($from, $to);
+}
+
+sub rule2 {
+
+
+
+
+}
 
 
 sub resolve {
@@ -466,15 +483,25 @@ sub resolve {
   my $mblocks = $self->{mblocks};
   my $ablocks = $self->{ablocks};
 
+  my $iter = $self->{iter};
+
+  my ($original, $rule1, $rule2);
+  my ($from, $to);
+
+
   return (1) unless $self->{unsolved_count};
   while (@pending) {
 
-    # We treat this as a directed graph, with edges coming from check
-    # or auxiliary nodes to auxiliary/message nodes (or left to right
-    # as above)
-    my ($from, $to) = (shift @pending);
+    $from = shift @pending;
 
-    next unless $self->{solved}->[$from];
+    $iter ++;
+    $rule1 = ""; $rule2 = "";
+    $original = $self->dump_graph_panel("original",$from);
+
+    unless ($from > $mblocks) {
+      warn "Can't start solving from a message node\n" ;
+      next;
+    }
 
     my @right_nodes = grep { $_ < $from } keys $self->{edges}->[$from];
 
@@ -483,82 +510,59 @@ sub resolve {
     print "Starting node: $from has right nodes: " . (join " ", @right_nodes) . "\n";
     print "(right degree $right_degree)\n";
 
-    my @merge_list =($self->{xor_hash}->[$from]);
-
+    # delete previously-solved right edges
     while ($right_degree--) {
       my $to = shift @right_nodes;
       if ($self->{solved}->[$to]) {
-	push @merge_list, $self->{xor_hash}->[$to];
+	$self->rule1($from,$to);
       } else {
-	push @right_nodes, $to;	# put it back in list
+    	push @right_nodes, $to;	# not solved
       }
     }
 
-    if (@right_nodes == 1) {
+    $rule1 = $self->dump_graph_panel("rule1",$from);
+
+    if (@right_nodes == 0) {
+
+      $self->{solved}->[$from] = 1;
+      for my $i (grep { $_ > $from } keys $self->{edges}->[$from]) {
+	push @pending, $i;
+      }
+
+    } elsif (@right_nodes == 1) {
 
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;
 
       print "Node $from solves node $to\n";
 
-      $self->delete_edge($from,$to);
-      foreach my $i (@merge_list) {
-	$self->merge_xor_hash($to, $i);
-      }
+      next unless ($self->{solved}->[$from]);
+
+      # mark node as solved
+      $self->{solved}->[$to] = 1;
+
+      # propagate solution
+      $self->merge_xor_hash($to, $self->{xor_hash}->[$from]);
+      $self->delete_edge($to, $from);
 
       # left nodes are to's left nodes
       my @left_nodes = grep { $_ > $to } keys $self->{edges}->[$to];
 
-      # mark node as solved
-      $self->{solved}->[$to] = 1;
-      push @newly_solved, $to;
+      print "Solved node $to has left nodes: " . (join " ", @left_nodes) . "\n";
+
+#      for my $back (@left_nodes) {
+#	if ($back > $mblocks + $ablocks) {
+#	  $self->merge_xor_hash($back, $self->{xor_hash}->[$to]);
+#	  $self->delete_edge($back,$to);
+#	}
+#      }
 
       if ($to < $mblocks) {
 	print "Solved message block $to completely\n";
+	push @newly_solved, $to;
 	unless (--($self->{unsolved_count})) {
 	  $finished = 1;
-	  @pending = ();
-	  last;			# finish searching
-	}
-
-	# solving a message block can also let us eliminate aux blocks
-	# by the same propagation rule (going right to left)
-	#
-	# In this case, the rule is restated as "if a neighbouring
-	# unsolved auxiliary neighbour has no unsolved right
-	# neighbour, then it can be solved". The actual value is the
-	# XOR of all its children.
-	#
-	# If we don't do this, then it may take longer to decode. It
-	# doesn't help us immediately with solving any more message
-	# blocks (since by definition the aux block solved in this way
-	# has no other message blocks as neighbours), but it can allow
-	# check blocks further up to make progress.
-
-	foreach my $back (@left_nodes) {
-
-	  # still slightly buggy
-	  next;
-
-	  next unless $self->is_auxiliary($back);
-	  next if     $self->{solved}->[$back];
-
-	  @right_nodes = grep { $_ < $back and !$self->{solved}->[$_] }
-	    keys $self->{edges}->[$back];
-
-	  if (@right_nodes == 0) {
-	    print "Back-propagating from $to to auxiliary $back\n";
-	    $self->{xor_hash}->[$back] = {};
-	    foreach my $child ($self->{neighbours}->[$back]) {
-	      next unless $child < $back;
-	      $self->merge_xor_hash($back, $self->{xor_hash}->[$child]);
-	    }
-
-	    $self->delete_edge($back,$to);
-	    $self->{solved}->[$back] = 1;
-	    push @newly_solved, $back;
-	    push @pending,  grep { $_ > $back } keys $self->{edges}->[$back];
-	  }
+	  #last;			# finish searching
 	}
       } else {
 	print "Solved auxiliary block $to completely\n";
@@ -566,17 +570,142 @@ sub resolve {
       }
 
       if (@left_nodes) {
-	print "Solved node $to still has left nodes " . (join " ", @left_nodes) . "\n";
+	print "Solved node $to had left nodes: " . (join " ", @left_nodes) . "\n";
       } else {
-	print "Solved node $to has no left nodes\n";
+	print "Solved node $to had no left nodes\n";
       }
       push @pending, @left_nodes;
+    }
+  } continue {
+    my $rule2 = $self->dump_graph_panel("rule2",$from);
 
+    my $filename = "dump-" . sprintf("%05d", $iter) . ".txt";
+
+    die "File create? $!\n" unless open DUMP, ">", $filename;
+
+    print DUMP "graph test {\n$original\n$rule1\n$rule2\n}\n";
+    close DUMP;
+    $self->{iter}=$iter;
+  }
+  return ($finished, @newly_solved);
+
+}
+
+# use graphviz to figure what's going on/going wrong
+
+sub dump_graph_panel {
+
+  my $self = shift;
+  my $panel = shift;		# name of the graph (also used as caption)
+  my $current = shift;
+
+  my $graph = "subgraph_cluster$panel";
+
+  my ($mblocks,$ablocks,$edges) = @{$self}{"mblocks","ablocks","edges"};
+
+  # do a bottom-up construction
+
+  my ($chk,$aux,$msg) = ("", "", "");
+
+  $chk = <<EOT;
+subgraph cluster_check_$panel {
+    label="chk";
+    rankdir=LR;
+    rank=same
+//    rank=min;
+EOT
+
+  $aux = <<EOT;
+subgraph cluster_aux_$panel {
+    label="aux";
+    rankdir=LR;
+    rank=same
+EOT
+
+  $msg = <<EOT;
+subgraph cluster_msg_$panel {
+    label="msg";
+    rankdir=LR;
+    rank=same
+EOT
+
+    # nodes are described like:
+    # $node [label="\N|{@keys}" style=bold];
+    #   $node  is the node number
+    #   @keys  are the keys from xor_hash
+    #   bold   if the node is marked as solved
+
+  my $edgelist="";
+  foreach my $i (0 .. scalar @{$self->{neighbours}} -1) {
+
+    # don't graph deleted nodes
+    next if $self->{deleted}->[$i];
+
+    my $nodedesc = "${panel}_$i [label=\"$i|{";
+    $nodedesc .= join ",", sort { $a <=> $b } keys(%{$self->{xor_hash}->[$i]});
+    $nodedesc .= "}\"";
+    $nodedesc .= " style=bold" if $self->{solved}->[$i];
+    $nodedesc .= " style=filled" if $current == $i;
+    $nodedesc .= "];";
+
+    # add invisible links between nodes in this cluster to keep them
+    # from being reordered
+    unless ($i == 0 or $i == $mblocks or $i == $mblocks + $ablocks) {
+      $nodedesc .= "\n    ${panel}_";
+      $nodedesc .= $i-1 . " -- ${panel}_$i [style=invis]";
+    }
+
+    if ($i < $mblocks) {
+      $msg .= "    $nodedesc\n";
+    } elsif ($i < $mblocks + $ablocks) {
+      $aux .= "    $nodedesc\n";
+    } else {
+      $chk .= "    $nodedesc\n";
+    }
+
+    # add invisible links between subgraphs
+    #$edgelist .= "cluster_chk -- cluster_aux;\n";
+    #$edgelist .= "cluster_aux -- cluster_msg;\n";
+
+    my $href =$self->{edges}->[$i];
+    foreach my $j (sort {$a<=>$b} keys %$href) {
+      if ($j < $i) {
+	die "graph edge ($j,$i) does not have reciprocal link!\n"
+	  unless exists($self->{edges}->[$i]->{$j});
+	next;
+      }
+
+      my $edgedesc = "${panel}_$i -- ${panel}_$j [dir=";
+      if (exists($self->{edges}->[$j]->{$i})) {
+	$edgedesc .= "both]";
+      } else {
+	$edgedesc .= "forward]";
+      }
+
+      #warn "adding edge description $edgedesc\n";
+      $edgelist .= "  $edgedesc\n";
     }
   }
 
-  return ($finished, @newly_solved);
+  my $subgraph =<<EOT;
+subgraph cluster_$panel {
 
+  ranksep = 2;
+  rankdir=BT;
+// rank=same;
+
+  label="$panel";
+
+  $chk  }
+
+  $aux  }
+
+  $msg  }
+
+$edgelist}
+EOT
+
+  return $subgraph;
 }
 
 1;
