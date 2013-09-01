@@ -154,8 +154,12 @@ sub rand {
     my @uints = unpack "N5", $self->{current};
 
     # We calculate the rand by max * uint/(max 32-bit int).
-    while (@uints) {
+    while (@uints>=5) {
       my $r = shift @uints;
+      $r ^= shift @uints;
+      $r ^= shift @uints;
+      $r ^= shift @uints;
+      $r ^= shift @uints;
       my $maxint = 2**32 - 1;
       my $ratio  = $r / $maxint;
       return ($max * $ratio) if ($r < $maxint);
