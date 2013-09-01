@@ -169,7 +169,7 @@ sub new {
   my $self = { q => $q, e => $e, f => $f, P => $P,
 	       mblocks => $mblocks, ablocks => $ablocks,
                chblocks => 0, expand_aux=> $args{expand_aux},
-	       e_changed => $e_changed };
+	       e_changed => $e_changed, unique => {} };
 
   print "expand_aux => $self->{expand_aux}\n";
 
@@ -232,7 +232,12 @@ sub get_P {			# P == probability distribution
 sub _count_auxiliary {
   my ($q, $e, $n) = @_;
 
-  my $count = int(ceil(0.55 * $q * $e * $n));
+#  my $count = int(ceil(0.55 * $q * $e * $n));
+  my $delta = 0.55 * $e;
+
+  warn "failure probability " . ($delta ** $q) . "\n";
+  my $count = int(ceil($q * $delta * $n));
+
   if ($count < $q) {
     #$count = $q;		# ???
     #warn "updated _count_auxiliary output value to $q\n";
@@ -245,12 +250,12 @@ sub _count_auxiliary {
 sub _max_degree {
 
   my $epsilon = shift;
-  #  my $quotient = (log ($epsilon * $epsilon / 4)) /
-  #		  (log (1 - $epsilon / 2));
 
   my $quotient = (2 * log ($epsilon / 2)) /
-		  (log (1 - $epsilon / 2));
+    (log (1 - $epsilon / 2));
 
+  my $delta = 0.55 * $epsilon;
+  $quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
 
   return int(ceil($quotient));
 }
@@ -312,7 +317,6 @@ sub _probability_distribution {
   print "generating probability distribution from nblocks $nblocks, e $epsilon\n";
 
   my  $f = _max_degree($epsilon);
-#  my  $f = shift;
 
   # after code reorganisation, this shouldn't happen:
   if ($f > $nblocks) {
@@ -579,6 +583,7 @@ sub checkblock_mapping {
   my $mblocks = $self->{mblocks}; # quicker than calling is_message
   my %expanded=();
   my $tries = 0;
+  my $key;			# used for uniqueness-checking
   until (keys %expanded) {
 
     ++$tries;
@@ -594,6 +599,13 @@ sub checkblock_mapping {
     # select i composite blocks uniformly
     $check_mapping = [ (0 .. $coblocks-1) ];
     fisher_yates_shuffle($rng, $check_mapping, $i);
+
+    # check block for uniqueness before expansion
+    $key = join " ", sort { $a <=> $b } @$check_mapping;
+    if (exists $self->{unique}->{$key}) {
+      warn "quashed duplicate check block\n";
+      next;
+    }
 
     # print "check_mapping: raw composite block list: ", 
     #  (join " ", @$check_mapping), "\n";
@@ -618,7 +630,10 @@ sub checkblock_mapping {
     }
   }
 
-  #warn "Created non-empty checkblock on try $tries\n" if $tries>1;
+  # prevent generating this block again
+  $self->{unique}->{$key}=1;
+
+  #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
 
   die "fisher_yates_shuffle: created empty check block\n!" unless @$check_mapping;
 
