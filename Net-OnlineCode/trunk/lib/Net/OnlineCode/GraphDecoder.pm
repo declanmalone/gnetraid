@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 
 use constant DEBUG => 1;
+use constant TRACE => 0;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -90,7 +91,122 @@ sub new {
   bless $self, $class;
 }
 
+# use graphviz to figure what's going on/going wrong
 
+sub dump_graph_panel {
+
+  my $self = shift;
+  my $panel = shift;		# name of the graph (also used as caption)
+  my $current = shift;
+
+  my $graph = "subgraph_cluster$panel";
+
+  my ($mblocks,$ablocks,$edges) = @{$self}{"mblocks","ablocks","edges"};
+
+  # do a bottom-up construction
+
+  my ($chk,$aux,$msg) = ("", "", "");
+
+  $chk = <<EOT;
+subgraph cluster_check_$panel {
+    label="chk";
+    rankdir=LR;
+    rank=same
+//    rank=min;
+EOT
+
+  $aux = <<EOT;
+subgraph cluster_aux_$panel {
+    label="aux";
+    rankdir=LR;
+    rank=same
+EOT
+
+  $msg = <<EOT;
+subgraph cluster_msg_$panel {
+    label="msg";
+    rankdir=LR;
+    rank=same
+EOT
+
+    # nodes are described like:
+    # $node [label="\N {@keys}" style=bold];
+    #   $node  is the node number
+    #   @keys  are the keys from xor_hash
+    #   bold   if the node is marked as solved
+
+  my $edgelist="";
+  foreach my $i (0 .. scalar @{$self->{neighbours}} -1) {
+
+    # don't graph deleted nodes
+    next if $self->{deleted}->[$i];
+
+    my $nodedesc = "${panel}_$i [label=\"$i {";
+    $nodedesc .= join ",", sort { $a <=> $b } keys(%{$self->{xor_hash}->[$i]});
+    $nodedesc .= "}\"";
+    $nodedesc .= " color=green" if $self->{solved}->[$i];
+    $nodedesc .= " style=filled" if $current == $i;
+    $nodedesc .= "];";
+
+    # add invisible links between nodes in this cluster to keep them
+    # from being reordered
+    unless ($i == 0 or $i == $mblocks or $i == $mblocks + $ablocks) {
+      $nodedesc .= "\n    ${panel}_";
+      $nodedesc .= $i-1 . " -- ${panel}_$i [style=invis]";
+    }
+
+    if ($i < $mblocks) {
+      $msg .= "    $nodedesc\n";
+    } elsif ($i < $mblocks + $ablocks) {
+      $aux .= "    $nodedesc\n";
+    } else {
+      $chk .= "    $nodedesc\n";
+    }
+
+    # add invisible links between subgraphs
+    #$edgelist .= "cluster_chk -- cluster_aux;\n";
+    #$edgelist .= "cluster_aux -- cluster_msg;\n";
+
+    my $href =$self->{edges}->[$i];
+    foreach my $j (sort {$a<=>$b} keys %$href) {
+      if ($j < $i) {
+	die "graph edge ($j,$i) does not have reciprocal link!\n"
+	  unless exists($self->{edges}->[$i]->{$j});
+	next;
+      }
+
+      my $edgedesc = "${panel}_$i -- ${panel}_$j [dir=";
+      if (exists($self->{edges}->[$j]->{$i})) {
+	$edgedesc .= "both]";
+      } else {
+	$edgedesc .= "forward]";
+      }
+
+      #warn "adding edge description $edgedesc\n";
+      $edgelist .= "  $edgedesc\n";
+    }
+  }
+
+  my $subgraph =<<EOT;
+subgraph cluster_$panel {
+
+  ranksep = 2;
+  rankdir=BT;
+// rank=same;
+
+  label="$panel";
+
+  $chk  }
+
+  $aux  }
+
+  $msg  }
+
+$edgelist}
+EOT
+
+  return $subgraph;
+}
 
 
 # the decoding algorithm is divided into two steps. The first adds a
@@ -398,13 +514,16 @@ sub add_check_block {
 
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
-    push $self->{neighbours}->[$i], $node;
+    if ($self->{solved}->[$i]) {
 
-    # !!!
-    #$self->{xor_hash}->[$node]->{$i}=1;
+      $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
 
-    $new_hash->{$i} = 1;
-    $self->{edges}->[$i]->{$node} = 1;
+    } else {
+      push $self->{neighbours}->[$i], $node;
+
+      $new_hash->{$i} = 1;
+      $self->{edges}->[$i]->{$node} = 1;
+    }
   }
 
   push $self->{edges}, $new_hash;
@@ -442,30 +561,6 @@ sub delete_edge {
 #
 # There is one rule for propagating a known value from left to
 # right: when the left node has exactly one right neighbour
-#
-# We can also delete edges if both the left and right nodes are
-# solved (the edge being superflous in this case)
-
-sub rule1 {
-
-  my ($self,$from,$to) = @_;
-
-  if (!$self->{solved}->[$to]) {
-    croak "invalid application of rule1($from,$to)\n";
-  }
-
-  print "Applying rule 1 from $from to $to\n";
-  $self->merge_xor_hash($from, $self->{xor_hash}->[$to]);
-  $self->delete_edge($from, $to);
-}
-
-sub rule2 {
-
-
-
-
-}
-
 
 sub resolve {
 
@@ -483,230 +578,113 @@ sub resolve {
   my $mblocks = $self->{mblocks};
   my $ablocks = $self->{ablocks};
 
-  my $iter = $self->{iter};
-
-  my ($original, $rule1, $rule2);
-  my ($from, $to);
-
-
   return (1) unless $self->{unsolved_count};
   while (@pending) {
 
-    $from = shift @pending;
-
-    $iter ++;
-    $rule1 = ""; $rule2 = "";
-    $original = $self->dump_graph_panel("original",$from);
-
-    unless ($from > $mblocks) {
-      warn "Can't start solving from a message node\n" ;
-      next;
-    }
+    my ($from, $to) = (shift @pending);
 
     my @right_nodes = grep { $_ < $from } keys $self->{edges}->[$from];
 
     my $right_degree = scalar(@right_nodes);
 
     print "Starting node: $from has right nodes: " . (join " ", @right_nodes) . "\n";
-    print "(right degree $right_degree)\n";
 
-    # delete previously-solved right edges
+    unless ($self->{solved}->[$from]) {
+      print "skipping unsolved from node $from\n";
+      next;
+    }
+
+    my $original;
+    my $rule1="";
+    my $rule2="";
+    my $iter = $self->{iter};
+    ++$iter;
+    if (TRACE) {
+      $original = $self->dump_graph_panel("original",$from);
+    }
+
+    my @merge_list =($from);
     while ($right_degree--) {
       my $to = shift @right_nodes;
       if ($self->{solved}->[$to]) {
-	$self->rule1($from,$to);
+	push @merge_list, $to;
       } else {
-    	push @right_nodes, $to;	# not solved
+	push @right_nodes, $to;	# unsolved
       }
     }
 
-    $rule1 = $self->dump_graph_panel("rule1",$from);
+    print "Unsolved right degree: " . scalar(@right_nodes) . "\n";
 
-    if (@right_nodes == 0) {
+    if (TRACE) {
+      $rule1 = $self->dump_graph_panel("rule1",$from);
+    }
 
-      $self->{solved}->[$from] = 1;
-      for my $i (grep { $_ > $from } keys $self->{edges}->[$from]) {
-	push @pending, $i;
-      }
-
-    } elsif (@right_nodes == 1) {
+    if (@right_nodes == 1) {
 
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;
 
       print "Node $from solves node $to\n";
 
-      next unless ($self->{solved}->[$from]);
-
-      # mark node as solved
-      $self->{solved}->[$to] = 1;
-
-      # propagate solution
-      $self->merge_xor_hash($to, $self->{xor_hash}->[$from]);
-      $self->delete_edge($to, $from);
+      $self->delete_edge($from,$to);
+      foreach my $i (@merge_list) {
+	$self->merge_xor_hash($to, $self->{xor_hash}->[$i]);
+	$self->delete_edge($from,$i);
+      }
 
       # left nodes are to's left nodes
       my @left_nodes = grep { $_ > $to } keys $self->{edges}->[$to];
 
-      print "Solved node $to has left nodes: " . (join " ", @left_nodes) . "\n";
-
-#      for my $back (@left_nodes) {
-#	if ($back > $mblocks + $ablocks) {
-#	  $self->merge_xor_hash($back, $self->{xor_hash}->[$to]);
-#	  $self->delete_edge($back,$to);
-#	}
-#      }
+      # mark node as solved
+      $self->{solved}->[$to] = 1;
+      push @newly_solved, $to;
 
       if ($to < $mblocks) {
 	print "Solved message block $to completely\n";
-	push @newly_solved, $to;
 	unless (--($self->{unsolved_count})) {
 	  $finished = 1;
-	  #last;			# finish searching
+	  # continue decoding just in case there's a bug later
+#	  @pending = ();
+#	  last;			# finish searching
 	}
+
       } else {
 	print "Solved auxiliary block $to completely\n";
 	push @pending, $to;
       }
 
       if (@left_nodes) {
-	print "Solved node $to had left nodes: " . (join " ", @left_nodes) . "\n";
+	print "Solved node $to still has left nodes " . (join " ", @left_nodes) . "\n";
       } else {
-	print "Solved node $to had no left nodes\n";
+	print "Solved node $to has no left nodes\n";
       }
       push @pending, @left_nodes;
+
+      @pending = sort { $b <=> $a } @pending;
+
+#      for my $back (@left_nodes) {
+#	$self->merge_xor_hash($back, $self->{xor_hash}->[$to]);
+#	$self->delete_edge($back,$to);
+#      }
+
     }
-  } continue {
-    my $rule2 = $self->dump_graph_panel("rule2",$from);
 
-    my $filename = "dump-" . sprintf("%05d", $iter) . ".txt";
 
-    die "File create? $!\n" unless open DUMP, ">", $filename;
+    if (TRACE) {
+      $rule2=$self->dump_graph_panel("rule2",$from);
+      my $filename = "dump-" . sprintf("%05d", $iter) . ".txt";
+      die "File create? $!\n" unless open DUMP, ">", $filename;
+      print DUMP "graph test {\n$original\n$rule1\n$rule2\n}\n";
+      close DUMP;
+      $self->{iter}=$iter;
+    }
 
-    print DUMP "graph test {\n$original\n$rule1\n$rule2\n}\n";
-    close DUMP;
-    $self->{iter}=$iter;
   }
+
   return ($finished, @newly_solved);
 
 }
 
-# use graphviz to figure what's going on/going wrong
-
-sub dump_graph_panel {
-
-  my $self = shift;
-  my $panel = shift;		# name of the graph (also used as caption)
-  my $current = shift;
-
-  my $graph = "subgraph_cluster$panel";
-
-  my ($mblocks,$ablocks,$edges) = @{$self}{"mblocks","ablocks","edges"};
-
-  # do a bottom-up construction
-
-  my ($chk,$aux,$msg) = ("", "", "");
-
-  $chk = <<EOT;
-subgraph cluster_check_$panel {
-    label="chk";
-    rankdir=LR;
-    rank=same
-//    rank=min;
-EOT
-
-  $aux = <<EOT;
-subgraph cluster_aux_$panel {
-    label="aux";
-    rankdir=LR;
-    rank=same
-EOT
-
-  $msg = <<EOT;
-subgraph cluster_msg_$panel {
-    label="msg";
-    rankdir=LR;
-    rank=same
-EOT
-
-    # nodes are described like:
-    # $node [label="\N|{@keys}" style=bold];
-    #   $node  is the node number
-    #   @keys  are the keys from xor_hash
-    #   bold   if the node is marked as solved
-
-  my $edgelist="";
-  foreach my $i (0 .. scalar @{$self->{neighbours}} -1) {
-
-    # don't graph deleted nodes
-    next if $self->{deleted}->[$i];
-
-    my $nodedesc = "${panel}_$i [label=\"$i|{";
-    $nodedesc .= join ",", sort { $a <=> $b } keys(%{$self->{xor_hash}->[$i]});
-    $nodedesc .= "}\"";
-    $nodedesc .= " style=bold" if $self->{solved}->[$i];
-    $nodedesc .= " style=filled" if $current == $i;
-    $nodedesc .= "];";
-
-    # add invisible links between nodes in this cluster to keep them
-    # from being reordered
-    unless ($i == 0 or $i == $mblocks or $i == $mblocks + $ablocks) {
-      $nodedesc .= "\n    ${panel}_";
-      $nodedesc .= $i-1 . " -- ${panel}_$i [style=invis]";
-    }
-
-    if ($i < $mblocks) {
-      $msg .= "    $nodedesc\n";
-    } elsif ($i < $mblocks + $ablocks) {
-      $aux .= "    $nodedesc\n";
-    } else {
-      $chk .= "    $nodedesc\n";
-    }
-
-    # add invisible links between subgraphs
-    #$edgelist .= "cluster_chk -- cluster_aux;\n";
-    #$edgelist .= "cluster_aux -- cluster_msg;\n";
-
-    my $href =$self->{edges}->[$i];
-    foreach my $j (sort {$a<=>$b} keys %$href) {
-      if ($j < $i) {
-	die "graph edge ($j,$i) does not have reciprocal link!\n"
-	  unless exists($self->{edges}->[$i]->{$j});
-	next;
-      }
-
-      my $edgedesc = "${panel}_$i -- ${panel}_$j [dir=";
-      if (exists($self->{edges}->[$j]->{$i})) {
-	$edgedesc .= "both]";
-      } else {
-	$edgedesc .= "forward]";
-      }
-
-      #warn "adding edge description $edgedesc\n";
-      $edgelist .= "  $edgedesc\n";
-    }
-  }
-
-  my $subgraph =<<EOT;
-subgraph cluster_$panel {
-
-  ranksep = 2;
-  rankdir=BT;
-// rank=same;
-
-  label="$panel";
-
-  $chk  }
-
-  $aux  }
-
-  $msg  }
-
-$edgelist}
-EOT
-
-  return $subgraph;
-}
 
 1;
 
