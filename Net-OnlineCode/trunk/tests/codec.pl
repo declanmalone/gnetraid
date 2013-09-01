@@ -15,13 +15,37 @@ use Net::OnlineCode ':xor';
 
 print "Testing: ENCODER AND DECODER\n";
 
+my $blksiz = shift @ARGV || 4;
+my $seed   = shift @ARGV;
+
 # test string is 41 characters (a prime, so it needs padding unless
 # blocksize is 1 or 41)
 my $test = "The quick brown fox jumps over a lazy dog";
 
-print "Test string: $test\n";
 
-my $blksiz = shift @ARGV || 4;
+# First thing to do is set up RNGs.
+my $erng;
+if (defined($seed)) {
+  die "supplied seed must be a hex number (40 characters for SHA1 RNG\n"
+    unless length($seed) == 40 and ($seed =~ m/^[0-9a-f]+$/i);
+
+  $erng = Net::OnlineCode::RNG->new(pack "H*", $seed);
+
+} else {
+
+ $erng = Net::OnlineCode::RNG->new_random;
+
+}
+
+my $drng = Net::OnlineCode::RNG->new;
+$drng->seed($erng->get_seed);
+
+die "initial seed mismatch\n" unless $erng->get_seed eq $drng->get_seed;
+die "initial rng mismatch\n"  unless $erng->as_hex eq $drng->as_hex;
+
+print "SEED: " . $erng->as_hex . "\n";
+
+print "Test string: $test\n";
 
 print "Length: " . length($test) . "\n";
 print "Block size: $blksiz\n";
@@ -43,12 +67,6 @@ print "Padded string: $istring\n";
 print "Message blocks: $mblocks\n";
 
 # Set up encoder, decoder
-my $erng = Net::OnlineCode::RNG->new_random;
-my $drng = Net::OnlineCode::RNG->new;
-$drng->seed($erng->get_seed);
-
-die "initial seed mismatch\n" unless $erng->get_seed eq $drng->get_seed;
-die "initial rng mismatch\n"  unless $erng->as_hex eq $drng->as_hex;
 
 my $enc = Net::OnlineCode::Encoder
   ->new(mblocks => $mblocks, initial_rng => $erng, expand_aux => 1);
@@ -85,7 +103,9 @@ my $check_count = 0;
 my $done = 0;
 until ($done) {
 
-  my $block_id     = $erng->seed_random;
+  # normally, we'd call seed_random, but for testing we want a
+  # deterministic order
+  my $block_id     = $erng->seed($erng->as_string);
 
   die "encoder random seed != block_id\n" unless $block_id eq $erng->get_seed;
 
