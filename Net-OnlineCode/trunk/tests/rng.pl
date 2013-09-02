@@ -60,24 +60,39 @@ print "OK\n";
 
 my $nbins = 100;		# 100 possible 2-digit decimal numbers
 my $nkeys = 15000;		# run RNG this many times; should be at
-			      # least 10 times $nbins for chi-squared
+				# least 10 times $nbins for chi-squared
 my @bins  = ((0) x $nbins);	# counts for leading log_10(nbins) digits
 my $p        = $nkeys / $nbins;
 
-# This is the simplest cross-platform conformance test:
-my $hostname = `hostname`;
-chomp $hostname;
-open RANDOM, ">random.$hostname" or die "couldn't create test file: $!\n";
+# This is the simplest cross-platform conformance test: if output
+# doesn't match when run on different machines, we have a problem.
+open RANDOM, ">random.localhost" or die "couldn't create test file: $!\n";
+
+# while generating our random numbers, also check for cycles
+my %unique;			# random key => iteration first seen
+my $cycle_length = undef;
 
 $rng1->seed_random;
 for (1..$nkeys) {
-  my ($r1) = $rng1->rand;
+  my $r1 = $rng1->rand;
+
+  if (exists($unique{$r1})) {
+    $cycle_length = $_ - $unique{$r1};
+  }
+  $unique{$r1} = $_;
 
   my $s = sprintf "%0.15f", $r1;
   print RANDOM "$s\n";
 
   $s =~ s/^0\.(\d\d).*$/$1/;
   $bins[$s]++;
+}
+
+print "\nTesting RNG for cycles ($nkeys trials): ";
+if (defined($cycle_length)) {
+  print "NOT OK, RNG appears to cycle with period length $cycle_length\n";
+} else {
+  print "OK, no cycle detected\n";
 }
 
 my $chisquared = 0;
@@ -108,7 +123,7 @@ if ($stddevs < 2) {
 } elsif ($stddevs < 3) {
   print "2 < $stddevs < 3:  MARGINAL RNG\n";
 } else {
-  print "$stddevs < 3: BAD RNG\n";
+  print "$stddevs > 3: BAD RNG\n";
 }
 
 # The above test gave the same output on:
