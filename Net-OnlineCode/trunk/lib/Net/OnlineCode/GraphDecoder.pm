@@ -5,7 +5,7 @@ use warnings;
 
 use Carp;
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 use constant TRACE => 0;
 
 # Implements a data structure for decoding the bipartite graph (not
@@ -492,7 +492,7 @@ sub add_check_block {
   my $node = scalar @{$self->{neighbours}};
   #warn "add_check_block: adding new node index $node\n";
 
-  print "New check block $node: " . (join " ", @$nodelist) . "\n";
+  print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
 
   # continue to use the neighbours structure, but use a parallel
   # "edge" structure that stores node numbers in a hash (also
@@ -536,7 +536,7 @@ sub delete_edge {
 
   my ($self,$from,$to) = @_;
 
-  print "Deleting edge $from, $to\n";
+  print "Deleting edge $from, $to\n" if DEBUG;
 
   delete $self->{edges}->[$from]->{$to};
   delete $self->{edges}->[$to]->{$from};
@@ -587,10 +587,11 @@ sub resolve {
 
     my $right_degree = scalar(@right_nodes);
 
-    print "Starting node: $from has right nodes: " . (join " ", @right_nodes) . "\n";
+    print "Starting node: $from has right nodes: " . (join " ", @right_nodes)
+      . "\n" if DEBUG;
 
     unless ($self->{solved}->[$from]) {
-      print "skipping unsolved from node $from\n";
+      print "skipping unsolved from node $from\n" if DEBUG;
       next;
     }
 
@@ -613,7 +614,7 @@ sub resolve {
       }
     }
 
-    print "Unsolved right degree: " . scalar(@right_nodes) . "\n";
+    print "Unsolved right degree: " . scalar(@right_nodes) . "\n" if DEBUG;
 
     if (TRACE) {
       $rule1 = $self->dump_graph_panel("rule1",$from);
@@ -624,7 +625,7 @@ sub resolve {
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;
 
-      print "Node $from solves node $to\n";
+      print "Node $from solves node $to\n" if DEBUG;
 
       $self->delete_edge($from,$to);
       foreach my $i (@merge_list) {
@@ -640,7 +641,7 @@ sub resolve {
       push @newly_solved, $to;
 
       if ($to < $mblocks) {
-	print "Solved message block $to completely\n";
+	print "Solved message block $to completely\n" if DEBUG;
 	unless (--($self->{unsolved_count})) {
 	  $finished = 1;
 	  # continue decoding just in case there's a bug later
@@ -649,14 +650,15 @@ sub resolve {
 	}
 
       } else {
-	print "Solved auxiliary block $to completely\n";
+	print "Solved auxiliary block $to completely\n" if DEBUG;
 	push @pending, $to;
       }
 
       if (@left_nodes) {
-	print "Solved node $to still has left nodes " . (join " ", @left_nodes) . "\n";
+	print "Solved node $to still has left nodes " . (join " ", @left_nodes)
+	  . "\n" if DEBUG;
       } else {
-	print "Solved node $to has no left nodes\n";
+	print "Solved node $to has no left nodes\n" if DEBUG;
       }
       push @pending, @left_nodes;
 
@@ -679,6 +681,22 @@ sub resolve {
       $self->{iter}=$iter;
     }
 
+  }
+
+  # do a pass over all check, aux blocks to make sure that they can't
+  # solve more blocks
+  if (0) {
+    for my $i ($mblocks .. @{$self->{neighbours}} - 1) {
+
+      next unless $self->{solved}->[$i];
+      my @right    = grep { $_ < $i &&
+			      !$self->{solved}->[$_] }
+	keys %{$self->{edges}->[$i]};
+      if (@right == 1) {
+	my $from = shift @right;
+	warn "algorithm failed to reach node $from that could be solved\n";
+      }
+    }
   }
 
   return ($finished, @newly_solved);

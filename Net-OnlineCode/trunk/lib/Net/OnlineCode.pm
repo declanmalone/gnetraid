@@ -91,7 +91,7 @@ sub new {
     return undef;
   }
 
-  print "Net::OnlineCode mblocks = $mblocks\n";
+  print "Net::OnlineCode mblocks = $mblocks\n" if DEBUG;
 
   my $P = undef;
   my $e_changed = 0;
@@ -101,6 +101,10 @@ sub new {
 
   # does epsilon value need updating?
   my $f = _max_degree($e);
+
+  # try an alternative way of calculating F:
+  #  $f = $mblocks + $ablocks if $f > $mblocks + $ablocks;
+
   if ($f > $mblocks + $ablocks) {
 
     $e_changed = 1;
@@ -122,14 +126,14 @@ sub new {
     my $l = -log(1/$e - 1);
     my $r = $l + 1;
 
-    # expand right side of search until we get F > n
+    # expand right side of search until we get F <= n'
     while (eval_f($r) > $mblocks + $ablocks) {
       # $r = $l + ($r - $l) * 2;
       $r = 2 * $r - $l;
     }
 
     # binary search between left and right to find a suitable lower
-    # value for epsilon
+    # value of epsilon still satisfying F <= n'
     while ($r - $l > 0.01) {
       my $m = ($l + $r) / 2;
       if (eval_f($m) > $mblocks + $ablocks) {
@@ -159,10 +163,10 @@ sub new {
   # how many auxiliary blocks would this scheme need?
 
   # calculate the probability distribution
-  print "new: mblocks=$mblocks, ablocks=$ablocks, q=$q\n";
+  print "new: mblocks=$mblocks, ablocks=$ablocks, q=$q\n" if DEBUG;
   $P = _probability_distribution($mblocks + $ablocks,$e);
 
-  die "Wrong number of elements in probability distribution (got " 
+  die "Wrong number of elements in probability distribution (got "
     . scalar(@$P) . ", expecting $f)\n"
       unless @$P == $f;
 
@@ -171,7 +175,7 @@ sub new {
                chblocks => 0, expand_aux=> $args{expand_aux},
 	       e_changed => $e_changed, unique => {} };
 
-  print "expand_aux => $self->{expand_aux}\n";
+  print "expand_aux => $self->{expand_aux}\n" if DEBUG;
 
   bless $self, $class;
 
@@ -235,7 +239,7 @@ sub _count_auxiliary {
 #  my $count = int(ceil(0.55 * $q * $e * $n));
   my $delta = 0.55 * $e;
 
-  warn "failure probability " . ($delta ** $q) . "\n";
+  warn "failure probability " . ($delta ** $q) . "\n" if DEBUG;
   my $count = int(ceil($q * $delta * $n));
 
   if ($count < $q) {
@@ -306,7 +310,7 @@ sub _max_degree {
 
 sub _probability_distribution {
 
-  my ($nblocks,$epsilon) = @_;
+  my ($nblocks,$epsilon) = @_;	# nblocks = number of *composite* blocks!
 
   # after code reorganisation, this shouldn't happen:
   if ($nblocks == 1) {
@@ -314,7 +318,8 @@ sub _probability_distribution {
     return (1, 0, 1);
   }
 
-  print "generating probability distribution from nblocks $nblocks, e $epsilon\n";
+  print "generating probability distribution from nblocks $nblocks, e $epsilon\n"
+    if DEBUG;
 
   my  $f = _max_degree($epsilon);
 
@@ -344,13 +349,13 @@ sub _probability_distribution {
   my $p1     = 1 - (1 + 1/$f)/(1 + $epsilon);
   my $pfterm = (1-$p1) * $f / ($f - 1);
 
+  die "p1 is negative\n" if $p1 < 0;
+
   # hard-code simple cases where f = 1 or 2
   if ($f == 1) {
     return [1];
-    #return ($f, $epsilon, 1);
   } elsif ($f == 2) {
     return [$p1, 1];
-    # return ($f, $epsilon, $p1, 1);
   }
 
   # calculate sum(p_i) for 2 <= i < F.
@@ -360,10 +365,12 @@ sub _probability_distribution {
 
   my $i = 2;
   while ($i < $f) {
-    my $iterm = $i * $i - $i;
+    my $iterm = $i * ($i - 1);
     my $p_i   = $pfterm / $iterm;
 
     $sum += $p_i;
+
+    die "p_$i is negative\n" if $p_i < 0;
 
     push @P, $sum;
     $i++;
@@ -375,7 +382,7 @@ sub _probability_distribution {
     # know there is a problem with the assumption!
     my $p_last = $sum + $pfterm / ($f * $f - $f);
     my $absdiff = abs (1 - $p_last);
-    warn "Absolute difference of 1,sum to p_F = $absdiff\n";
+    warn "Absolute difference of 1,sum to p_F = $absdiff\n" if DEBUG;
   }
 
   return [(@P),1];
@@ -495,7 +502,7 @@ sub auxiliary_mapping {
 
   # convert list of hashes into a list of lists
   for my $i (0 .. $mblocks + $ablocks -1) {
-    print "map $i: " . (join " ", keys %{$hashes[$i]}) . "\n";
+    print "map $i: " . (join " ", keys %{$hashes[$i]}) . "\n" if DEBUG;
     push @$aux_mapping, [ keys %{$hashes[$i]} ];
   }
 
@@ -563,6 +570,9 @@ sub checkblock_mapping {
   my $coblocks = $self->get_coblocks;
   my $P        = $self->{P};
 
+  #  die "Probability distribution has wrong number of terms\n"
+  #    unless scalar(@$P) <= $coblocks;
+
   my $check_mapping;
 
   # It's possible to generate a check block that is empty. If it only
@@ -594,7 +604,7 @@ sub checkblock_mapping {
     ++$i while($r > $P->[$i]);	# terminates since r < P[last]
     ++$i;
 
-    #print "picked $i values for checkblock (from $coblocks)\n";
+    #warn "picked $i values for checkblock (from $coblocks)\n";
 
     # select i composite blocks uniformly
     $check_mapping = [ (0 .. $coblocks-1) ];
@@ -603,7 +613,7 @@ sub checkblock_mapping {
     # check block for uniqueness before expansion
     $key = join " ", sort { $a <=> $b } @$check_mapping;
     if (exists $self->{unique}->{$key}) {
-      warn "quashed duplicate check block\n";
+      warn "quashed duplicate check block\n" if DEBUG;
       next;
     }
 
@@ -639,8 +649,7 @@ sub checkblock_mapping {
 
   ++($self->{chblocks});
 
-  print "CHECKblock mapping: " . (join " ", @$check_mapping) . "\n";
-
+  print "CHECKblock mapping: " . (join " ", @$check_mapping) . "\n" if DEBUG;
 
   return $check_mapping;
 
