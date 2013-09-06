@@ -1,15 +1,21 @@
 Net::OnlineCode
 
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
+This module implements "Online Codes", a form of "rateless" forward
+error correction.  Unlike optimal error-correcting codes such as
+Reed-Solomon codes, Online Codes differ in certain respects:
 
-A README file is required for CPAN modules since CPAN extracts the README
-file from a module distribution so that people browsing the archive
-can use it to get an idea of the module's uses. It is usually a good idea
-to provide version information here so that people can decide whether
-fixes for the module are worth downloading.
+* They can send a practically infinite number of check blocks (ie,
+  they are "rateless") without needing to determine the network packet
+  loss rate in advance.
+
+* They are near-optimal (meaning that a certain percentage extra
+  blocks need to be sent for the original message to be decoded)
+
+* Encoding and decoding takes linear time (as opposed to, say RS
+  codes, which can take time proportional to O(n(log n))
+
+Taken together, this set of qualities makes Online Codes very suitable
+for transmission of data in a multicast or multi-sender network.
 
 
 INSTALLATION
@@ -26,30 +32,30 @@ SUPPORT AND DOCUMENTATION
 After installing, you can find documentation for this module with the
 perldoc command.
 
-    perldoc Net::Online
+    perldoc Net::OnlineCode
 
 You can also look for information at:
 
     RT, CPAN's request tracker
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Media-RAID
+        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Net-OnlineCode
 
     AnnoCPAN, Annotated CPAN documentation
-        http://annocpan.org/dist/Media-RAID
+        http://annocpan.org/dist/Net-OnlineCode
 
-    CPAN Ratings
-        http://cpanratings.perl.org/d/Media-RAID
+    GNETRAID project homepage:
+        https://sourceforge.net/projects/gnetraid/
 
-    Search CPAN
-        http://search.cpan.org/dist/Media-RAID/
-
+    The included extended test and examples directories:
+	tests/
+	examples/
 
 LICENSE AND COPYRIGHT
 
-Copyright (C) 2011 Declan Malone
+Copyright (C) 2013 Declan Malone
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation.
 
 See http://dev.perl.org/licenses/ for more information.
 
