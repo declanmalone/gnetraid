@@ -84,6 +84,9 @@ my $promise_2_total = 0;
 my $expected_check_count_2 = int ( 0.5 + ((1 + 3 * $e) * $mblocks));
 my $promise_3_total = 0;
 
+# calculate the average number of check blocks
+my $average = 0;
+
 for my $trial (1 .. $trials) {
 
   $rng->seed_random;
@@ -135,6 +138,7 @@ for my $trial (1 .. $trials) {
     ++ $promise_3_total;
   }
 
+  $average += $i;
 
 }
 
@@ -162,3 +166,6 @@ print "Decoded message in  $expected_check_count_2 or fewer check blocks " .
   "$promise_3_total / $trials times = " .
   sprintf("%0.8f%%\n", 100 * ($promise_3_total / $trials));
 
+$average /= $trials;
+print "Average:\n";
+print "It took an average of $average check blocks to decode the message\n";

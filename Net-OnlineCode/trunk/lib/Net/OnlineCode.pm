@@ -46,7 +46,7 @@ use constant DEBUG => 0;
 #
 
 use Carp;
-use POSIX qw(ceil);
+use POSIX qw(ceil floor);
 use Digest::SHA qw(sha1 sha1_hex);
 use Fcntl;
 
@@ -236,11 +236,11 @@ sub get_P {			# P == probability distribution
 sub _count_auxiliary {
   my ($q, $e, $n) = @_;
 
-#  my $count = int(ceil(0.55 * $q * $e * $n));
+  my $count = int(ceil(0.55 * $q * $e * $n));
   my $delta = 0.55 * $e;
 
   warn "failure probability " . ($delta ** $q) . "\n" if DEBUG;
-  my $count = int(ceil($q * $delta * $n));
+  #$count = int(ceil($q * $delta * $n));
 
   if ($count < $q) {
     #$count = $q;		# ???
@@ -259,7 +259,7 @@ sub _max_degree {
     (log (1 - $epsilon / 2));
 
   my $delta = 0.55 * $epsilon;
-  $quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
+  #$quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
 
   return int(ceil($quotient));
 }
@@ -382,10 +382,10 @@ sub _probability_distribution {
     # know there is a problem with the assumption!
     my $p_last = $sum + $pfterm / ($f * $f - $f);
     my $absdiff = abs (1 - $p_last);
-    warn "Absolute difference of 1,sum to p_F = $absdiff\n" if DEBUG;
+    warn "Absolute difference of 1,sum to p_F = $absdiff\n";
   }
 
-  return [(@P),1];
+  return [@P,1];
 
   # old return:
   # return ($f, $epsilon, @P, 1);
@@ -603,6 +603,8 @@ sub checkblock_mapping {
     my $r = $rng->rand;
     ++$i while($r > $P->[$i]);	# terminates since r < P[last]
     ++$i;
+
+    #die "went past end of probability list\n" if $i > @$P;
 
     #warn "picked $i values for checkblock (from $coblocks)\n";
 

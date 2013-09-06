@@ -7,6 +7,7 @@ my $builder = Module::Build->new(
     license             => 'gpl',
     dist_author         => q{Declan Malone <idablack@users.sourceforge.net>},
     dist_version_from   => 'lib/Net/OnlineCode.pm',
+    dist_abstract       => 'A rateless forward error correction scheme',
     build_requires => {
         'Test::More' => 0,
     },
