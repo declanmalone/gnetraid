@@ -446,7 +446,7 @@ void do_benchmarks(void) {
   long long delta_ns;
   int retval;
 
-  long long ns_per_test = 2500000000l; // 2.5 seconds
+  long long ns_per_test = 2500000000ll; // 2.5 seconds
 
   int  lengths[] = {1, 4, 8, 16, 32, SIZE_IN_BYTES};
   unsigned long byte_runs[6] = { 0,0,0,0,0,0};
@@ -477,7 +477,7 @@ void do_benchmarks(void) {
       retval = clock_gettime(CLOCK_REALTIME,&end_time);
       assert (retval == 0);
       delta_ns = end_time.tv_nsec - start_time.tv_nsec;
-      delta_ns += 1000000000 * (end_time.tv_sec - start_time.tv_sec);
+      delta_ns += 1000000000ll * (end_time.tv_sec - start_time.tv_sec);
 
     } while (delta_ns < ns_per_test);
 
