@@ -443,7 +443,7 @@ void do_benchmarks(void) {
   // we need better than the 1s granularity provided by time()
   struct timespec start_time, end_time;
 
-  long delta_ns;
+  long long delta_ns;
   int retval;
 
   long long ns_per_test = 2500000000l; // 2.5 seconds
