@@ -19,8 +19,8 @@
 #define SIZE_IN_BYTES ((sizeof(native_register_t)) * SIZE_IN_WORDS)
 
 // use static arrays rather than faffing around with malloc
-char src[SIZE_IN_BYTES];
-char dst[SIZE_IN_BYTES];
+char __attribute__((aligned(__BIGGEST_ALIGNMENT__))) src[SIZE_IN_BYTES];
+char __attribute__((aligned(__BIGGEST_ALIGNMENT__))) dst[SIZE_IN_BYTES];
 
 // list all test and check types
 typedef enum {
@@ -458,7 +458,7 @@ void do_benchmarks(void) {
   printf("Each test takes %.2fs to run\n", ((float)ns_per_test) / 1000000000.0);
   printf("Lower scores below are better\n\n");
 
-  for (offset = 0; offset < sizeof(native_register_t); ++offset) {
+  for (offset = sizeof(native_register_t) - 1; offset >= 0 ; --offset) {
 
     printf("Testing offset %d\n", offset);
 
