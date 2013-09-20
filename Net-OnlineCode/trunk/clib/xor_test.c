@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "this_machine.h"
 #include "xor.h"
@@ -375,7 +377,7 @@ int test_harness(void) {
   int passed = 0;
   test_entry_t *tp = tests;
   int is_required, invert, result;
-  int rand_trials = 10000;
+  int rand_trials = 1000;
   unsigned long start,bytes;
 
   // do all the individual tests from the list
@@ -424,7 +426,7 @@ int test_harness(void) {
     if (!result) {
       printf("Failed random trials\n");
       break;
-    }      
+    }
   }
 
   if (rand_trials <= 0) {
@@ -435,8 +437,84 @@ int test_harness(void) {
   return passed;
 }
 
-    
+// simple benchmarks to compare bytewise_xor and aligned_word_xor performance
+void do_benchmarks(void) {
+
+  // we need better than the 1s granularity provided by time()
+  struct timespec start_time, end_time;
+
+  long delta_ns;
+  int retval;
+
+  long ns_per_test = 2500000000l; // 2.5 seconds
+
+  int  lengths[] = {1, 4, 8, 16, 32, SIZE_IN_BYTES};
+  unsigned long byte_runs[6] = { 0,0,0,0,0,0};
+  unsigned long word_runs[6] = { 0,0,0,0,0,0};
+  int i,j;
+  int batch_size = 250;
+
+  printf("Running benchmarks with batch size of %d\n", batch_size);
+  printf("Each test takes %.2fs to run\n", ((float)ns_per_test) / 1000000000.0);
+  printf("Lower scores below are better\n\n");
+
+  for (i=0; i < 6; ++i) {
+
+    printf("String size in bytes: %d\n",lengths[i]);
+
+    // start clock
+    retval = clock_gettime(CLOCK_REALTIME,&start_time);
+    assert (retval == 0);
+
+    do {
+      // do a batch of xors
+      for (j=0; j<batch_size; ++j) {
+	bytewise_xor(dst,src,lengths[i]);
+      }
+      byte_runs[i] += batch_size;
+
+      // end clock
+      retval = clock_gettime(CLOCK_REALTIME,&end_time);
+      assert (retval == 0);
+      delta_ns = end_time.tv_nsec - start_time.tv_nsec;
+      delta_ns += 1000000000 * (end_time.tv_sec - start_time.tv_sec);
+
+    } while (delta_ns < ns_per_test);
+
+    printf("  bytewise= %f ns/byte\n",
+	   ((float) delta_ns / (lengths[i] * (float) byte_runs[i])));
+
+    // start clock
+    retval = clock_gettime(CLOCK_REALTIME,&start_time);
+    assert (retval == 0);
+
+    do {
+      // do a batch of xors
+      for (j=0; j<batch_size; ++j) {
+	aligned_word_xor(dst,src,lengths[i]);
+      }
+      word_runs[i] += batch_size;
+
+      // end clock
+      retval = clock_gettime(CLOCK_REALTIME,&end_time);
+      assert (retval == 0);
+      delta_ns = end_time.tv_nsec - start_time.tv_nsec;
+      delta_ns += 1000000000 * (end_time.tv_sec - start_time.tv_sec);
+
+    } while (delta_ns < ns_per_test);
+
+    printf("  wordwise= %f ns/byte\n\n", 
+	   ((float) delta_ns / (lengths[i] * (float) word_runs[i])));
+
+  }
+
+}
+
+
 int main(int ac, char **av) {
   printf("Passed %d of %d tests\n", test_harness(), sizeof(tests)/sizeof(test_entry_t));
+
+  do_benchmarks();
+
 }
   
