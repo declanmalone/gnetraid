@@ -19,6 +19,7 @@
 // on the above type.
 
 #include "this_machine.h"
+#include "xor.h"
 
 // The simplest implementation operates on bytes
 void bytewise_xor (unsigned char *dest, unsigned char *src, 
@@ -36,11 +37,11 @@ void bytewise_xor (unsigned char *dest, unsigned char *src,
 // 3. Use "Duff's Device" to do loop-unrolling (fewer condition checks)
 //
 // The second optimisation may not be useful on all platforms, but
-// there are still quite a few platforms where it is useful. It may
-// not be possible to align accesses to both the source and
-// destination memory spaces if they have differing alignments. We
-// concentrate on aligning memory accesses in the dest array since we
-// need to do both a read and a write on it.
+// there are still quite a few platforms where it is. It may not be
+// possible to align accesses to both the source and destination
+// memory spaces if they have differing alignments. We concentrate on
+// aligning memory accesses in the dest array since we need to do both
+// a read and a write on it.
 //
 // Another optimisation is also included:
 //
@@ -93,14 +94,14 @@ void aligned_word_xor(unsigned char *dest, unsigned char *src,
     // constants used are for 8 unrollings of the loop
     register count = (words + 7) >> 3;
     switch (words & 0x07) {
-    case 0: do {    *dword++ ^= *sword++;
-    case 7:         *dword++ ^= *sword++;
-    case 6:         *dword++ ^= *sword++;
-    case 5:         *dword++ ^= *sword++;
-    case 4:         *dword++ ^= *sword++;
-    case 3:         *dword++ ^= *sword++;
-    case 2:         *dword++ ^= *sword++;
-    case 1:         *dword++ ^= *sword++;
+    case 0: do {  *dword++ ^= *sword++;
+    case 7:       *dword++ ^= *sword++;
+    case 6:       *dword++ ^= *sword++;
+    case 5:       *dword++ ^= *sword++;
+    case 4:       *dword++ ^= *sword++;
+    case 3:       *dword++ ^= *sword++;
+    case 2:       *dword++ ^= *sword++;
+    case 1:       *dword++ ^= *sword++;
             } while (--count);
     }
   }
