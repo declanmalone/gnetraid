@@ -446,68 +446,72 @@ void do_benchmarks(void) {
   long long delta_ns;
   int retval;
 
-  long long ns_per_test = 2500000000ll; // 2.5 seconds
+  long long ns_per_test = 1000000000ll; // 1 second
 
-  int  lengths[] = {1, 4, 8, 16, 32, SIZE_IN_BYTES};
+  int  lengths[] = {1, 4, 8, 16, 32, SIZE_IN_BYTES - sizeof(native_register_t)};
   unsigned long byte_runs[6] = { 0,0,0,0,0,0};
   unsigned long word_runs[6] = { 0,0,0,0,0,0};
-  int i,j;
+  int i,j,offset;
   int batch_size = 250;
 
   printf("Running benchmarks with batch size of %d\n", batch_size);
   printf("Each test takes %.2fs to run\n", ((float)ns_per_test) / 1000000000.0);
   printf("Lower scores below are better\n\n");
 
-  for (i=0; i < 6; ++i) {
+  for (offset = 0; offset < sizeof(native_register_t); ++offset) {
 
-    printf("String size in bytes: %d\n",lengths[i]);
+    printf("Testing offset %d\n", offset);
 
-    // start clock
-    retval = clock_gettime(CLOCK_REALTIME,&start_time);
-    assert (retval == 0);
+    for (i=0; i < 6; ++i) {
 
-    do {
-      // do a batch of xors
-      for (j=0; j<batch_size; ++j) {
-	bytewise_xor(dst,src,lengths[i]);
-      }
-      byte_runs[i] += batch_size;
+      printf("  String size in bytes: %d\n",lengths[i]);
 
-      // end clock
-      retval = clock_gettime(CLOCK_REALTIME,&end_time);
+      // start clock
+      retval = clock_gettime(CLOCK_REALTIME,&start_time);
       assert (retval == 0);
-      delta_ns = end_time.tv_nsec - start_time.tv_nsec;
-      delta_ns += 1000000000ll * (end_time.tv_sec - start_time.tv_sec);
 
-    } while (delta_ns < ns_per_test);
+      do {
+	// do a batch of xors
+	for (j=0; j<batch_size; ++j) {
+	  bytewise_xor(&dst[offset],&src[offset],lengths[i]);
+	}
+	byte_runs[i] += batch_size;
 
-    printf("  bytewise= %f ns/byte\n",
-	   ((float) delta_ns / (lengths[i] * (float) byte_runs[i])));
+	// end clock
+	retval = clock_gettime(CLOCK_REALTIME,&end_time);
+	assert (retval == 0);
+	delta_ns = end_time.tv_nsec - start_time.tv_nsec;
+	delta_ns += 1000000000ll * (end_time.tv_sec - start_time.tv_sec);
 
-    // start clock
-    retval = clock_gettime(CLOCK_REALTIME,&start_time);
-    assert (retval == 0);
+      } while (delta_ns < ns_per_test);
 
-    do {
-      // do a batch of xors
-      for (j=0; j<batch_size; ++j) {
-	aligned_word_xor(dst,src,lengths[i]);
-      }
-      word_runs[i] += batch_size;
+      printf("    bytewise= %f ns/byte\n",
+	     ((float) delta_ns / (lengths[i] * (float) byte_runs[i])));
 
-      // end clock
-      retval = clock_gettime(CLOCK_REALTIME,&end_time);
+      // start clock
+      retval = clock_gettime(CLOCK_REALTIME,&start_time);
       assert (retval == 0);
-      delta_ns = end_time.tv_nsec - start_time.tv_nsec;
-      delta_ns += 1000000000 * (end_time.tv_sec - start_time.tv_sec);
 
-    } while (delta_ns < ns_per_test);
+      do {
+	// do a batch of xors
+	for (j=0; j<batch_size; ++j) {
+	  aligned_word_xor(&dst[offset],&src[offset],lengths[i]);
+	}
+	word_runs[i] += batch_size;
 
-    printf("  wordwise= %f ns/byte\n\n", 
-	   ((float) delta_ns / (lengths[i] * (float) word_runs[i])));
+	// end clock
+	retval = clock_gettime(CLOCK_REALTIME,&end_time);
+	assert (retval == 0);
+	delta_ns = end_time.tv_nsec - start_time.tv_nsec;
+	delta_ns += 1000000000 * (end_time.tv_sec - start_time.tv_sec);
 
+      } while (delta_ns < ns_per_test);
+
+      printf("    wordwise= %f ns/byte\n\n", 
+	     ((float) delta_ns / (lengths[i] * (float) word_runs[i])));
+
+    }
   }
-
 }
 
 
