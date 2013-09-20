@@ -446,7 +446,7 @@ void do_benchmarks(void) {
   long delta_ns;
   int retval;
 
-  long ns_per_test = 2500000000l; // 2.5 seconds
+  long long ns_per_test = 2500000000l; // 2.5 seconds
 
   int  lengths[] = {1, 4, 8, 16, 32, SIZE_IN_BYTES};
   unsigned long byte_runs[6] = { 0,0,0,0,0,0};
