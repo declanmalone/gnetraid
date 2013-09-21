@@ -1,0 +1,161 @@
+List of TODO items (oldest first)
+
+----------------------------------------------------------------------
+
+Subject: Write unit tests
+Status: pending
+
+There are plenty of extended tests in the tests/ directory, but I need
+to have some simpler unit test cases. Besides the usual use/use_ok
+stuff, any check that's currently implemented as a die/croak/warn can
+be converted into a unit test case.
+
+Also, I need to write test cases that ensure that the "fast" xor
+routine work in the same way as the "safe" one. I don't need too many
+tests for this as there are more tests in the ctest/ directory.
+
+----------------------------------------------------------------------
+
+Subject: Gather a list of references
+Status: pending
+
+Basically the wikipedia article and the main papers referenced from
+there.
+
+----------------------------------------------------------------------
+
+Subject: Investigate why the "asymptotically good in n" promise fails
+Status: pending
+
+The algorithm is supposed to be able to decode a message after
+receiving a small number of check blocks over and above the number of
+message/composite blocks. In my testing, this isn't working.
+
+I may have to contact the papers' authors in order to find out what's
+going wrong.
+
+----------------------------------------------------------------------
+
+Subject: Write "multi-speed" example program
+Status: pending
+
+One of the nice applications described in one of the papers I've read
+is to have a sender transmitting over several different "channels",
+each of which has a distinct bandwidth rate (no. of check blocks sent
+per time unit). Listeners subscribe to one or more channels based on
+their ability to receive check blocks sent over that channel. The idea
+is that the sender doesn't have to receive explicit ACK/NAK messages
+from nodes that have poor network connectivity: so long as any nodes
+are subscribed to a lower-bandwidth channel, it simply continues
+sending check blocks their way (and doesn't stop sending until it's
+sent enough check blocks on that channel for the message to be
+reconstructed).
+
+As a variation of this, I want a program that will be testable over a
+local network that is separated into two subnets. Assume that the
+sender is on a high-speed subnet, so it can send at full speed to each
+local machine on this subnet via multicast messaging. Also assume that
+we have a router that can route multicast traffic to the second
+subnet.  Assume that this second subnet is slower than the main subnet
+(even if it's not, we can just pretend that it is). So we will send
+check blocks on a separate multicast channel at a slower speed.
+
+Besides joining a separate multicast channel for fast and slow
+receivers, we also set the ttl ("time-to-live") parameter for each
+multicast packet sent. We use a value of 1 for local (fast) network
+peers, with a value of 2 for peers that live on the other side of the
+router and have a slower network.
+
+----------------------------------------------------------------------
+
+Subject: get POD documentation into shape
+Status: pending
+
+Some things may have changed since I started coding, so I have to
+check what I've already written.
+
+The Net::OnlineCode module needs to document what Online Codes are,
+and include references.
+
+I also need to include a warning that the interfaces might change
+between the initial release and subsequent releases. In particular,
+I'm leaning towards changing how the Decoder class works. See the next
+TODO for that.
+
+----------------------------------------------------------------------
+
+Subject: rewrite Decoder to be be more POE-friendly
+Status: pending
+
+When using POE as an event loop, we generally want each event handler
+(callback) to take only a small time to complete. This way, we can do
+a small bit of work and then return control back to POE's main event
+loop, which can check for newly arrived network packets and so on.
+
+As the code stands, whenever we receive a check block the resolve()
+method tries to resolve as many auxiliary/message blocks as possible
+before returning. Unfortunately, if this takes too long (because too
+many new composite blocks have become decodable at once) then we may
+not return to the POE main loop for quite a while, and we may
+potentially miss receipt of several new check blocks as a result.
+
+By limiting the amount of work done in the resolve to only decode at
+most one composite block at a time (and arranging for any outstanding
+decoding work to be scheduled for the next invocation), we will have
+only a short delay each time we enter resolve(), and the calling
+program can then interleave checks for newly-incoming check blocks
+with the resolution step(s) without fear of dropping packets.
+
+
+----------------------------------------------------------------------
+
+Subject: Reduce memory requirements
+Status: pending
+
+The algorithm is supposed to work best when there are a large number
+(eg, in the order of 100,000 to 1 million) of check blocks being sent.
+Unfortunately, as it stands, the program is a real memory hog when
+many check blocks are being received. I need to look into reducing the
+memory footprint, eg:
+
+* free up useless object-local storage (eg, auxiliary mapping?)
+* make sure to free memory where possible (eg, finished check blocks)
+* possibly move to using more space-efficient structures for edges
+* possibly move to C-based implementation for decoder
+
+
+----------------------------------------------------------------------
+
+Subject: Make installing C/XS part of the code optional
+Status: pending
+
+Although I'm sure most people would prefer to have optimised C
+routines when they can, not all platforms where Perl is installed will
+have a C compiler. I'd like to make the module at least installable on
+such platforms.
+
+Related to this is making Net::OnlineCode::xor_strings call the
+appropriate safe/fast routine by default. May be as simple as:
+
+  our (*xor_strings) = safe_xor_strings|fast_xor_strings; #?
+
+----------------------------------------------------------------------
+
+Subject: get modules CPAN-ready
+Status: pending
+
+The usual suspects:
+
+* license details (including copyright year)
+* having useful unit tests
+* project-specific README
+* $VERSION in each file
+* sanity-check MANIFEST file (and try installing from dist tarfile)
+* POD included/up-to-date
+* test on a variety of platforms (x86/x86_64/ARM)
+
+Afterwards:
+
+* check smoke tests online and fix any problems
+
+

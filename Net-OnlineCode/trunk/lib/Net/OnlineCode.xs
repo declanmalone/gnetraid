@@ -37,7 +37,7 @@ CODE:
 
   // dest_Str must be a referenece to a scalar
   if (!(SvROK(dest_Str) && SvTYPE((dest_deref = SvRV(dest_Str)))== SVt_PV)) {
-    fprintf(stderr, "fast_xor_strings: arg 1 should be a referenece to a SCALAR!\n");
+    fprintf(stderr, "fast_xor_strings: arg 1 should be a reference to a SCALAR!\n");
     exit(1);			// Is this OK? It will do for now.
   }
 
