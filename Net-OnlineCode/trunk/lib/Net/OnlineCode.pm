@@ -10,7 +10,7 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 require Exporter;
 
-our @ISA = qw(Exporter);
+@ISA = qw(Exporter);
 
 our @export_xor = qw (xor_strings safe_xor_strings fast_xor_strings);
 our @export_default = qw();
@@ -21,6 +21,10 @@ our @export_default = qw();
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = ();
 $VERSION = '0.01';
+
+# Use XS for fast xors (TODO: make this optional)
+require XSLoader;
+XSLoader::load('Net::OnlineCode', $VERSION);
 
 # on to our stuff ...
 
@@ -689,7 +693,7 @@ sub safe_xor_strings {
 # error checking, so make a backward-compatible version and an
 # explicit fast/unsafe version.
 sub xor_strings      { safe_xor_strings(@_) }
-sub fast_xor_strings { safe_xor_strings(@_) }
+#sub fast_xor_strings { safe_xor_strings(@_) } # implemented in OnlineCode.xs.
 
 
 1;

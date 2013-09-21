@@ -1,4 +1,4 @@
-// Generate the "this_machine.h" file
+// Generate the "this_machine.h" file and write it in ../clib directory
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,7 +39,7 @@ int main(int ac, char **av) {
     exit(1);
   }
 
-  if (!(fp = fopen("./this_machine.h", "w"))) {
+  if (!(fp = fopen("../clib/this_machine.h", "w"))) {
     fprintf(stderr, "Failed to open output file for writing\n");
     exit(2);
   }

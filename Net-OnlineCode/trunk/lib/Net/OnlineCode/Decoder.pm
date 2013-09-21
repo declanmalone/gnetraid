@@ -13,8 +13,10 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
 require Exporter;
 
 # Inherit from base class
-our @ISA = qw(Net::OnlineCode Exporter);
-our @EXPORT_OK = qw();
+@ISA = qw(Net::OnlineCode Exporter);
+@EXPORT_OK = qw();
+
+$VERSION = '0.01';
 
 sub new {
 

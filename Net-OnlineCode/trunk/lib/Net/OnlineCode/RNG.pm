@@ -10,9 +10,9 @@ use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
 
 require Exporter;
 
-our @ISA = qw(Exporter);
-our @EXPORT_OK = qw(random_uuid_160);
-
+@ISA = qw(Exporter);
+@EXPORT_OK = qw(random_uuid_160);
+$VERSION = '0.01';
 
 #
 # Random number generator
@@ -154,12 +154,12 @@ sub rand {
     my @uints = unpack "N5", $self->{current};
 
     # We calculate the rand by max * uint/(max 32-bit int).
-    while (@uints>=5) {
+    while (@uints>=1) {
       my $r = shift @uints;
-      $r ^= shift @uints;
-      $r ^= shift @uints;
-      $r ^= shift @uints;
-      $r ^= shift @uints;
+      #      $r ^= shift @uints;
+      #      $r ^= shift @uints;
+      #      $r ^= shift @uints;
+      #      $r ^= shift @uints;
       my $maxint = 2**32 - 1;
       my $ratio  = $r / $maxint;
       return ($max * $ratio) if ($r < $maxint);
@@ -230,3 +230,4 @@ sub random_uuid_160 {
 }
 
 1;
+

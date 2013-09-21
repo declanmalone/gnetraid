@@ -1,16 +1,26 @@
 Build.PL
+clib/xor.c
+clib/xor.h
+ctest/gen_this_machine.c
+ctest/Makefile
+ctest/xor_test.c
 lib/Net/OnlineCode.pm
 lib/Net/OnlineCode/Decoder.pm
 lib/Net/OnlineCode/Encoder.pm
 lib/Net/OnlineCode/GraphDecoder.pm
 lib/Net/OnlineCode/RNG.pm
+lib/Net/OnlineCode/xor.c
+lib/Net/OnlineCode/xor.xs
 MANIFEST			This list of files
 README
 tests/bipartite.pl
 tests/codec.pl
 tests/encoder.pl
 tests/fisher-yates.pl
+tests/graph-example-1.pl
+tests/graph-example-2.pl
 tests/mindecoder.pl
+tests/plot-foo.txt
 tests/plot.pl
 tests/probdist.pl
 tests/promises.pl

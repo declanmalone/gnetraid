@@ -10,8 +10,6 @@
 #include "this_machine.h"
 #include "xor.h"
 
-
-
 // constant array sizes
 
 #define SIZE_POW_2    12	/* 4,096 entries */
@@ -377,7 +375,7 @@ int test_harness(void) {
   int passed = 0;
   test_entry_t *tp = tests;
   int is_required, invert, result;
-  int rand_trials = 1000;
+  int rand_trials = 10000;
   unsigned long start,bytes;
 
   // do all the individual tests from the list
