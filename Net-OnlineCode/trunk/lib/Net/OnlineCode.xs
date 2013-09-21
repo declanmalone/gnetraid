@@ -64,7 +64,8 @@ CODE:
     }
   }
 
-  // return the dereferenced SV (TODO: Mortality?)
+  // return the dereferenced SV
+  SvREFCNT_inc(dest_deref); // fix up refcount for $$dest_Str
   RETVAL = dest_deref;
 OUTPUT:
   RETVAL
