@@ -701,3 +701,219 @@ sub xor_strings      { safe_xor_strings(@_) }
 __END__
 
 
+
+=head1 NAME
+
+Net::OnlineCode - A rateless forward error correction scheme
+
+=head1 SYNOPSIS
+
+  use strict;
+
+  # Base class only exports routines for doing xor
+  use Net::OnlineCode ':xor'
+
+  my @strings = ("abcde", "     ", "ABCDE", "\0\0\0\0\0");
+
+  # xor routines take a reference to a destination string, which is
+  # modified by xoring it with all the other strings passed in. The
+  # calculated value is also returned.
+
+  # "safe" xor routine is a pure Perl implementation
+  my $result1 = safe_xor_strings(\$strings[0], @strings[1..3]);
+
+  # "fast" xor routine is implemented in C
+  my $result2 = fast_xor_strings(\$strings[0], @strings[1..3]);
+
+=head1 DESCRIPTION
+
+This module implements the common functions required for the
+L<Net::OnlineCode::Encoder> and L<Net::OnlineCode::Decoder> modules.
+Apart from the two xor library routines shown above, there are no
+other user-callable methods or functions.
+
+The remainder of this document will give a brief overview of the
+Online Code algorithms. For a programmer's view of how to use this
+collection of modules, refer to the man pages for the
+L<Encoder|Net::OnlineCode::Encoder> and
+L<Decoder|Net::OnlineCode::Decoder> modules.
+
+=head1 ONLINE CODES
+
+Briefly, Online Codes are a scheme that allows a sender to break up a
+message (eg, a file) into a series of "check blocks" for transmission
+over a lossy network. When the receiver has received and decoded
+enough check blocks, they will ultimately be able to recover the
+original message in its entirety.
+
+Online Codes differ from traditional "forward error correcting"
+schemes in two important respects:
+
+=over
+
+=item * they are fast to calculate (on both sending and receiving end); and
+
+=item * they are "rateless", meaning that the sender can send out a (practically) infinite stream of check blocks, and the receiver typically only has to correctly receive a certain number of them (usually a only small percentage more than the number of original message blocks) in order to decode the full message.
+
+=back
+
+When using a traditional error-correction scheme, the sender usually
+has to set up the encoder parameters to take account of the expected
+packet loss rate. In contrast, with Online Codes, the sender
+effectively doesn't care about what the packet loss rate: it just
+keeps sending new check blocks until either the receiver(s)
+acknowledge the message as having been decoded, or until it has a
+reasonable expectation that the message should have been decoded.
+
+
+=head1 ONLINE CODES IN MORE DETAIL
+
+The fundamental idea used in Online Codes is to xor some number of
+message blocks together to form either auxiliary blocks (which are
+internal to the algorithm) or check blocks (which are sent across the
+network). Each check block is sent along with a block ID, which
+encodes information about which message blocks (or auxiliary blocks)
+comprise that check block. Initially, the only check blocks that a
+receiver can use are those that are comprised of only a single message
+block, but as more message blocks are decoded, they can be xored (or,
+in algebraic terms, "substituted") into each pending (unsolved) check
+block. Eventually, given enough check blocks, the receiver will be
+able to solve each of the message blocks.
+
+=head2 ENCODING/DECODING STEPS
+
+Encoding consists of two phases:
+
+=over
+
+=item * Before transmission begins, some number of auxiliary blocks are created by xoring a random selection of message blocks
+
+=item * For each check block that is to be transmitted, a random selection of auxiliary and/or message blocks (collectively referred to as "composite blocks") are xored together.
+
+=back
+
+Decoding follows the same steps as in the Encoder, except in
+reverse. Each received check block can potentially solve one unknown
+auxiliary or message block. Further, every time an auxiliary or
+message block becomes solved, that value can be "substituted in" to
+any check block that has not yet been fully decoded. Those check
+blocks may then be able to solve more message or auxiliary blocks.
+
+=head2 PSEUDO-RANDOM NUMBER GENERATORS AND BLOCK IDS
+
+When the receiver receives a check block, it needs to know which
+message and/or auxiliary blocks it is composed of. Likewise, it needs
+to know which message blocks each auxiliary block is composed of. This
+is achieved by having both the sender and receiver side use an
+identical pseudo-random number generator algorithm. Since both sides
+are using an identical PRNG, they can both use it to randomly select
+which message blocks comprise each auxiliary block, and which
+composite blocks comprise each check block.
+
+Naturally, for this to work, not only should the sender and receiver
+both be using the same PRNG algorithm, but they also need to be using
+the same I<seeds>. This is where I<Block IDs> (and also, for the
+auxiliary block mapping, I<File IDs>) come in. For check blocks, the
+sender picks a (truly) random Block ID and uses it to seed the
+PRNG. Then, using the PRNG, it pseudo-randomly selects some number of
+composite blocks. It then sends the Block ID along with the xor of all
+the selected composite blocks. The sender then uses the Block ID to
+seed its own PRNG, so when it pseudo-randomly selects the list of
+composite blocks, it should be the same as that selected by the
+sender.
+
+A similar scheme is used at the start of the transmission to determine
+which message blocks are xored to create the auxiliary blocks.
+
+The upshot of this is that Block (and File) IDs only need to be a
+fixed size, regardless of how many message blocks there are, how many
+composite blocks are included in a check block, and so on. This makes
+it much easier to design a packet format and process it at the
+sending and receiving sides.
+
+=head1 IMPLEMENTATION DETAILS
+
+The module is a fairly faithful implementation of Maymounkov and
+Maziere's paper describing the scheme. There are some slight
+variations:
+
+=over
+
+=item * in the case where the epsilon value would produce a max degree (F) value greater than the number of message blocks, it (ie, epsilon) is increased until F <= # of message blocks. The code to do this is based on Python code by Gwylim Ashley.
+
+=item * duplicate check blocks are quashed (since they provide no new information)
+
+=item * the graph decoding algorithm is replaced with a functionally equivalent one
+
+=back
+
+Apart from that, the original paper does not specify a PRNG algorithm.
+This module implements one using SHA-1, since it is portable across
+platforms and readily available.
+
+
+=head1 IMPORTANT NOTE
+
+This is the initial software release. It should be free of serious
+bugs, however it has a few shortcomings:
+
+=over
+
+=item * Memory usage is particularly high, especially if the number of check blocks runs into the thousands; and
+
+=item * The Decoder must see more check blocks than the original paper suggests should be the case
+
+=item * Although intended to be used with POE, the Decoder is currently not very suitable for use in a POE callback because it does not yield until it has done as much graph decoding as possible. If POE is being used to handle incoming network packets, the delay can cause it to drop packets. A future version will correct this by reducing the amount of work done per callback (so that control is returned to the POE event loop sooner, with the possibility to queue the remaining outstanding work with more calls to the Decoder object)
+
+=back
+
+As a result, it is likely that any future version that tries to
+address these two points may result in changes to the calling
+interfaces. See the TODO file that came in this distribution for more
+details.
+
+
+
+=head1 SEE ALSO
+
+
+This module is part of the GnetRAID project. For project development
+page, see:
+
+  https://sourceforge.net/projects/gnetraid/develop
+
+=head1 AUTHOR
+
+Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2013 by Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of the "GNU General Public License" ("GPL").
+
+The C code at the core of this Perl module can additionally be
+redistributed and/or modified under the terms of the "GNU Library
+General Public License" ("LGPL"). For the purpose of that license, the
+"library" is defined as the unmodified C code in the clib/ directory
+of this distribution. You are permitted to change the typedefs and
+function prototypes to match the word sizes on your machine, but any
+further modification (such as removing the static modifier for
+non-exported function or data structure names) are not permitted under
+the LGPL, so the library will revert to being covered by the full
+version of the GPL.
+
+Please refer to the files "GNU_GPL.txt" and "GNU_LGPL.txt" in this
+distribution for details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+See the "GNU General Public License" for more details.
+
+=cut
+

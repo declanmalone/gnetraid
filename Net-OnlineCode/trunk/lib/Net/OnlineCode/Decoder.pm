@@ -153,7 +153,47 @@ for rateless forward error correction. Refer to the L<the
 Net::OnlineCode documentation|Net::OnlineCode> for more technical
 details.
 
-The basic outline for how the encoder works is follows:
 
-=over
+=head1 SEE ALSO
+
+
+This module is part of the GnetRAID project. For project development
+page, see:
+
+  https://sourceforge.net/projects/gnetraid/develop
+
+=head1 AUTHOR
+
+Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2013 by Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of the "GNU General Public License" ("GPL").
+
+The C code at the core of this Perl module can additionally be
+redistributed and/or modified under the terms of the "GNU Library
+General Public License" ("LGPL"). For the purpose of that license, the
+"library" is defined as the unmodified C code in the clib/ directory
+of this distribution. You are permitted to change the typedefs and
+function prototypes to match the word sizes on your machine, but any
+further modification (such as removing the static modifier for
+non-exported function or data structure names) are not permitted under
+the LGPL, so the library will revert to being covered by the full
+version of the GPL.
+
+Please refer to the files "GNU_GPL.txt" and "GNU_LGPL.txt" in this
+distribution for details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+See the "GNU General Public License" for more details.
+
+=cut
 
