@@ -711,7 +711,7 @@ Net::OnlineCode - A rateless forward error correction scheme
   use strict;
 
   # Base class only exports routines for doing xor
-  use Net::OnlineCode ':xor'
+  use Net::OnlineCode ':xor';
 
   my @strings = ("abcde", "     ", "ABCDE", "\0\0\0\0\0");
 
@@ -753,7 +753,7 @@ schemes in two important respects:
 
 =item * they are fast to calculate (on both sending and receiving end); and
 
-=item * they are "rateless", meaning that the sender can send out a (practically) infinite stream of check blocks, and the receiver typically only has to correctly receive a certain number of them (usually a only small percentage more than the number of original message blocks) in order to decode the full message.
+=item * they are "rateless", meaning that the sender can send out a (practically) infinite stream of check blocks. The receiver typically only has to correctly receive a certain number of them (usually a only small percentage more than the number of original message blocks) in order to decode the full message.
 
 =back
 
@@ -782,11 +782,11 @@ able to solve each of the message blocks.
 
 =head2 ENCODING/DECODING STEPS
 
-Encoding consists of two phases:
+Encoding consists of two parts:
 
 =over
 
-=item * Before transmission begins, some number of auxiliary blocks are created by xoring a random selection of message blocks
+=item * Before transmission begins, some number of auxiliary blocks are created by xoring a random selection of message blocks together.
 
 =item * For each check block that is to be transmitted, a random selection of auxiliary and/or message blocks (collectively referred to as "composite blocks") are xored together.
 
@@ -794,7 +794,7 @@ Encoding consists of two phases:
 
 Decoding follows the same steps as in the Encoder, except in
 reverse. Each received check block can potentially solve one unknown
-auxiliary or message block. Further, every time an auxiliary or
+auxiliary or message block directly. Further, every time an auxiliary or
 message block becomes solved, that value can be "substituted in" to
 any check block that has not yet been fully decoded. Those check
 blocks may then be able to solve more message or auxiliary blocks.
@@ -812,7 +812,7 @@ composite blocks comprise each check block.
 
 Naturally, for this to work, not only should the sender and receiver
 both be using the same PRNG algorithm, but they also need to be using
-the same I<seeds>. This is where I<Block IDs> (and also, for the
+the same PRNG I<seeds>. This is where I<Block IDs> (and also, for the
 auxiliary block mapping, I<File IDs>) come in. For check blocks, the
 sender picks a (truly) random Block ID and uses it to seed the
 PRNG. Then, using the PRNG, it pseudo-randomly selects some number of
@@ -845,6 +845,8 @@ variations:
 
 =item * the graph decoding algorithm is replaced with a functionally equivalent one
 
+=item * message blocks need not decoded immediately: rather, the calling application makes the choice about when to do the xors (this I<may> be more time-efficient, particularly if the application is storing check blocks to secondary storage)
+
 =back
 
 Apart from that, the original paper does not specify a PRNG algorithm.
@@ -872,10 +874,21 @@ address these two points may result in changes to the calling
 interfaces. See the TODO file that came in this distribution for more
 details.
 
-
-
 =head1 SEE ALSO
 
+L<Wikipedia page describing Online Codes|http://en.wikipedia.org/wiki/Online_codes>
+
+PDF/PostScript links:
+
+=over
+
+=item * L<"Online Codes": by Petar Maymounkov|http://cs.nyu.edu/web/Research/TechReports/TR2002-833/TR2002-833.pdf>
+
+=item * L<"Rateless Codes and Big Downloads" by Petar Maymounkov and David Maziere|http://pdos.csail.mit.edu/~petar/papers/maymounkov-bigdown-lncs.ps>
+
+=back
+
+L<Github repository for Gwylim Ashley's Online Code implementation|https://github.com/gwylim/online-code> (various parts of my code are based on this)
 
 This module is part of the GnetRAID project. For project development
 page, see:

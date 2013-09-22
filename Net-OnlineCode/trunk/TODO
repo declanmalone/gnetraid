@@ -2,8 +2,8 @@ List of TODO items (oldest first)
 
 ----------------------------------------------------------------------
 
-Subject: Write unit tests
-Status: pending
+Subject: Write enough unit tests for first release
+Status: done
 
 There are plenty of extended tests in the tests/ directory, but I need
 to have some simpler unit test cases. Besides the usual use/use_ok
@@ -17,10 +17,10 @@ tests for this as there are more tests in the ctest/ directory.
 ----------------------------------------------------------------------
 
 Subject: Gather a list of references
-Status: pending
+Status: done
 
 Basically the wikipedia article and the main papers referenced from
-there.
+there. Also link to Gwylim Ashley's python implementation.
 
 ----------------------------------------------------------------------
 
@@ -75,7 +75,7 @@ Some things may have changed since I started coding, so I have to
 check what I've already written.
 
 The Net::OnlineCode module needs to document what Online Codes are,
-and include references.
+and include references. (done)
 
 I also need to include a warning that the interfaces might change
 between the initial release and subsequent releases. In particular,
@@ -147,9 +147,9 @@ Status: pending
 The usual suspects:
 
 * license details (including copyright year)
-* having useful unit tests
+* having useful unit tests (done)
 * project-specific README
-* $VERSION in each file
+* $VERSION in each file (done)
 * sanity-check MANIFEST file (and try installing from dist tarfile)
 * POD included/up-to-date
 * test on a variety of platforms (x86/x86_64/ARM)
