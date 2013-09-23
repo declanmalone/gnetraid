@@ -5,6 +5,10 @@ use warnings;
 
 use Carp;
 
+use vars qw($VERSION);
+
+$VERSION = '0.01';
+
 use constant DEBUG => 0;
 use constant TRACE => 0;
 
@@ -77,7 +81,7 @@ sub new {
     $self->{deleted}  ->[$i] = 0;
 
     # empty edge structure
-    push $self->{edges}, {};
+    push @{$self->{edges}}, {}; # 5.14
   }
 
   # set up edge structure (same as neighbours, but using hashes)
@@ -232,7 +236,7 @@ sub old_add_check_block {
 
   # store reciprocal links
   foreach my $i (@$nodelist) {
-    push $self->{neighbours}->[$i], $node;
+    push @{$self->{neighbours}->[$i]}, $node;  # 5.14
   }
 
   # return index of newly created node
@@ -462,7 +466,7 @@ sub xor_list {
 	  $xors{$block} = 1;
 	}
       } elsif ($block >= $mblocks) { # aux block
-	push @queue, keys $self->{xor_hash}->[$block];
+	push @queue, keys %{$self->{xor_hash}->[$block]}; # 5.14
       } else {
 	die "BUG: message block found in xor list!\n";
       }
@@ -503,14 +507,14 @@ sub add_check_block {
   # it simplifies the algorithm if each check block is marked as
   # (trivially) being composed of only itself. (this way we don't have
   # to include separate cases for check and aux blocks)
-  push $self->{xor_hash}, { $node => 1};
+  push @{$self->{xor_hash}}, { $node => 1}; # 5.14
 
 
   # likewise, we mark check blocks as solved (ie, having a known value)
   $self->{solved}->[$node]=1;
 
   # store this check block's neighbours
-  push $self->{neighbours},  $nodelist;
+  push @{$self->{neighbours}},  $nodelist;	# 5.14
 
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
@@ -519,14 +523,14 @@ sub add_check_block {
       $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
 
     } else {
-      push $self->{neighbours}->[$i], $node;
+      push @{$self->{neighbours}->[$i]}, $node; # 5.14
 
       $new_hash->{$i} = 1;
       $self->{edges}->[$i]->{$node} = 1;
     }
   }
 
-  push $self->{edges}, $new_hash;
+  push @{$self->{edges}}, $new_hash; # 5.14
 
   # return index of newly created node
   return $node;
@@ -583,7 +587,7 @@ sub resolve {
 
     my ($from, $to) = (shift @pending);
 
-    my @right_nodes = grep { $_ < $from } keys $self->{edges}->[$from];
+    my @right_nodes = grep { $_ < $from } keys %{$self->{edges}->[$from]}; # 5.14
 
     my $right_degree = scalar(@right_nodes);
 
@@ -634,7 +638,7 @@ sub resolve {
       }
 
       # left nodes are to's left nodes
-      my @left_nodes = grep { $_ > $to } keys $self->{edges}->[$to];
+      my @left_nodes = grep { $_ > $to } keys %{$self->{edges}->[$to]}; # 5.14
 
       # mark node as solved
       $self->{solved}->[$to] = 1;

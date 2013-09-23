@@ -142,20 +142,57 @@ appropriate safe/fast routine by default. May be as simple as:
 ----------------------------------------------------------------------
 
 Subject: get modules CPAN-ready
-Status: pending
+Status: done
 
 The usual suspects:
 
-* license details (including copyright year)
+* license details (including copyright year) (done)
 * having useful unit tests (done)
-* project-specific README
+* project-specific README (done)
 * $VERSION in each file (done)
-* sanity-check MANIFEST file (and try installing from dist tarfile)
-* POD included/up-to-date
-* test on a variety of platforms (x86/x86_64/ARM)
+* sanity-check MANIFEST file (and try installing from dist tarfile) (done)
+* POD included/up-to-date (done)
+* test on a variety of platforms (x86/x86_64/ARM) (oops.. forgot)
 
 Afterwards:
 
 * check smoke tests online and fix any problems
+
+
+----------------------------------------------------------------------
+
+Subject: Fix smoke test errors
+Status: pending
+
+Edited error outputs:
+
+#   Failed test 'use Net::OnlineCode::Decoder;'
+#   at t/05_Decoder.t line 4.
+#     Tried to use 'Net::OnlineCode::Decoder'.
+#     Error:  Type of arg 1 to push must be array (not hash element) at GraphDecoder.pm line 80, near "};"
+# Type of arg 1 to push must be array (not array element) at GraphDecoder.pm line 235, near "$node;"
+# Type of arg 1 to keys must be hash or array (not array element) at GraphDecoder.pm line 465, near "];"
+# Type of arg 1 to push must be array (not hash element) at GraphDecoder.pm line 506, near "};"
+# Type of arg 1 to push must be array (not hash element) at GraphDecoder.pm line 513, near "$nodelist;"
+# Type of arg 1 to push must be array (not array element) at GraphDecoder.pm line 522, near "$node;"
+# Type of arg 1 to push must be array (not hash element) at GraphDecoder.pm line 529, near "$new_hash;"
+# Type of arg 1 to keys must be hash or array (not array element) at GraphDecoder.pm line 586, near "];"
+# Type of arg 1 to keys must be hash or array (not array element) at GraphDecoder.pm line 637, near "];"
+# Compilation failed in require at Decoder.pm line 9.
+# BEGIN failed--compilation aborted at Decoder.pm line 9.
+# Compilation failed in require at (eval 4) line 2.
+# BEGIN failed--compilation aborted at (eval 4) line 2.
+# Looks like you failed 1 test of 1.
+t/05_Decoder.t ......... 
+
+All of these are for Perl versions < 5.14. The problem is apparently
+that I'm using hashrefs and arrayrefs and operating on them as if they
+were hashes and arrays. This doesn't work in older versions of
+perl. See perllol/Growing Your Own.
+
+I'll install an old (5.004) version of Perl somewhere and see if I can
+rework the code to use explicit dereferences. In the meantime, I've
+marked all the places where the errors cropped up with the comment
+"5.14".
 
 
