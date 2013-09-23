@@ -135,10 +135,8 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
     foreach my $decoded_block (@decoded) {
       my @xor_list = $decoder->xor_list($decoded_block);
       my $block = $check_blocks[shift @xor_list];
-      foreach my $xor_block (@xor_list) {
-        map { substr($block, $_, 1) ^= substr($check_blocks[$xor_block], $_, 1) }
-          (0 .. $blocksize-1);
-      }
+      fast_xor_strings(\$block, map { $check_blocks[$_] } @xor_list);
+
       # save contents of decoded block
       substr($message, $decoded_block * $blocksize, $blocksize) = $block;
     }
@@ -150,12 +148,13 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
 
 This module implements the "decoder" side of the Online Code algorithm
 for rateless forward error correction. Refer to the L<the
-Net::OnlineCode documentation|Net::OnlineCode> for more technical
-details.
+Net::OnlineCode documentation|Net::OnlineCode> for the technical
+background
 
 
 =head1 SEE ALSO
 
+See L<Net::OnlineCode> for background information on Online Codes.
 
 This module is part of the GnetRAID project. For project development
 page, see:

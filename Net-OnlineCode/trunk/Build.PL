@@ -31,9 +31,9 @@ sub gen_this_machine_h {
 
   if ($matching) {
     my $build_dir = $0;
-    $build_dir =~ s|^(.*)/(.*)|$1/clib|;
+    $build_dir = "./clib" unless $build_dir =~ s|^(.*)/(.*)|$1/clib|;
 
-    die "$build_dir directory is missing!\n" unless -d $build_dir;
+    die "directory $build_dir is missing!\n" unless -d $build_dir;
 
     open (OUT, ">${build_dir}/this_machine.h") or
       die "Failed to write this_machine.h output file\n";
@@ -54,8 +54,8 @@ if (@ARGV > 0 and $ARGV[0] =~ "USE_CUSTOM_TYPEDEFS") {
   warn "OK, skipping attempt to divine proper typedef from \$Config\n";
   shift @ARGV;
 } else {
-  print "Created clib/this_machine.h\n";
   gen_this_machine_h;
+  print "Created clib/this_machine.h\n";
 }
 
 my $builder = Module::Build->new(
@@ -64,8 +64,11 @@ my $builder = Module::Build->new(
     dist_author         => q{Declan Malone <idablack@users.sourceforge.net>},
     dist_version_from   => 'lib/Net/OnlineCode.pm',
     dist_abstract       => 'A rateless forward error correction scheme',
+    configure_requires => {
+			   'Module::Build' => 0.40,
+			  },
     build_requires => {
-        'Module::Build'      => '0.19', # XS
+        'Module::Build'      => '0.40', # XS
 	'ExtUtils::CBuilder' => 0,      # XS
         'Test::More'         => 0,
     },

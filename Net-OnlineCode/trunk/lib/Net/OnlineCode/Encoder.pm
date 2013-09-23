@@ -86,6 +86,7 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
 
 =head1 SYNOPSIS
 
+  use Net::OnlineCode ':xor'
   use Net::OnlineCode::Encoder;
   use strict;
 
@@ -113,10 +114,7 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
 
     # XOR all blocks in xor_list together
     my $block = $blocks[shift @xor_list];
-    foreach my $xor_block (@xor_list) {
-      map { substr($block, $_, 1) ^= substr($blocks[$xor_block], $_, 1) }
-        (0 .. $blocksize-1);
-    }
+    fast_xor_strings(\$block, map { $blocks[$_] } @xor_list);
 
     # Send $msg_id, $block_id and (xored) $block to receiver
     # ...
@@ -191,86 +189,12 @@ The procedure for sending a single check block is as follows:
 
 =item * the user sends the message ID (if multiple messages may be sent at once), the block ID and the check block contents
 
-=head2 EXPORT
-
-
-=head1 TECHNICAL INFORMATION
-
-=head2 BACKGROUND
-
-=head2 ALGORITHMS
-
-
-=head2 FUTURE DIRECTIONS
-
-
-=head2 APPLICATIONS
-
-=head1 KNOWN BUGS
+=back
 
 
 =head1 SEE ALSO
 
-I<http://en.wikipedia.org/wiki/Finite_field_arithmetic>
-
-A (mostly) readable description of arithmetic operations in Galois
-Fields.
-
-I<http://point-at-infinity.org/ssss/>
-
-B. Poettering's implementation of Shamir's secret sharing scheme. This
-uses Galois Fields, and my own implementation of C<gf2_inv> is based
-on this code.
-
-I<"Efficient dispersal of information for security, load balancing,
-and fault tolerance">, by Michael O. Rabin. JACM Volume 36, Issue 2
-(1989).
-
-The initial motivation for writing this module.
-
-I<Introduction to the new AES Standard: Rijndael>, by Paul Donis,
-I<http://islab.oregonstate.edu/koc/ece575/aes/intro.pdf>
-
-Besides the AES info, this is also a very good introduction to
-arithmetic in GF(2^m).
-
-I<"Optimizing Galois Field Arithmetic for Diverse Processor
-Architectures and Applications">, by Kevin M. Greenan, Ethan L. Miller
-and Thomas J. E. Schwarz, S.J. (MASCOTS 2008)
-
-Paper giving an overview of several optimisation techniques for
-calculations in Galois Fields. I have used the optimised log/exp
-technique described therein, and a modified version of the l-r tables
-described (called "high-nibble" and "low-nibble" above) . Comments in
-the paper that optimisations may need to be tailored to the particular
-hardware architecture have been borne out in my testing.
-
-I<http://www.cs.utk.edu/~plank/plank/papers/CS-07-593/>
-
-James S. Plank's C/C++ implementation of optimised Galois Field
-calculations. Although I haven't explored the code in great detail, I
-have used it as a source of benchmarks. In fact, my benchmarking code
-is modelled on this code. Plank's code is much more fully-featured
-than mine, so if that is what you want, I would recommend using it
-instead. If, on the other hand, you want something that's simple,
-doesn't use much memory and is usable from Perl, I recommend this
-module of course.
-
-I<Studies on hardware-assisted implementation of arithmetic operations in
-Galois Field GF(2^m)>, by Katsuki Kobayashi.
-
-Despite being aimed at hardware, this paper also contains a wealth of
-information on software algorithms including several field inversion
-algorithms.
-
-I<http://charles.karney.info/misc/secret.html> Original implementation
-of Shamir's secret sharing algorithm, on which C<shamir-split.pl> and
-C<shamir-combine.pl> are based. These new versions replace the integer
-modulo a prime fields with Galois fields implemented with
-Math::FastGF2.
-
-The L<Math::FastGF2::Matrix> module has a range of Matrix functions to
-operate more efficiently on large blocks of data.
+See L<Net::OnlineCode> for background information on Online Codes.
 
 This module is part of the GnetRAID project. For project development
 page, see:

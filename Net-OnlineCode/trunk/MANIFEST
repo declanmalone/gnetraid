@@ -1,6 +1,7 @@
 Build.PL
 clib/xor.c
 clib/xor.h
+clib/ppport.h
 ctest/gen_this_machine.c
 ctest/Makefile
 ctest/xor_test.c
@@ -9,9 +10,9 @@ lib/Net/OnlineCode/Decoder.pm
 lib/Net/OnlineCode/Encoder.pm
 lib/Net/OnlineCode/GraphDecoder.pm
 lib/Net/OnlineCode/RNG.pm
-lib/Net/OnlineCode/xor.c
-lib/Net/OnlineCode/xor.xs
+lib/Net/OnlineCode.xs
 MANIFEST			This list of files
+MANIFEST.SKIP
 README
 tests/bipartite.pl
 tests/codec.pl
@@ -26,3 +27,11 @@ tests/probdist.pl
 tests/promises.pl
 tests/README
 tests/rng.pl
+Makefile.PL
+META.yml
+META.json
+t/01_RNG.t
+t/02_OnlineCode.t
+t/03_OnlineCode_xor.t
+t/04_Encoder.t
+t/05_Decoder.t

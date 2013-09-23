@@ -49,6 +49,9 @@ You can also look for information at:
 	tests/
 	examples/
 
+    C code that is used to implement fast XORs is in clib/, while
+    tests for the same code is in ctest/
+
 LICENSE AND COPYRIGHT
 
 Copyright (C) 2013 Declan Malone
@@ -56,6 +59,9 @@ Copyright (C) 2013 Declan Malone
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation.
+
+Code under the clib/ directory may be distributed under the terms of
+the Lesser GNU General Public License.
 
 See http://dev.perl.org/licenses/ for more information.
 
