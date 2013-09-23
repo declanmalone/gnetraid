@@ -1,0 +1,7 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/App-Diskd.t
+lib/App/Diskd.pm
+bin/diskd
