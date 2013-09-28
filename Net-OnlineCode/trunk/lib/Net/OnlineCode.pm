@@ -390,9 +390,6 @@ sub _probability_distribution {
   }
 
   return [@P,1];
-
-  # old return:
-  # return ($f, $epsilon, @P, 1);
 }
 
 
@@ -426,8 +423,7 @@ sub fisher_yates_shuffle {
   my $i=scalar(@$array);
   while (--$i >= scalar(@$array) - $picks) {
     my $j=int($rng->rand($i + 1)); # range [0,$i]
-    #rint "fisher: rand j = $j\n";
-    next if $i==$j;
+    #next if $i==$j;	           # not worth checking, probably
     @$array[$i,$j]=@$array[$j,$i]
   }
 
