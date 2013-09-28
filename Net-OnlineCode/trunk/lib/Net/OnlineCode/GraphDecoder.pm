@@ -7,7 +7,7 @@ use Carp;
 
 use vars qw($VERSION);
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 use constant DEBUG => 0;
 use constant TRACE => 0;
@@ -78,7 +78,7 @@ sub new {
     # mark blocks as unsolved, and having no XOR expansion
     $self->{solved}   ->[$i] = 0;
     $self->{xor_hash} ->[$i] = {};
-    $self->{deleted}  ->[$i] = 0;
+#    $self->{deleted}  ->[$i] = 0;
 
     # empty edge structure
     push @{$self->{edges}}, {}; # 5.14
@@ -87,8 +87,8 @@ sub new {
   # set up edge structure (same as neighbours, but using hashes)
   for my $i (0..$mblocks + $ablocks - 1) {
     for my $j (@{$auxlist->[$i]}) {
-      $self->{edges}->[$i]->{$j} = 1;
-      $self->{edges}->[$j]->{$i} = 1;
+      $self->{edges}->[$i]->{$j} = undef;
+      $self->{edges}->[$j]->{$i} = undef;
     }
   }
 
@@ -213,10 +213,6 @@ EOT
 }
 
 
-# the decoding algorithm is divided into two steps. The first adds a
-# new check block to the graph, while the second resolves the graph to
-# discover newly solvable auxiliary or message blocks.
-
 sub old_add_check_block {
   my $self = shift;
   my $nodelist = shift;
@@ -275,7 +271,8 @@ sub old_resolve {
 
     # check for unsolved lower neighbours
     my @unsolved = grep { $_ < $start and !$self->{solved}->[$_]
-		     } @{$self->{neighbours}->[$start]};
+#		     } @{$self->{neighbours}->[$start]}; # phase out neighbours list
+		     } keys %{$self->{edges}->[$start]};
 
     if (@unsolved == 0) {	# bubble up solution for auxiliary block
 
@@ -293,7 +290,8 @@ sub old_resolve {
       $solved = shift @unsolved; # newly solved
       my @solved = grep {		# previously solved
 	$_ < $start and $_ != $solved
-      } @{$self->{neighbours}->[$start]};
+#     } @{$self->{neighbours}->[$start]}; # phase out neighbours list
+      } keys %{$self->{edges}->[$start]};
 
       print "Start node $start can solve node $solved\n";
 
@@ -337,10 +335,12 @@ sub old_resolve {
       unless ($finished) {
 	if (0) {
 	  # queue *everything* to debug this part
-	  @pending = (0..@{$self->{neighbours}});
+	  #	  @pending = (0..@{$self->{neighbours}}); # phase out neighbours list
+	  @pending = (0..@{$self->{edges}}/2);
 	} else {
 	  # queue up the newly solved node and all its neighbouring check nodes
-	  push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};
+#	  push @pending, grep { $_ > $solved } @{$self->{neighbours}->[$solved]};# phase out neighbours list
+	  push @pending, grep { $_ > $solved } keys %{$self->{edges}->[$solved]};
 	  push @pending, $solved unless $self->is_message($solved);
 	}
       }
@@ -350,10 +350,12 @@ sub old_resolve {
   # make sure that all edges that could be solved were
 
   if (0 and !$finished) {
-    for my $left ($mblocks .. scalar($self->{neighbours})) {
+#    for my $left ($mblocks .. scalar($self->{neighbours})) {# phase out neighbours list
+    for my $left ($mblocks .. scalar($self->{edges})/2) {
 
       my @unsolved = grep { $_ < $left and !$self->{solved}->[$_]
-			  } @{$self->{neighbours}->[$left]};
+#			  } @{$self->{neighbours}->[$left]};# phase out neighbours list
+			  } keys %{$self->{edges}->[$left]};
       if (@unsolved == 1) {
 	warn "failed to solve block $left (one unsolved child)\n";
       }
@@ -410,7 +412,7 @@ sub toggle_xor {
   if (exists($href->{$value})) {
     delete $href->{$value};
   } else {
-    $href->{$value} = 1;
+    $href->{$value} = undef;
   }
 }
 
@@ -480,6 +482,9 @@ sub xor_list {
   }
 }
 
+# the decoding algorithm is divided into two steps. The first adds a
+# new check block to the graph, while the second resolves the graph to
+# discover newly solvable auxiliary or message blocks.
 
 # new approach to graph: use explicit edge structure and remove them
 # as we resolve the graph
@@ -493,14 +498,32 @@ sub add_check_block {
   }
 
   # new node number for this check block
-  my $node = scalar @{$self->{neighbours}};
-  #warn "add_check_block: adding new node index $node\n";
+#  my $node = scalar @{$self->{neighbours}}; # phase out neighbours list
+  my $node = scalar @{$self->{edges}};
 
+  # we'll check whether this new block provides any new information by
+  # incrementing unsolved for each unsolved right neighbour
+  my $unsolved = 0;
+  foreach my $i (@$nodelist) {
+    ++$unsolved unless $self->{solved}->[$i];
+  }
+
+  unless ($unsolved) {
+    push @{$self->{edges}}, undef;
+#    push @{$self->{neighbours}}, undef;
+    push @{$self->{xor_hash}}, undef;
+    return 0;
+  }
+
+  #warn "add_check_block: adding new node index $node\n";
   print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
 
   # continue to use the neighbours structure, but use a parallel
   # "edge" structure that stores node numbers in a hash (also
   # reciprocally)
+
+  # store this check block's neighbours (list form)
+#  push @{$self->{neighbours}},  $nodelist;	# 5.14
 
   my $new_hash = {};		# new edge hash for this check block
 
@@ -509,12 +532,8 @@ sub add_check_block {
   # to include separate cases for check and aux blocks)
   push @{$self->{xor_hash}}, { $node => 1}; # 5.14
 
-
-  # likewise, we mark check blocks as solved (ie, having a known value)
+  # also mark check block as solved (ie, having a known value)
   $self->{solved}->[$node]=1;
-
-  # store this check block's neighbours
-  push @{$self->{neighbours}},  $nodelist;	# 5.14
 
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
@@ -523,17 +542,19 @@ sub add_check_block {
       $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
 
     } else {
-      push @{$self->{neighbours}->[$i]}, $node; # 5.14
+#      push @{$self->{neighbours}->[$i]}, $node; # 5.14
 
-      $new_hash->{$i} = 1;
-      $self->{edges}->[$i]->{$node} = 1;
+      $new_hash->{$i} = undef;
+      $self->{edges}->[$i]->{$node} = undef;
     }
   }
 
+  # store edges emanating from checkblock (hash form)
   push @{$self->{edges}}, $new_hash; # 5.14
 
   # return index of newly created node
   return $node;
+
 }
 
 sub delete_edge {
@@ -624,7 +645,15 @@ sub resolve {
       $rule1 = $self->dump_graph_panel("rule1",$from);
     }
 
-    if (@right_nodes == 1) {
+    if (@right_nodes == 0) {
+
+      # if this is a check block, free any memory it uses
+
+      next if $from < $mblocks + $ablocks;
+
+      $self->{xor_hash}->[$node] = undef;
+
+    } elsif (@right_nodes == 1) {
 
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;
@@ -648,9 +677,10 @@ sub resolve {
 	print "Solved message block $to completely\n" if DEBUG;
 	unless (--($self->{unsolved_count})) {
 	  $finished = 1;
-	  # continue decoding just in case there's a bug later
-#	  @pending = ();
-#	  last;			# finish searching
+	  # comment out next two lines to continue decoding just in
+	  # case there's a bug later
+	  @pending = ();
+	  last;			# finish searching
 	}
 
       } else {

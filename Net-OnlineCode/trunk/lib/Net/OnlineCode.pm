@@ -20,7 +20,7 @@ our @export_default = qw();
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = ();
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 # Use XS for fast xors (TODO: make this optional)
 require XSLoader;
@@ -499,8 +499,8 @@ sub auxiliary_mapping {
     #print "aux_mapping: shuffled list: " . (join " ", @$ab) . "\n";
 
     foreach my $aux (@$ab) {
-      $hashes[$aux]->{$msg}=1;
-      $hashes[$msg]->{$aux}=1;
+      $hashes[$aux]->{$msg}=undef;
+      $hashes[$msg]->{$aux}=undef;
     }
   }
 
@@ -531,7 +531,7 @@ sub blklist_to_msglist {
       if (exists($blocks{$entry})) {
 	delete $blocks{$entry};
       } else {
-	$blocks{$entry}=1;
+	$blocks{$entry}= undef;
       }
     } else {
       # aux block : push all message blocks it's composed of
@@ -556,7 +556,9 @@ sub toggle_key {
   if (exists($href->{$key})) {
     delete $href->{$key};
   } else {
-    $href->{$key}=1;
+    # apparently, using key => undef is more space-efficient than
+    # using key => 1 (similar changes made throughout this file)
+    $href->{$key}=undef;
   }
 }
 
@@ -647,7 +649,7 @@ sub checkblock_mapping {
   }
 
   # prevent generating this block again
-  $self->{unique}->{$key}=1;
+  $self->{unique}->{$key}=undef;
 
   #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
 

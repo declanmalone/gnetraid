@@ -15,7 +15,7 @@ require Exporter;
 @ISA = qw(Net::OnlineCode Exporter);
 @EXPORT_OK = qw();
 
-$VERSION = '0.01';
+$VERSION = '0.02';
 
 sub new {
 
@@ -124,8 +124,8 @@ Net::OnlineCode::Encoder - Rateless Forward Error Correction Encoder
 
 This module implements the "encoder" side of the Online Code algorithm
 for rateless forward error correction. Refer to the L<the
-Net::OnlineCode documentation|Net::OnlineCode> for more technical
-details.
+Net::OnlineCode documentation|Net::OnlineCode> for the technical
+background.
 
 The basic outline for how the encoder works is follows:
 

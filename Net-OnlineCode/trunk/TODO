@@ -69,7 +69,7 @@ router and have a slower network.
 ----------------------------------------------------------------------
 
 Subject: get POD documentation into shape
-Status: pending
+Status: done
 
 Some things may have changed since I started coding, so I have to
 check what I've already written.
@@ -162,7 +162,7 @@ Afterwards:
 ----------------------------------------------------------------------
 
 Subject: Fix smoke test errors
-Status: pending
+Status: done
 
 Edited error outputs:
 
@@ -195,4 +195,26 @@ rework the code to use explicit dereferences. In the meantime, I've
 marked all the places where the errors cropped up with the comment
 "5.14".
 
+Rather than test with older version of Perl (which proved impossible
+with my distro without installing from source), I've just put the
+appropriate @{} and %{} casts around the offending items.
+
+The other problem that I can deduce from the cpantester reports is
+that I was using 'integer-type int' in my Build.PL. This works fine
+for "short int", "long int" and so on, but obviously fails for "int
+int", which isn't a C type.
+
+----------------------------------------------------------------------
+
+Subject: Write a more memory-efficient Set module
+Status: pending
+
+None of the alternatives look like they're particularly geared to
+reducing the memory footprint. Set::Light is supposed to be but I
+gather from reading the man page that it's effectively only using
+regular hashes to implement set membership. I'm inclined to implement
+a solution based on compressing the set contents in memory using Rice
+encoding:
+
+ http://giovanni.bajo.it/post/47119962313/golomb-coded-sets-smaller-than-bloom-filters
 
