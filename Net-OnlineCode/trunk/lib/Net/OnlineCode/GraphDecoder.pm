@@ -471,11 +471,14 @@ sub resolve {
 
     if (@right_nodes == 0) {
 
-      # if this is a check block, free any memory it uses
-
+      # if this is a check block with no unsolved right nodes, free
+      # any memory it uses
       next if $from < $mblocks + $ablocks;
 
       $self->{xor_hash}->[$node] = undef;
+      foreach my $to (@merge_list) {
+	$self->delete_edge($from,$to);
+      }
 
     } elsif (@right_nodes == 1) {
 
