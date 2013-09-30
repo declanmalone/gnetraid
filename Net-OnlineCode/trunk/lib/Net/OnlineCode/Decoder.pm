@@ -86,6 +86,11 @@ sub xor_list {
   my $self = shift;
   my $i = shift;
 
+  return ($self->{graph}->xor_list($i));
+
+  # algorithm will no longer return just composite blocks
+
+
   my $coblocks = $self->get_coblocks;
 
   # the graph object assigns check blocks indexes after the composite

@@ -77,6 +77,7 @@ die "Failed to create encoder. Quitting\n" unless ref($enc);
 my $e = $enc->get_e;
 my $q = $enc->get_q;
 my $f = $enc->get_f;
+my $coblocks = $enc->get_coblocks;
 
 print "Encoder parameters:\ne= $e, q = $q, f=$f\n";
 print "Expected number of check blocks: " .
@@ -149,9 +150,20 @@ until ($done) {
     print "Decoded message block $decoded_block is composed of: ",
       (join ", ", @dec_xor_list) . "\n";
 
-    my $block = $check_blocks[shift @dec_xor_list];
+    my ($block, $i);
+    $i = shift @dec_xor_list;
+    if ($i >= $mblocks) {
+      $block = $check_blocks[$i - $coblocks];
+    } else {
+      $block = substr($ostring,  $blksiz * $i, $blksiz);
+    }
     foreach my $xor_block (@dec_xor_list) {
-      xor_strings(\$block, $check_blocks[$xor_block]);
+      if ($xor_block >= $coblocks) {
+	xor_strings(\$block, $check_blocks[$xor_block - $coblocks]);
+      } else {
+	xor_strings(\$block,
+		substr($ostring,  $blksiz * $xor_block, $blksiz));
+      }
     }
     print "Decoded message block: '$block'\n";
 

@@ -307,7 +307,12 @@ sub xor_list {
       } elsif ($block >= $mblocks) { # aux block
 	push @queue, keys %{$self->{xor_hash}->[$block]}; # 5.14
       } else {
-	die "BUG: message block found in xor list!\n";
+#	die "BUG: message block found in xor list!\n";
+	if (exists($xors{$block})) {
+	  delete $xors{$block};
+	} else {
+	  $xors{$block} = 1;
+	}
       }
     }
 	
@@ -357,16 +362,20 @@ sub add_check_block {
 
   # it simplifies the algorithm if each check block is marked as
   # (trivially) being composed of only itself. (this way we don't have
-  # to include separate cases for check and aux blocks)
-  push @{$self->{xor_hash}}, { $node => undef}; # 5.14
+  # to include separate cases for check and aux blocks) (not necessary
+  # any more)
+
+#  push @{$self->{xor_hash}}, { $node => undef}; # 5.14
+  push @{$self->{xor_hash}}, { }; # 5.14
 
   # also mark check block as solved (ie, value is known)
   $self->{solved}->[$node]=1;
 
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
-    if ($self->{solved}->[$i]) {
-      $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
+    if (0 and $self->{solved}->[$i]) {
+#      $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
+      $self->{xor_hash}->[$node]->{$i} = undef;
     } else {
       $new_hash->{$i} = undef;
       $self->{edges}->[$i]->{$node} = undef;
@@ -453,6 +462,7 @@ sub resolve {
       $original = $self->dump_graph_panel("original",$from);
     }
 
+#    my @merge_list =(keys %{$self->{xor_hash}->[$from]});
     my @merge_list =($from);
     while ($right_degree--) {
       my $to = shift @right_nodes;
@@ -470,6 +480,7 @@ sub resolve {
     }
 
     if (@right_nodes == 0) {
+      next;
 
       # if this is a check block with no unsolved right nodes, free
       # any memory it uses
@@ -489,7 +500,8 @@ sub resolve {
 
       $self->delete_edge($from,$to);
       foreach my $i (@merge_list) {
-	$self->merge_xor_hash($to, $self->{xor_hash}->[$i]);
+#	$self->merge_xor_hash($to, $self->{xor_hash}->[$i]);
+	$self->{xor_hash}->[$to]->{$i}=undef;
 	$self->delete_edge($from,$i);
       }
 
