@@ -177,7 +177,9 @@ sub new {
   my $self = { q => $q, e => $e, f => $f, P => $P,
 	       mblocks => $mblocks, ablocks => $ablocks,
                chblocks => 0, expand_aux=> $args{expand_aux},
-	       e_changed => $e_changed, unique => {} };
+	       e_changed => $e_changed, unique => {},
+	       fisher_string => pack("L*", (0 .. $mblocks + $ablocks -1)),
+	     };
 
   print "expand_aux => $self->{expand_aux}\n" if DEBUG;
 
@@ -407,29 +409,29 @@ sub fisher_yates_shuffle {
 
   my ($rng, $array, $picks) = @_;
 
-  #print "picks is $picks\n";
-
   die "fisher_yates_shuffle: 1st arg not an RNG object\n"
     unless ref($rng);
 
-  die "fisher_yates_shuffle: 2nd arg not a listref\n"
-    unless ref($array) eq "ARRAY";
+  # length in 32-bit words
+  my $len = length($array) >> 2;
 
   # Change recipe to pick subset of list
-  $picks=scalar(@$array) unless
-    defined($picks) and $picks >=0 and $picks<scalar(@$array);
+  $picks=$len unless
+    defined($picks) and $picks >= 0;
 
   # algorithm fills picks into the end of the array
-  my $i=scalar(@$array);
-  while (--$i >= scalar(@$array) - $picks) {
+  my $i=$len;
+  while (--$i >= $len - $picks) {
     my $j=int($rng->rand($i + 1)); # range [0,$i]
     #next if $i==$j;	           # not worth checking, probably
-    @$array[$i,$j]=@$array[$j,$i]
+    #    @$array[$i,$j]=@$array[$j,$i]
+    my $tmp1 = substr $array, $i << 2, 4;
+    my $tmp2 = substr $array, $j << 2, 4;
+    substr $array, $i << 2, 4, $tmp2;
+    substr $array, $j << 2, 4, $tmp1;
   }
 
-  # delete unpicked elements from the front of the array
-  # (does nothing if picks == length of the array)
-  splice @$array, 0, (scalar @$array - $picks);
+  return (unpack "L*", substr $array, ($len - $picks) << 2);
 }
 
 #
@@ -482,19 +484,16 @@ sub auxiliary_mapping {
 
   my $aux_mapping = [];
 
+  my $ab_string = pack "L*", ($mblocks .. $mblocks + $ablocks -1);
+
   # list of empty hashes
   my @hashes;
   for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
 
   for my $msg (0 .. $mblocks - 1) {
     # list of all aux block indices
-    my $ab = [$mblocks .. $mblocks + $ablocks -1];
 
-    fisher_yates_shuffle($rng, $ab, $q);
-
-    #print "aux_mapping: shuffled list: " . (join " ", @$ab) . "\n";
-
-    foreach my $aux (@$ab) {
+    foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
       $hashes[$aux]->{$msg}=undef;
       $hashes[$msg]->{$aux}=undef;
     }
@@ -505,8 +504,6 @@ sub auxiliary_mapping {
     print "map $i: " . (join " ", keys %{$hashes[$i]}) . "\n" if DEBUG;
     push @$aux_mapping, [ keys %{$hashes[$i]} ];
   }
-
-  #print "auxiliary_mapping: leaving RNG value: " . ($rng->as_hex). "\n";
 
   # save and return aux_mapping
   $self->{aux_mapping} = $aux_mapping;
@@ -594,6 +591,7 @@ sub checkblock_mapping {
 
   my $mblocks = $self->{mblocks}; # quicker than calling is_message
   my %expanded=();
+  my @unpacked;
   my $tries = 0;
   my $key;			# used for uniqueness-checking
   until (keys %expanded) {
@@ -611,11 +609,12 @@ sub checkblock_mapping {
     #warn "picked $i values for checkblock (from $coblocks)\n";
 
     # select i composite blocks uniformly
-    $check_mapping = [ (0 .. $coblocks-1) ];
-    fisher_yates_shuffle($rng, $check_mapping, $i);
+#    $check_mapping = [ (0 .. $coblocks-1) ];
+#    print "Calling fisher 2\n";
+    @unpacked = fisher_yates_shuffle($rng, $self->{fisher_string}, $i);
 
     # check block for uniqueness before expansion
-    $key = join " ", sort { $a <=> $b } @$check_mapping;
+    $key = join " ", sort { $a <=> $b } @unpacked;
     if (exists $self->{unique}->{$key}) {
       warn "quashed duplicate check block\n" if DEBUG;
       next;
@@ -625,7 +624,7 @@ sub checkblock_mapping {
     #  (join " ", @$check_mapping), "\n";
 
     # check expanded list
-    my @xor_list = @$check_mapping;
+    my @xor_list = @unpacked;
     while (@xor_list) {
       my $entry = shift @xor_list;
       if ($entry < $mblocks) { # is it a message block index?
@@ -649,13 +648,13 @@ sub checkblock_mapping {
 
   #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
 
-  die "fisher_yates_shuffle: created empty check block\n!" unless @$check_mapping;
+  die "fisher_yates_shuffle: created empty check block\n!" unless @unpacked;
 
   ++($self->{chblocks});
 
-  print "CHECKblock mapping: " . (join " ", @$check_mapping) . "\n" if DEBUG;
+  print "CHECKblock mapping: " . (join " ", @unpacked) . "\n" if DEBUG;
 
-  return $check_mapping;
+  return [@unpacked];
 
 }
 
