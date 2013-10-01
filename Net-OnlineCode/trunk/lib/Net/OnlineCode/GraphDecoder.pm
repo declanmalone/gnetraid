@@ -441,17 +441,26 @@ sub resolve {
 
     my ($from, $to) = (shift @pending);
 
-    my @right_nodes = grep { $_ < $from } keys %{$self->{edges}->[$from]}; # 5.14
-
-    my $right_degree = scalar(@right_nodes);
-
-    print "Starting node: $from has right nodes: " . (join " ", @right_nodes)
-      . "\n" if DEBUG;
-
     unless ($self->{solved}->[$from]) {
       print "skipping unsolved from node $from\n" if DEBUG;
       next;
     }
+
+    my @right_nodes;
+    my @merge_list = ($from);
+
+    foreach $to (keys %{$self->{edges}->[$from]}) {
+      next unless $to < $from;
+      if ($self->{solved}->[$to]) {
+	push @merge_list, $to;
+      } else {
+	push @right_nodes, $to;	# unsolved
+	last if @right_nodes > 1; # optimisation
+      }
+    }
+
+    print "Starting node: $from has right nodes: " . (join " ", @right_nodes)
+      . "\n" if DEBUG;
 
     my $original;
     my $rule1="";
@@ -463,8 +472,7 @@ sub resolve {
     }
 
 #    my @merge_list =(keys %{$self->{xor_hash}->[$from]});
-    my @merge_list =($from);
-    while ($right_degree--) {
+    while (0) { # $right_degree--) {
       my $to = shift @right_nodes;
       if ($self->{solved}->[$to]) {
 	push @merge_list, $to;
