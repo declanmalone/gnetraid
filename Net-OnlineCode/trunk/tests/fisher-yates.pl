@@ -123,8 +123,9 @@ my @bin_counts = ((0) x $bins);
 for (1..$trials) {
 
   my $array = [ 1 .. $size ];
+  my $string = pack("L*", (1 .. $size) );  # fisher-yates has changed
 
-  Net::OnlineCode::fisher_yates_shuffle($rng, $array, $picks);
+  @{$array} = Net::OnlineCode::fisher_yates_shuffle($rng, $string, $picks);
 
   correctness_check($picks, $array);
 
