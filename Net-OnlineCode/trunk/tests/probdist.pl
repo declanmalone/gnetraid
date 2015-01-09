@@ -11,9 +11,9 @@ print "Testing: PROBABILITY\n";
 
 my ($test_eps,$test_q,$blocks);
 
-for $test_eps (0.01, 0.001, 0.1) {
-  for $test_q (3, 4, 7) {
-    for $blocks (1, 2, 1000) {
+for $test_eps (0.01) {
+  for $test_q (3) {
+    for $blocks (5000, 32_000, 100_000) {
 
       my $online = new
 	Net::OnlineCode(

@@ -267,7 +267,12 @@ sub _max_degree {
   my $delta = 0.55 * $epsilon;
   #$quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
 
-  return int(ceil($quotient));
+  # who says F has to be int?
+  #return $quotient;
+
+  # obiwan?
+  return int($quotient);
+  return int(ceil($quotient)); # original line
 }
 
 # Functions relating to probability distribution
@@ -482,21 +487,57 @@ sub auxiliary_mapping {
   # list to the graph decoder (which will have to be modified
   # appropriately).
 
-  my $aux_mapping = [];
+  # After coming back to this project after a while, I thought that I
+  # might have discovered why the various promises in the paper were
+  # not being honoured. It may be due to some auxiliary blocks being
+  # either duplicates of some other aux. block, or because they're
+  # actually blank (with no attached message blocks). I'm adding the
+  # check here as a quick test of that theory and iterating several
+  # times until I'm sure that each auxiliary block is distinct and
+  # non-empty.
 
-  my $ab_string = pack "L*", ($mblocks .. $mblocks + $ablocks -1);
-
-  # list of empty hashes
+  my $aux_mapping;
+  my $ab_string;
+  my $tries=1;
   my @hashes;
-  for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
 
-  for my $msg (0 .. $mblocks - 1) {
-    # list of all aux block indices
+  outer: while (1) {
+  
+    $aux_mapping = [];
+    $ab_string = pack "L*", ($mblocks .. $mblocks + $ablocks -1);
+    @hashes = ();
 
-    foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
-      $hashes[$aux]->{$msg}=undef;
-      $hashes[$msg]->{$aux}=undef;
+    # hashes (attaching blocks to other blocks) are initially empty
+    for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
+
+    for my $msg (0 .. $mblocks - 1) {
+      foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
+        $hashes[$aux]->{$msg}=undef;
+        $hashes[$msg]->{$aux}=undef;
+      }
     }
+
+    # validity check
+    my %seen_mappings = ();  # keys formed from sorted list of blocks
+    for my $aux ($mblocks .. $mblocks + $ablocks -1) {
+       my $blocklist = join " ", sort keys %{$hashes[$aux]};
+       my $bad = 0;
+       $bad++ if $blocklist eq "";
+       $bad++ if exists($seen_mappings{$blocklist});
+       if ($bad) {
+	 warn "Bad Auxiliary mapping detected (try $tries)\n";
+         next outer;
+       }
+       $seen_mappings{$blocklist}=undef;
+    }
+
+    ++$tries;
+    last if $tries < 20;
+
+  }
+
+  if ($tries > 20) {
+     die "Failed multiple times to produce distinct, non-empty aux blocks\n";
   }
 
   # convert list of hashes into a list of lists
@@ -504,6 +545,7 @@ sub auxiliary_mapping {
     print "map $i: " . (join " ", keys %{$hashes[$i]}) . "\n" if DEBUG;
     push @$aux_mapping, [ keys %{$hashes[$i]} ];
   }
+  
 
   # save and return aux_mapping
   $self->{aux_mapping} = $aux_mapping;
