@@ -9,6 +9,9 @@
 #define OC_RNG_BITS 160
 #define OC_RNG_BYTES 20
 
+// file to read random byte from (assumes Unix-like system)
+#define OC_RANDOM_SOURCE "/dev/urandom"
+
 typedef struct {
 
   char seed[OC_RNG_BYTES];
@@ -19,15 +22,13 @@ typedef struct {
 
 
 
-void oc_rng_init(oc_rng_sha1 *);
-void oc_rng_init_seed(oc_rng_sha1 *);
-void oc_rng_init_random(oc_rng_sha1 *);
+void oc_rng_init(oc_rng_sha1 *rng);
+void oc_rng_init_seed(oc_rng_sha1 *rng, const char *seed);
+void oc_rng_init_random(oc_rng_sha1 *rng);
 
-unsigned oc_rng_random_uuid(void);
+int oc_rng_random_uuid(char *dest);
 
 float oc_rng_rand(oc_rng_sha1 *rng, float max);
-
-
 
 void oc_rng_advance(oc_rng_sha1 *rng);
 
