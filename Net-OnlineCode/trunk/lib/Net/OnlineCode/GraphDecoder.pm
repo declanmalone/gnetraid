@@ -9,7 +9,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.02';
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 use constant TRACE => 0;
 
 # Implements a data structure for decoding the bipartite graph (not
@@ -331,6 +331,10 @@ sub xor_list {
 # new approach to graph: use explicit edge structure and remove them
 # as we resolve the graph
 
+# This routine returns either a node number or zero if it didn't add
+# any new information. In the latter case, the calling routine
+# (accept_check_block) shouldn't do anything.
+
 sub add_check_block {
   my $self = shift;
   my $nodelist = shift;
@@ -339,51 +343,54 @@ sub add_check_block {
     croak ref($self) . "->add_check_block: nodelist should be a listref!\n";
   }
 
-  # new node number for this check block
-  my $node = $self->{nodes}++;
-
   # we'll check whether this new block provides any new information by
-  # incrementing unsolved for each unsolved right neighbour
+  # incrementing unsolved for each unsolved right neighbour. As we go,
+  # we'll populate some temporary structures that will be incorporated
+  # into the main data structure only if it turns out that this block
+  # adds some new information.
+
+  my @xor_list;			# previously-solved message/aux blocks
+  my $new_hash={};		# our side of the new graph edges
+  my @reciprocal=();		# nodes on the other side of edges
+
   my $unsolved = 0;
   foreach my $i (@$nodelist) {
-    ++$unsolved unless $self->{solved}->[$i];
-  }
-
-  unless ($unsolved) {
-    push @{$self->{edges}}, undef;
-    push @{$self->{xor_hash}}, undef;
-    return 0;
-  }
-
-  #warn "add_check_block: adding new node index $node\n";
-  print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
-
-  my $new_hash = {};		# new edge hash for this check block
-
-  # it simplifies the algorithm if each check block is marked as
-  # (trivially) being composed of only itself. (this way we don't have
-  # to include separate cases for check and aux blocks) (not necessary
-  # any more)
-
-#  push @{$self->{xor_hash}}, { $node => undef}; # 5.14
-  push @{$self->{xor_hash}}, { }; # 5.14
-
-  # also mark check block as solved (ie, value is known)
-  $self->{solved}->[$node]=1;
-
-  # store edges, reciprocal links
-  foreach my $i (@$nodelist) {
-    if (0 and $self->{solved}->[$i]) {
-#      $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
-      $self->{xor_hash}->[$node]->{$i} = undef;
-    } else {
-      $new_hash->{$i} = undef;
-      $self->{edges}->[$i]->{$node} = undef;
+    if ($self->{solved}->[$i]) {
+      push @xor_list, $i;
+    }  else {
+      ++$unsolved;
+      push @reciprocal, $i;
     }
   }
 
-  # store edges emanating from checkblock (hash form)
-  push @{$self->{edges}}, $new_hash; # 5.14
+  unless ($unsolved) {
+    warn "New check block is fully solved already : [ " .
+      (join (", ", @$nodelist)) . " ]\n";
+    return 0;
+  }
+
+  # we're good to go: this new block adds information
+
+  # new node number for this check block
+  my $node = $self->{nodes}++;
+
+  print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
+  print "of which, these are still unsolved: " . (join " ", @reciprocal) . "\n" if DEBUG;
+
+  push @{$self->{xor_hash}}, { };
+  $self->{solved}->[$node]=1;  # mark check block as solved (unneeded?)
+  push @{$self->{edges}}, {};
+
+  # store edges, reciprocal links
+  foreach my $i (@reciprocal) {
+    $self->{edges}->[$node]->{$i} = undef;
+    $self->{edges}->[$i]->{$node} = undef;
+  }
+
+  # store already-solved blocks
+  foreach my $i (@xor_list) {
+    $self->{xor_hash}->[$node]->{$i} = undef;
+  }
 
   # return index of newly created node
   return $node;
@@ -449,13 +456,15 @@ sub resolve {
     my @right_nodes;
     my @merge_list = ($from);
 
+    my $count_right = 0;
     foreach $to (keys %{$self->{edges}->[$from]}) {
       next unless $to < $from;
       if ($self->{solved}->[$to]) {
 	push @merge_list, $to;
       } else {
+#	last if ++$count_right > 1; # optimisation
+	++$count_right;
 	push @right_nodes, $to;	# unsolved
-	last if @right_nodes > 1; # optimisation
       }
     }
 
@@ -471,23 +480,13 @@ sub resolve {
       $original = $self->dump_graph_panel("original",$from);
     }
 
-#    my @merge_list =(keys %{$self->{xor_hash}->[$from]});
-    while (0) { # $right_degree--) {
-      my $to = shift @right_nodes;
-      if ($self->{solved}->[$to]) {
-	push @merge_list, $to;
-      } else {
-	push @right_nodes, $to;	# unsolved
-      }
-    }
-
     print "Unsolved right degree: " . scalar(@right_nodes) . "\n" if DEBUG;
 
     if (TRACE) {
       $rule1 = $self->dump_graph_panel("rule1",$from);
     }
 
-    if (@right_nodes == 0) {
+    if ($count_right == 0) {
       next;
 
       # if this is a check block with no unsolved right nodes, free
@@ -499,7 +498,7 @@ sub resolve {
 	$self->delete_edge($from,$to);
       }
 
-    } elsif (@right_nodes == 1) {
+    } elsif ($count_right == 1) {
 
       # we have found a node that matches the propagation rule
       $to = shift @right_nodes;

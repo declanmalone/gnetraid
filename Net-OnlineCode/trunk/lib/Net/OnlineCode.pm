@@ -611,7 +611,8 @@ sub checkblock_mapping {
     # select i composite blocks uniformly
 #    $check_mapping = [ (0 .. $coblocks-1) ];
 #    print "Calling fisher 2\n";
-    @unpacked = fisher_yates_shuffle($rng, $self->{fisher_string}, $i);
+    my $string = $self->{fisher_string};
+    @unpacked = fisher_yates_shuffle($rng, $string , $i);
 
     # check block for uniqueness before expansion
     $key = join " ", sort { $a <=> $b } @unpacked;
@@ -631,26 +632,32 @@ sub checkblock_mapping {
 	# toggle entry
 	toggle_key (\%expanded, $entry);
       } else {
+
 	# aux block : push all message blocks it's composed of. Since
 	# we're sharing the aux_mapping structure with the decoder, we
 	# have to filter out any entries it's putting in (ie,
 	# composite blocks) or we can get into an infinite loop
-	my @expanded = grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]};
+
+	foreach (grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]}) {
+	  toggle_key (\%expanded, $_);
+	}
+
+	#my @expanded = grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]};
 	#print "check_mapping: expanding aux block $entry to ", 
 	#  (join " ", @expanded), "\n";
-	push @xor_list, @expanded;
+	#push @xor_list, @expanded;
       }
     }
   }
 
   # prevent generating this block again
-  $self->{unique}->{$key}=undef;
+  #$self->{unique}->{$key}=undef;
 
   #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
 
   die "fisher_yates_shuffle: created empty check block\n!" unless @unpacked;
 
-  ++($self->{chblocks});
+#  ++($self->{chblocks});
 
   print "CHECKblock mapping: " . (join " ", @unpacked) . "\n" if DEBUG;
 
