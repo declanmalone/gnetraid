@@ -631,7 +631,7 @@ sub resolve {
 
 	  map { $self->toggle_xor($to,$_) } $self->xor_hash_list($i);
 	} else {
-	  print "Direct insertion of aux/check block $i into $from\n" 
+	  print "Direct insertion of aux/check block $i into $to\n" 
 	    if DEBUG;
 	  $self->toggle_xor($to,$i);
 	}
