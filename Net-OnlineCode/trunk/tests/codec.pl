@@ -160,9 +160,12 @@ until ($done) {
     for my $i (@dec_xor_list) {
       if ($i < $mblocks) {
 	die "codec: got a message block as part of an expansion\n";
-      } elsif ($i > $coblocks) { # check block
+      } elsif ($i >= $coblocks) { # check block
+	print "DECODER: XORing block $i (check block) into $decoded_block\n";
+	print "(check block # " . ($i - $coblocks) . "\n";
 	xor_strings(\$block, $check_blocks[$i - $coblocks]);
       } else {			# auxiliary block
+	print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
 	xor_strings(\$block, $decoded_ablocks[$i - $ablocks]);
       }
     }
