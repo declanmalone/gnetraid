@@ -162,7 +162,9 @@ until ($done) {
 	die "codec: got a message block as part of an expansion\n";
       } elsif ($i >= $coblocks) { # check block
 	print "DECODER: XORing block $i (check block) into $decoded_block\n";
-	print "(check block # " . ($i - $coblocks) . ")\n";
+<<<<<<< HEAD
+	print "(check block # " . ($i - $coblocks) . "\n";
+>>>>>>> e806428ce02ef3fb20fe5c7e13fb410bc59ade71
 	xor_strings(\$block, $check_blocks[$i - $coblocks]);
       } else {			# auxiliary block
 	print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
