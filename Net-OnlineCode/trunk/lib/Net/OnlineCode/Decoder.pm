@@ -78,15 +78,8 @@ sub accept_check_block {
   ++($self->{chblocks});
 
   # print "Decoder: Resolving graph\n";
-  my ($done, @which) = ($self->{graph}->resolve($check_node));
+  ($self->{graph}->resolve($check_node));
 
-  # print "Decoder: Returning from accept_check_block\n";
-#  if ($self->{expand_aux}) {
-#    # user doesn't care about aux blocks if expand_aux is on
-#    return ($done, grep { $_ < $self->{mblocks} } @which );
-#  } else {
-    return ($done, @which);
-#  }
 }
 
 # expand_aux already handled in graph object

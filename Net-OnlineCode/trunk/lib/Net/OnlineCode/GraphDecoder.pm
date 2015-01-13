@@ -143,11 +143,14 @@ sub incorporate_solved {
 
     print "Incorporating expansion of message block $solved into $node\n" 
       if DEBUG;
-    map { $self->toggle_xor($node,$solved) } $self->xor_hash_list($solved);
+    map { $self->toggle_xor($node,$_) } $self->xor_hash_list($solved);
+
   } else {
+
     print "Incorporating auxiliary block number $solved into $node\n" if DEBUG;
     $self->toggle_xor($node,$solved);
-  }  
+  }
+
 }
 
 # Rather than referring to left and right neighbours, I used the
@@ -265,6 +268,9 @@ sub toggle_xor {
   } else {
     $href->{$member} = undef;
   }
+
+  print "Updated XOR list: " . (join ", ", sort $self->xor_hash_list($node)) . "\n";
+
 }
 
 # toggle all keys from a hashref into a solved node
@@ -359,9 +365,9 @@ sub add_check_block {
 
   # we'll check whether this new block provides any new information by
   # incrementing unsolved for each unsolved right neighbour. As we go,
-  # we'll populate some temporary structures that will be incorporated
-  # into the main data structure only if it turns out that this block
-  # adds some new information.
+  # we'll populate some temporary structures that will be put into the
+  # main data structure only if it turns out that this block adds some
+  # new information.
 
   my $new_hash={};		# our side of the new graph edges
 
@@ -618,7 +624,17 @@ sub resolve {
       foreach my $i ($from, $self->xor_hash_list($from)) {
 	print "=> Adding $to to XOR list\n" if DEBUG;
 
-	$self->toggle_xor($to,$i);
+	if ($self->is_message($i)) {
+	  print "Expanding solution of message block $i into $from\n" 
+	    if DEBUG;
+
+	  map { $self->toggle_xor($to,$_) } $self->xor_hash_list($i);
+	} else {
+	  print "Direct insertion of aux/check block $i into $from\n" 
+	    if DEBUG;
+	  $self->toggle_xor($to,$i);
+	}
+
 	$self->delete_edge($from,$i);
       }
 

@@ -137,6 +137,8 @@ until ($done) {
   my @decoded;
   ($done,@decoded)  = $dec->accept_check_block($drng);
 
+  next unless @decoded;
+
   # right now I don't have a way to check that the check block was
   # composed the same was as in the decoder. That information is
   # stored in the decoder's graph object, though.
