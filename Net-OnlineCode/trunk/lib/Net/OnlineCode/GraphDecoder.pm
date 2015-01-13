@@ -308,6 +308,7 @@ sub xor_list {
     unless defined($i);
 
   my $href   = $self->{xor_hash}->[$i];
+  return (keys %$href);
 
   if (0 and $self->{expand_aux}) {
 
