@@ -309,7 +309,7 @@ sub xor_list {
 
   my $href   = $self->{xor_hash}->[$i];
 
-  if ($self->{expand_aux}) {
+  if (0 and $self->{expand_aux}) {
 
     my $mblocks  = $self->{mblocks};
     my $coblocks = $self->{coblocks};
