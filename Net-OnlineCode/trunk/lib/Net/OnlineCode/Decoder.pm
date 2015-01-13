@@ -67,7 +67,7 @@ sub accept_check_block {
   # print "Decoder: calling checkblock_mapping\n";
   my $composite_blocks = $self->checkblock_mapping($rng);
 
-  print "Decoder check block $self->{node}: " . (join " ", @$composite_blocks) . "\n" if DEBUG;
+  print "Decoder check block: " . (join " ", @$composite_blocks) . "\n" if DEBUG;
 
   # print "Decoder: Adding check block to graph\n";
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
@@ -81,12 +81,12 @@ sub accept_check_block {
   my ($done, @which) = ($self->{graph}->resolve($check_node));
 
   # print "Decoder: Returning from accept_check_block\n";
-  if ($self->{expand_aux}) {
-    # user doesn't care about aux blocks if expand_aux is on
-    return ($done, grep { $_ < $self->{mblocks} } @which );
-  } else {
+#  if ($self->{expand_aux}) {
+#    # user doesn't care about aux blocks if expand_aux is on
+#    return ($done, grep { $_ < $self->{mblocks} } @which );
+#  } else {
     return ($done, @which);
-  }
+#  }
 }
 
 # expand_aux already handled in graph object

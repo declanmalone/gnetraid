@@ -28,7 +28,7 @@ XSLoader::load('Net::OnlineCode', $VERSION);
 
 # on to our stuff ...
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 
 # Codec parameters
@@ -388,7 +388,7 @@ sub _probability_distribution {
     # know there is a problem with the assumption!
     my $p_last = $sum + $pfterm / ($f * $f - $f);
     my $absdiff = abs (1 - $p_last);
-    warn "Absolute difference of 1,sum to p_F = $absdiff\n";
+    warn "Absolute difference of 1,sum to p_F = $absdiff\n" if $absdiff >1e-8;
   }
 
   return [@P,1];
