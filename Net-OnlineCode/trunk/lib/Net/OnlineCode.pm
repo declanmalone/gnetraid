@@ -28,7 +28,7 @@ XSLoader::load('Net::OnlineCode', $VERSION);
 
 # on to our stuff ...
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 
 # Codec parameters

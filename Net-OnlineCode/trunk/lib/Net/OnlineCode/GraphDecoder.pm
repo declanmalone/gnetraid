@@ -9,7 +9,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.02';
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 use constant TRACE => 0;
 
 # Implements a data structure for decoding the bipartite graph (not
@@ -365,15 +365,15 @@ sub add_check_block {
   # to include separate cases for check and aux blocks) (not necessary
   # any more)
 
-#  push @{$self->{xor_hash}}, { $node => undef}; # 5.14
-  push @{$self->{xor_hash}}, { }; # 5.14
+  push @{$self->{xor_hash}}, { $node => undef}; # 5.14
+#  push @{$self->{xor_hash}}, { }; # 5.14
 
   # also mark check block as solved (ie, value is known)
   $self->{solved}->[$node]=1;
 
   # store edges, reciprocal links
   foreach my $i (@$nodelist) {
-    if (0 and $self->{solved}->[$i]) {
+    if ($self->{solved}->[$i]) { # why not work???
 #      $self->merge_xor_hash($node,$self->{xor_hash}->[$i]);
       $self->{xor_hash}->[$node]->{$i} = undef;
     } else {
@@ -447,7 +447,8 @@ sub resolve {
     }
 
     my @right_nodes;
-    my @merge_list = ($from);
+    my @merge_list = (keys %{$self->{xor_hash}->[$from]});
+    print "XOR list for $from is " . (join ", ", @merge_list) . "\n";
 
     foreach $to (keys %{$self->{edges}->[$from]}) {
       next unless $to < $from;
@@ -509,7 +510,7 @@ sub resolve {
       $self->delete_edge($from,$to);
       foreach my $i (@merge_list) {
 #	$self->merge_xor_hash($to, $self->{xor_hash}->[$i]);
-	$self->{xor_hash}->[$to]->{$i}=undef;
+	$self->toggle_xor($to,$i);
 	$self->delete_edge($from,$i);
       }
 
