@@ -460,7 +460,7 @@ sub resolve {
       }
     }
 
-    print "Starting node: $from has right nodes: " . (join " ", @right_nodes)
+    print "\nStarting node: $from has right nodes: " . (join " ", @right_nodes)
       . "\n" if DEBUG;
 
     my $original;
