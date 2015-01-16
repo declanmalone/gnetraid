@@ -127,13 +127,17 @@ sub incorporate_solved {
   # This means that eventually all solutions will be in terms of
   # auxiliary blocks and check blocks, but never message blocks.
 
-  if (ASSERT and $self->is_message($node)) {
-    die "Message blocks can't have other nodes incorporated into them\n";
-  }
+  #if (ASSERT and $self->is_message($node)) {
+  #  die "Message blocks can't have other nodes incorporated into them\n";
+  #}
 
   #if (ASSERT and $self->is_check($node)) {
   #  die "Check blocks can't be incorporated into other nodes\n";
   #}
+
+#  if (ASSERT and !$self->is_solved($solved)) {
+#    die "Asked to incorporate a non-solved block $solved\n";
+#  }
 
   print "Incorporating previously solved node $solved into node $node\n" if DEBUG;
 
@@ -395,7 +399,7 @@ sub add_check_block {
   print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
   print "of which, there are $solved solved node(s): " . (join " ", @solved) . "\n" if DEBUG;
 
-  push @{$self->{xor_hash}}, { };
+  push @{$self->{xor_hash}}, { $node => undef };
   $self->mark_as_solved($node);
   push @{$self->{edges}}, {};
 
@@ -502,7 +506,8 @@ sub resolve_old {
       foreach my $i (@merge_list) {
 	print "=> Adding $to to XOR list\n" if DEBUG;
 
-	$self->add_to_xor_hash($to,$i);
+	$self->toggle_xor($to,$i);
+#	$self->add_to_xor_hash($to,$i);
 	$self->delete_edge($from,$i);
       }
 
@@ -580,23 +585,27 @@ sub resolve {
       next;
     }
 
-    my @unsolved_nodes;		# blocks we might solve with this node
+    my @solved_nodes = keys %{$self->{xor_hash}->[$from]};
+    my $unsolved_node;		# block we might solve with this node
     my $count_unsolved = 0;	# size of above array
 
-    foreach $to ($self->edge_list($from)) {
-      next unless $to < $from;
+    print "XOR list for $from is " . (join ", ", @solved_nodes) . "\n";
+
+    my @right_nodes = grep { $_ < $from } $self->edge_list($from);
+
+    foreach $to (@right_nodes) {
       if ($self->is_solved($to)) {
-	$self->incorporate_solved($from, $to);
+	push @solved_nodes, $to;
       } else {
-	push @unsolved_nodes, $to;
+	$unsolved_node = $to;	# we only care if there's exactly 1 unsolved
 	++$count_unsolved;
       }
     }
 
-    print "Starting node: $from has right nodes: " . (join " ", @unsolved_nodes)
-      . "\n" if DEBUG;
+#    print "\nStarting node: $from has right nodes: " . (join " ", @right_nodes) . "\n"
+#      if DEBUG;
 
-    print "Unsolved right degree: " . scalar(@unsolved_nodes) . "\n" if DEBUG;
+    print "Unsolved right degree: $count_unsolved\n" if DEBUG;
 
 
     if ($count_unsolved == 0) {
@@ -606,38 +615,47 @@ sub resolve {
 
     if ($count_unsolved == 1) {
 
-      # we have found a node that matches the propagation rule
-      $to = shift @unsolved_nodes;
+      # Propagation rule matched
+      $to = $unsolved_node;
 
       print "Node $from solves node $to\n" if DEBUG;
 
       $self->mark_as_solved($to);
       push @newly_solved, $to;
 
-      # at this point our node should have all solved blockes already
-      # in the xor hash. We need to propagate that list, plus our own
-      # node to the newly-solved node.
+      # create XOR list for the newly-solved node
 
       print "Node $from has XOR list: " . 
 	(join ", ", $self->xor_hash_list($from)) . "\n" if DEBUG;
 						   
       $self->delete_edge($from,$to);
-      foreach my $i ($from, $self->xor_hash_list($from)) {
+
+      foreach my $i (@solved_nodes) {
+	
 	print "=> Adding $to to XOR list\n" if DEBUG;
 
-	if ($self->is_message($i)) {
-	  print "Expanding solution of message block $i into $from\n" 
-	    if DEBUG;
-
-	  map { $self->toggle_xor($to,$_) } $self->xor_hash_list($i);
-	} else {
-	  print "Direct insertion of aux/check block $i into $to\n" 
-	    if DEBUG;
-	  $self->toggle_xor($to,$i);
-	}
-
+	$self->toggle_xor($to,$i);
 	$self->delete_edge($from,$i);
+
+
+#	$self->incorporate_solved($to, $i);
+#
+#	if ($self->is_message($i)) {
+#	  print "Expanding solution of message block $i into $from\n" 
+#	    if DEBUG;
+#
+#	  map { $self->toggle_xor($to,$_) } $self->xor_hash_list($i);
+#	} else {
+#	  print "Direct insertion of aux/check block $i into $to\n" 
+#	    if DEBUG;
+#	  $self->toggle_xor($to,$i);
+#	}
+#
+#	$self->delete_edge($from,$i);
       }
+
+      # write completed XOR list into solved node
+      #$self->{xor_hash}->[$to]= $self->{xor_hash}->[$from];
 
       # Update global structure and decide if we're done
 

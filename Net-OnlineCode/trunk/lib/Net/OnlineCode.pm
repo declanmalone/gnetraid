@@ -651,7 +651,7 @@ sub checkblock_mapping {
   }
 
   # prevent generating this block again
-  #$self->{unique}->{$key}=undef;
+  $self->{unique}->{$key}=undef;
 
   #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
 
