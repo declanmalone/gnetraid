@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+use Getopt::Std;
+
 # Test promises made by paper regarding how many checkblocks should be
 # needed to recover the message.
 #
@@ -24,7 +26,32 @@ use warnings;
 #    me where this constant value 3 comes from.  It seems to me that
 #    perhaps it should be "q" instead.
 #
+
+# Two optional arguments:
 #
+# -d         Use a default/deterministic seed value (160 zero bits)
+# -s seed    Use a user-supplied seed (overrides -d)
+#
+# These seed values apply to the first trial. Any successive trials
+# will continue to use the existing RNG so each trial will generate
+# different values but overall the results will be the same across
+# different runs.
+
+my $seed = undef;
+
+# optional args
+our ($opt_d, $opt_s) = (0,undef); # seems we need 'our' instead of 'my'
+getopts('ds:');
+if ($opt_d) {
+  $seed = "\0" x20;
+}
+if (defined($opt_s)) {
+  $seed = $opt_s;
+  die "Option -s requires a 20-character seed value\n"
+    unless length($opt_s) == 20;
+}
+
+# remaining args
 my ($mblocks, $trials, @junk) = @ARGV;
 
 use lib '../lib';
@@ -37,13 +64,18 @@ print "Testing: PROMISES\n";
 $mblocks = 100 unless defined($mblocks);
 $trials  = 10  unless defined($trials);
 
-# based on code in mindecoder.pl
+# set up RNG
+my $rng;
+if (defined($seed)) {
+  $rng=Net::OnlineCode::RNG->new($seed);
+} else {
+  $rng=Net::OnlineCode::RNG->new_random;
+}
+print "RNG seed: ". $rng->as_hex() . "\n";
 
 # use a trial Decoder object to fix e, q, ablocks parameters
-
-my $rng=Net::OnlineCode::RNG->new_random;
-print "RNG seed: ". $rng->as_hex() . "\n";
-my $o=Net::OnlineCode::Decoder->new(mblocks=>$mblocks,initial_rng=>$rng,expand_aux=>0);
+my $o=Net::OnlineCode::Decoder->
+  new(mblocks=>$mblocks, initial_rng=>$rng, expand_aux=>0);
 
 my $e = $o->get_e;
 my $q =	$o->get_q;
@@ -89,9 +121,8 @@ my $average = 0;
 
 for my $trial (1 .. $trials) {
 
-  $rng->seed_random;
-
-  $o=Net::OnlineCode::Decoder->new(mblocks=>$mblocks,initial_rng=>$rng,expand_aux=>0);
+  $o=Net::OnlineCode::Decoder->
+    new(mblocks=>$mblocks, initial_rng=>$rng, expand_aux=>0);
 
   # check that parameters are still the same as for our trial decoder
   die "e changed\n"        unless $e == $o->get_e;
