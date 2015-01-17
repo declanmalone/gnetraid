@@ -368,44 +368,51 @@ sub add_check_block {
     croak ref($self) . "->add_check_block: nodelist should be a listref!\n";
   }
 
-  # we'll check whether this new block provides any new information by
-  # incrementing unsolved for each unsolved right neighbour. As we go,
-  # we'll populate some temporary structures that will be put into the
-  # main data structure only if it turns out that this block adds some
-  # new information.
+  # The original code that I was using here would create a new entry
+  # in the graph structure regardless of whether the check block
+  # actually added any new information or not. Later, I modified this
+  # to only add checkblocks that add new info to the graph.
+  # Unfortunately, that led to a (fairly trivial) bug in my codec code
+  # where it failed to check the return value of
+  # Decoder->accept_check_block and got confused about its check block
+  # array.
+  #
+  # Given the choice of making more work for the calling program (and
+  # making them more error-prone) and using slightly more memory, I've
+  # decided that the latter option is best. So this routine will now
+  # revert to the original method and always add a check block,
+  # regardless of whether it adds more information or not.
 
-  my $new_hash={};		# our side of the new graph edges
 
-  my $solved = 0;
-  my @solved = ();
-  foreach my $i (@$nodelist) {
-    if ($self->is_solved($i)) {
-      ++$solved;
-      push @solved, $i;
-    }
-  }
-
-  if ($solved == scalar(@$nodelist)) {
-    print "Discarded check block since contents are solved already : [ " .
-      (join (", ", @$nodelist)) . " ]\n" if DEBUG;
-    return 0;
-  }
-
-  # we're good to go: this new block adds information
-
-  # new node number for this check block
   my $node = $self->{nodes}++;
 
-  print "New check block $node: " . (join " ", @$nodelist) . "\n" if DEBUG;
-  print "of which, there are $solved solved node(s): " . (join " ", @solved) . "\n" if DEBUG;
-
+  # set up new array elements
   push @{$self->{xor_hash}}, { $node => undef };
   $self->mark_as_solved($node);
   push @{$self->{edges}}, {};
 
-  # store edges
+  my $solved = 0;		# just used for debug output
+  my @solved = ();		# ditto
+
+  # set up graph edges and/or xor list
   foreach my $i (@$nodelist) {
-    $self->add_edge($node,$i);
+    if ($self->is_solved($i)) {
+      ++$solved;
+      push @solved, $i;
+
+      # solved, so add node $i to our xor list
+      $self->{xor_hash}->[$node]->{$i} = undef;
+      
+    } else {
+      # unsolved, so add edge to $i
+      $self->add_edge($node,$i);
+    }
+  }
+
+  if (DEBUG) {
+    print "New check block $node: " . (join " ", @$nodelist) . "\n";
+    print "of which, there are $solved solved node(s): " . 
+      (join " ", @solved) . "\n";
   }
 
   # return index of newly created node

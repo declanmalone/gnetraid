@@ -72,9 +72,6 @@ sub accept_check_block {
   # print "Decoder: Adding check block to graph\n";
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
 
-  # short-circuit check blocks that don't have any unsolved neighbours
-  return (0) unless $check_node;
-
   ++($self->{chblocks});
 
   # print "Decoder: Resolving graph\n";
