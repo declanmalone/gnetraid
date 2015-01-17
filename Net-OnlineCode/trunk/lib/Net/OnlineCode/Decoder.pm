@@ -8,15 +8,18 @@ use Carp;
 use Net::OnlineCode;
 use Net::OnlineCode::GraphDecoder;
 
-use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
-
 require Exporter;
+
+use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 # Inherit from base class
 @ISA = qw(Net::OnlineCode Exporter);
 @EXPORT_OK = qw();
 
 $VERSION = '0.02';
+
+
+use constant DEBUG => 1;
 
 sub new {
 
@@ -64,22 +67,16 @@ sub accept_check_block {
   # print "Decoder: calling checkblock_mapping\n";
   my $composite_blocks = $self->checkblock_mapping($rng);
 
+  print "Decoder check block: " . (join " ", @$composite_blocks) . "\n" if DEBUG;
+
   # print "Decoder: Adding check block to graph\n";
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
 
-  # short-circuit check blocks that don't have any unsolved neighbours
-  return (0) unless $check_node;
+  ++($self->{chblocks});
 
   # print "Decoder: Resolving graph\n";
-  my ($done, @which) = ($self->{graph}->resolve($check_node));
+  ($self->{graph}->resolve($check_node));
 
-  # print "Decoder: Returning from accept_check_block\n";
-  if ($self->{expand_aux}) {
-    # user doesn't care about aux blocks if expand_aux is on
-    return ($done, grep { $_ < $self->{mblocks} } @which );
-  } else {
-    return ($done, @which);
-  }
 }
 
 # expand_aux already handled in graph object

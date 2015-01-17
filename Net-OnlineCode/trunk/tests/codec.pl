@@ -77,6 +77,7 @@ die "Failed to create encoder. Quitting\n" unless ref($enc);
 my $e = $enc->get_e;
 my $q = $enc->get_q;
 my $f = $enc->get_f;
+my $ablocks  = $enc->get_ablocks;
 my $coblocks = $enc->get_coblocks;
 
 print "Encoder parameters:\ne= $e, q = $q, f=$f\n";
@@ -92,14 +93,14 @@ my $dec = Net::OnlineCode::Decoder
 	e => $e, q=> $q, expand_aux => 1);
 die "Failed to create decoder. Quitting\n" unless ref($dec);
 
-# substr won't allow us to write to portions outside the string, so
-# zero it out
-$ostring = "x" x (1 * length($istring));
+# Create arrays to store received/decoded message, aux and check blocks
+my @decoded_mblocks = (("\0" x $blksiz) x $mblocks);
+my @decoded_ablocks = (("\0" x $blksiz) x $ablocks);
+my @check_blocks = ();
 
 print "Entering main loop\n";
 
 # main loop
-my @check_blocks = ();
 my $check_count = 0;
 my $done = 0;
 until ($done) {
@@ -115,7 +116,7 @@ until ($done) {
 
   my $enc_xor_list = $enc->create_check_block($erng);
 
-  print "Encoder check block: " . (join ", ", @$enc_xor_list) . "\n";
+  print "Encoder check block (after expansion): " . (join ", ", @$enc_xor_list) . "\n";
 
 
   # xor check block
@@ -136,6 +137,8 @@ until ($done) {
   my @decoded;
   ($done,@decoded)  = $dec->accept_check_block($drng);
 
+  next unless @decoded;
+
   # right now I don't have a way to check that the check block was
   # composed the same was as in the decoder. That information is
   # stored in the decoder's graph object, though.
@@ -150,27 +153,34 @@ until ($done) {
     print "Decoded message block $decoded_block is composed of: ",
       (join ", ", @dec_xor_list) . "\n";
 
-    my ($block, $i);
-    $i = shift @dec_xor_list;
-    if ($i >= $mblocks) {
-      $block = $check_blocks[$i - $coblocks];
-    } else {
-      $block = substr($ostring,  $blksiz * $i, $blksiz);
-    }
-    foreach my $xor_block (@dec_xor_list) {
-      if ($xor_block >= $coblocks) {
-	xor_strings(\$block, $check_blocks[$xor_block - $coblocks]);
-      } else {
-	xor_strings(\$block,
-		substr($ostring,  $blksiz * $xor_block, $blksiz));
+    die "Decoded message block $decoded_block had empty XOR list\n" unless @dec_xor_list;
+
+    my $block = "\0" x $blksiz;
+
+    for my $i (@dec_xor_list) {
+      if ($i < $mblocks) {
+	print "codec: got message block $i as part of an expansion\n";
+	xor_strings(\$block, $decoded_mblocks[$i]); # xor it anyway for now
+	
+      } elsif ($i >= $coblocks) { # check block
+	print "DECODER: XORing block $i (check block) into $decoded_block\n";
+	print "(check block # " . ($i - $coblocks) . ")\n";
+	xor_strings(\$block, $check_blocks[$i - $coblocks]);
+      } else {			# auxiliary block
+	print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
+	xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
       }
     }
-    print "Decoded message block: '$block'\n";
-
-    substr($ostring, $decoded_block * $blksiz, $blksiz) = $block;
+    if ($decoded_block < $mblocks) {
+      print "Decoded message block $decoded_block: '$block'\n";
+      $decoded_mblocks[$decoded_block] = $block;
+    } else {
+      print "Decoded auxiliary block $decoded_block\n";
+      $decoded_ablocks[$decoded_block - $mblocks] = $block;
+    }
   }
 }
 
 
-print "Decoded text: '$ostring'\n";
+print "Decoded text: '" . (join("",@decoded_mblocks)) . "'\n";
 
