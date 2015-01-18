@@ -28,7 +28,7 @@ XSLoader::load('Net::OnlineCode', $VERSION);
 
 # on to our stuff ...
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 
 
 # Codec parameters
@@ -79,7 +79,7 @@ sub new {
 	      e           => 0.01,
 	      q           => 3,
 	      mblocks     => undef,
-	      expand_aux  => 1,
+	      expand_aux  => 0,
 	      e_warning   => 0,
 
 	      # We don't use or store any RNG parameter that's been

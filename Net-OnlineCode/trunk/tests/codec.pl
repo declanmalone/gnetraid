@@ -73,6 +73,11 @@ my $enc = Net::OnlineCode::Encoder
 
 die "Failed to create encoder. Quitting\n" unless ref($enc);
 
+# Ordinarily, we'd create check blocks at this point so that we have
+# them available to XOR into the check blocks, but because of the
+# expand_aux flag above it means that any references to aux blocks
+# will be replaced an expansion in terms of message blocks only
+
 # extract parameters from encoder
 my $e = $enc->get_e;
 my $q = $enc->get_q;
@@ -119,7 +124,7 @@ until ($done) {
   print "Encoder check block (after expansion): " . (join ", ", @$enc_xor_list) . "\n";
 
 
-  # xor check block (encoder side stores message and aux in same string)
+  # xor check block (just a list of message blocks thanks to expand_aux flag)
   my $contents = substr($istring,  $blksiz * shift @$enc_xor_list, $blksiz);
   foreach (@$enc_xor_list) {
     xor_strings(\$contents,
@@ -146,7 +151,8 @@ until ($done) {
     # composed the same was as in the decoder. That information is
     # stored in the decoder's graph object, though.
 
-    print "This checkblock solved " . scalar(@decoded) . " message block(s)\n";
+    print "This checkblock solved " . scalar(@decoded) . " composite block(s) (";
+    print "". (join " ", @decoded) . ")\n";
     print "This solves the entire message\n" if $done;
 
     foreach my $decoded_block (@decoded) {
