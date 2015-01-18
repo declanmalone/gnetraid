@@ -34,8 +34,15 @@ print "1-epsilon/2 times composite = " . ($coblocks * (1-$e/2)) . "\n";
 my $done = 0;
 my $i = 0;
 until ($done) {
-  ($done,@A) =$o->accept_check_block($rng);
-  ++$i;
-  print $i . " ($done): " . (join " ", @A) . "\n" if @A;
+  $o->accept_check_block($rng);
+  while (1) {
+    ($done,@A) =$o->resolve;
+    last unless @A;
+
+    ++$i;
+    print $i . " ($done): " . (join " ", @A) . "\n" if @A;
+
+    last if $done;
+  }
 }
 

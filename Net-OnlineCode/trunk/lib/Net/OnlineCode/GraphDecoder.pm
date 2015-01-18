@@ -205,6 +205,8 @@ sub new {
      nodes          => $mblocks + $ablocks, # running count
      xor_hash       => [],
      iter           => 0,	# debug use
+     unresolved     => [],      # queue of nodes needing resolution
+     done           => 0,       # all message nodes decoded?
     };
 
   # work already done in auxiliary_mapping in Decoder
@@ -353,12 +355,8 @@ sub xor_list {
 # new check block to the graph, while the second resolves the graph to
 # discover newly solvable auxiliary or message blocks.
 
-# new approach to graph: use explicit edge structure and remove them
-# as we resolve the graph
-
-# This routine returns either a node number or zero if it didn't add
-# any new information. In the latter case, the calling routine
-# (accept_check_block) shouldn't do anything.
+# Decoder object creates a check block and we store it in the graph
+# here
 
 sub add_check_block {
   my $self = shift;
@@ -415,177 +413,57 @@ sub add_check_block {
       (join " ", @solved) . "\n";
   }
 
+  # mark node as pending resolution
+  push @{$self->{unresolved}}, $node;
+
   # return index of newly created node
   return $node;
 
 }
 
-
-
-# the strategy here will be to simplify the graph on each call by
-# deleting edges.
-#
-# For the sake of this explanation, assume that check nodes are to
-# the left of the auxiliary and message blocks. Check nodes have a
-# known value, while (initially, at least), auxiliary and message
-# blocks have unknown values.
-#
-# We work our way from known nodes on the left to solve unknowns on
-# the right. As nodes on the right become known, we save the list of
-# known left nodes that comprise it in the node's xor list, and then
-# delete those edges (in fact, each edge becomes an element in the
-# xor list). When a node has no more left edges, it is marked as
-# solved.
-#
-# There is one rule for propagating a known value from left to
-# right: when the left node has exactly one right neighbour
-
-sub resolve_old {
-
-  # same boilerplate as before
-  my $self = shift;
-  my $node = shift;		# start node
-
-  if ($node < $self->{mblocks}) {
-    croak ref($self) . "->resolve: start node '$node' is a message block!\n";
-  }
-
-  my $finished = 0;
-  my @newly_solved = ();
-  my @pending= ($node);
-  my $mblocks = $self->{mblocks};
-  my $ablocks = $self->{ablocks};
-
-  return (1) unless $self->{unsolved_count};
-  while (@pending) {
-
-    my ($from, $to) = (shift @pending);
-
-    unless ($self->is_solved($from)) {
-      print "skipping unsolved from node $from\n" if DEBUG;
-      next;
-    }
-
-    my @right_nodes;
-    my @merge_list = (keys %{$self->{xor_hash}->[$from]});
-    print "XOR list for $from is " . (join ", ", @merge_list) . "\n";
-
-    my $count_right = 0;
-    foreach $to ($self->edge_list($from)) {
-      next unless $to < $from;
-      if ($self->is_solved($to)) {
-	push @merge_list, $to;
-      } else {
-#	last if ++$count_right > 1; # optimisation
-	++$count_right;
-	push @right_nodes, $to;	# unsolved
-      }
-    }
-
-    print "\nStarting node: $from has right nodes: " . (join " ", @right_nodes)
-      . "\n" if DEBUG;
-
-    print "Unsolved right degree: " . scalar(@right_nodes) . "\n" if DEBUG;
-
-
-    if ($count_right == 0) {
-      next;
-
-      # if this is a check block with no unsolved right nodes, free
-      # any memory it uses
-      next if $from < $mblocks + $ablocks;
-
-      $self->{xor_hash}->[$node] = undef;
-      foreach my $to (@merge_list) {
-	$self->delete_edge($from,$to);
-      }
-
-    } elsif ($count_right == 1) {
-
-      # we have found a node that matches the propagation rule
-      $to = shift @right_nodes;
-
-      print "Node $from solves node $to\n" if DEBUG;
-      print "Node $from has XOR list: " . 
-	(join ", ", $self->xor_hash_list($to)) . "\n" if DEBUG;
-						   
-
-      $self->delete_edge($from,$to);
-      foreach my $i (@merge_list) {
-	print "=> Adding $to to XOR list\n" if DEBUG;
-
-	$self->toggle_xor($to,$i);
-	$self->delete_edge($from,$i);
-      }
-
-      # left nodes are to's left nodes
-      my @left_nodes = grep { $_ > $to } $self->edge_list($to);
-
-      $self->mark_as_solved($to);
-      push @newly_solved, $to;
-
-      if ($to < $mblocks) {
-	print "Solved message block $to completely\n" if DEBUG;
-	unless (--($self->{unsolved_count})) {
-	  $finished = 1;
-	  # comment out next two lines to continue decoding just in
-	  # case there's a bug later
-	  @pending = ();
-	  last;			# finish searching
-	}
-
-      } else {
-	print "Solved auxiliary block $to completely\n" if DEBUG;
-	push @pending, $to;
-      }
-
-      # if this is a checkblock, free space reserved for xor_hash
-      if ($from > $mblocks + $ablocks) {
-	$self->free_xor_hash($from);
-      }
-
-      if (@left_nodes) {
-	print "Solved node $to still has left nodes " . (join " ", @left_nodes)
-	  . "\n" if DEBUG;
-      } else {
-	print "Solved node $to has no left nodes (no cascade)\n" if DEBUG;
-      }
-      push @pending, @left_nodes;
-
-    }
-
-
-
-  }
-
-  return ($finished, @newly_solved);
-
-}
-
-# start again with resolve
+# resolve graph
 
 sub resolve {
 
-  # same boilerplate as before
-  my $self = shift;
-  my $start_node = shift;
+  # now doesn't take any arguments (uses unresolved queue instead)
+  my ($self, @junk) = @_;
 
-  if ($start_node < $self->{mblocks}) {
+  if (ASSERT and scalar(@junk)) {
+    die "resolve doesn't take arguments\n";
+  }
+
+  my $pending = $self->{unresolved};
+
+  # Indicate to caller that our queue is empty and they need to add
+  # another check block (see example code at top of Decoder man page)
+  unless (@$pending) {
+    return ($self->{done});
+  }
+
+  my $start_node = $pending->[0];
+
+  if (ASSERT and !defined($start_node)) {
+    die "resolve: start node is undefined\n";
+  }
+
+  if (ASSERT and $start_node < $self->{mblocks}) {
     croak ref($self) . "->resolve: start node '$start_node' is a message block!\n";
   }
 
   my $finished = 0;
   my @newly_solved = ();
-  my @pending= ($start_node);
   my $mblocks = $self->{mblocks};
   my $ablocks = $self->{ablocks};
 
   # exit if all message blocks are already solved
-  return (1) unless $self->{unsolved_count};
+  unless ($self->{unsolved_count}) {
+    $self->{done}=1;
+    return (1);
+  }
 
-  while (@pending) {		# list of nodes to check
+  while (@$pending) {
 
-    my ($from, $to) = (shift @pending);
+    my ($from, $to) = (shift @$pending);
 
     unless ($self->is_solved($from)) {
       print "skipping unsolved from node $from\n" if DEBUG;
@@ -644,21 +522,6 @@ sub resolve {
 	$self->toggle_xor($to,$i);
 	$self->delete_edge($from,$i);
 
-
-#	$self->incorporate_solved($to, $i);
-#
-#	if ($self->is_message($i)) {
-#	  print "Expanding solution of message block $i into $from\n" 
-#	    if DEBUG;
-#
-#	  map { $self->toggle_xor($to,$_) } $self->xor_hash_list($i);
-#	} else {
-#	  print "Direct insertion of aux/check block $i into $to\n" 
-#	    if DEBUG;
-#	  $self->toggle_xor($to,$i);
-#	}
-#
-#	$self->delete_edge($from,$i);
       }
 
       # write completed XOR list into solved node
@@ -672,13 +535,13 @@ sub resolve {
 	  $finished = 1;
 	  # comment out next two lines to continue decoding just in
 	  # case there's a bug later
-	  @pending = ();
+	  @$pending = ();
 	  last;			# finish searching
 	}
 
       } else {
 	print "Solved auxiliary block $to completely\n" if DEBUG;
-	push @pending, $to;
+	push @$pending, $to;
       }
 
       # Cascade to potentially find more solvable blocks
@@ -699,7 +562,7 @@ sub resolve {
 	print "Solved node $to has no left nodes (no cascade)\n\n" if DEBUG;
       }
 
-      push @pending, @left_nodes;
+      push @$pending, @left_nodes;
 
     }
 

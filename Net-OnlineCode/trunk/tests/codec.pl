@@ -119,7 +119,7 @@ until ($done) {
   print "Encoder check block (after expansion): " . (join ", ", @$enc_xor_list) . "\n";
 
 
-  # xor check block
+  # xor check block (encoder side stores message and aux in same string)
   my $contents = substr($istring,  $blksiz * shift @$enc_xor_list, $blksiz);
   foreach (@$enc_xor_list) {
     xor_strings(\$contents,
@@ -131,53 +131,60 @@ until ($done) {
   print "\nDECODE Block #$check_count " . $drng->as_hex . "\n";
 
 
-  # save contents of checkblock
+  # save contents of checkblock and add it to the graph
   push @check_blocks, $contents;
+  $dec->accept_check_block($drng);
 
   my @decoded;
-  ($done,@decoded)  = $dec->accept_check_block($drng);
 
-  next unless @decoded;
+  # XOR as many blocks as resolve gives us
+  while (1) {
+    ($done,@decoded) = $dec->resolve;
+    last unless @decoded;
 
-  # right now I don't have a way to check that the check block was
-  # composed the same was as in the decoder. That information is
-  # stored in the decoder's graph object, though.
+    # right now I don't have a way to check that the check block was
+    # composed the same was as in the decoder. That information is
+    # stored in the decoder's graph object, though.
 
-  print "This checkblock solved " . scalar(@decoded) . " message block(s)\n";
-  print "This solves the entire message\n" if $done;
+    print "This checkblock solved " . scalar(@decoded) . " message block(s)\n";
+    print "This solves the entire message\n" if $done;
 
-  foreach my $decoded_block (@decoded) {
+    foreach my $decoded_block (@decoded) {
 
-    my @dec_xor_list = $dec->xor_list($decoded_block);
+      my @dec_xor_list = $dec->xor_list($decoded_block);
 
-    print "Decoded message block $decoded_block is composed of: ",
-      (join ", ", @dec_xor_list) . "\n";
+      print "Decoded message block $decoded_block is composed of: ",
+	(join ", ", @dec_xor_list) . "\n";
+      die "Decoded message block $decoded_block had empty XOR list\n"
+	unless @dec_xor_list;
 
-    die "Decoded message block $decoded_block had empty XOR list\n" unless @dec_xor_list;
+      my $block = "\0" x $blksiz;
 
-    my $block = "\0" x $blksiz;
+      foreach my $i (@dec_xor_list) {
+	if ($i < $mblocks) {
+	  print "codec: got message block $i as part of an expansion\n";
+	  xor_strings(\$block, $decoded_mblocks[$i]); # xor it anyway for now
 
-    for my $i (@dec_xor_list) {
-      if ($i < $mblocks) {
-	print "codec: got message block $i as part of an expansion\n";
-	xor_strings(\$block, $decoded_mblocks[$i]); # xor it anyway for now
-	
-      } elsif ($i >= $coblocks) { # check block
-	print "DECODER: XORing block $i (check block) into $decoded_block\n";
-	print "(check block # " . ($i - $coblocks) . ")\n";
-	xor_strings(\$block, $check_blocks[$i - $coblocks]);
-      } else {			# auxiliary block
-	print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
-	xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
+	} elsif ($i >= $coblocks) { # check block
+	  print "DECODER: XORing block $i (check block) into $decoded_block\n";
+	  print "(check block # " . ($i - $coblocks) . ")\n";
+	  xor_strings(\$block, $check_blocks[$i - $coblocks]);
+	} else {			# auxiliary block
+	  print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
+	  xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
+	}
+      }
+
+      # save newly-decoded message/aux block
+      if ($decoded_block < $mblocks) {
+	print "Decoded message block $decoded_block: '$block'\n";
+	$decoded_mblocks[$decoded_block] = $block;
+      } else {
+	print "Decoded auxiliary block $decoded_block\n";
+	$decoded_ablocks[$decoded_block - $mblocks] = $block;
       }
     }
-    if ($decoded_block < $mblocks) {
-      print "Decoded message block $decoded_block: '$block'\n";
-      $decoded_mblocks[$decoded_block] = $block;
-    } else {
-      print "Decoded auxiliary block $decoded_block\n";
-      $decoded_ablocks[$decoded_block - $mblocks] = $block;
-    }
+    last if $done;		# escape inner loop
   }
 }
 

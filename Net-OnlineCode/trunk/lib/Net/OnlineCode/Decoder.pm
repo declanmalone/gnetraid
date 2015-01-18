@@ -74,10 +74,25 @@ sub accept_check_block {
 
   ++($self->{chblocks});
 
+  # Caller will now have to call resolve manually ...
   # print "Decoder: Resolving graph\n";
-  ($self->{graph}->resolve($check_node));
+  # ($self->{graph}->resolve($check_node));
+
+  # caller probably won't use return value, but if they do it makes
+  # sense to return zero-based array index
+   
+  return $check_node - $self->get_coblocks;
 
 }
+
+# pass calls to resolve onto graph decoder object
+sub resolve {
+  my ($self,@args) = @_;
+
+  $self->{graph}->resolve(@args);
+}
+
+
 
 # expand_aux already handled in graph object
 sub xor_list {
@@ -118,15 +133,18 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
   my ($msg_id, $e, $q, $msg_size, $blocksize);
 
   # calculated/local variables
-  my (@check_blocks,$message,$block_id);
+  my (@check_blocks,@aux_blocks,$message,$block_id);
   my $mblocks = int(0.5 + ($msg_size / $blocksize));
   my $rng     = Net::OnlineCode::RNG->new($msg_id);
+
 
   my $decoder = Net::OnlineCode::Decoder->new(
     mblocks     => $mblocks,
     initial_rng => $rng,
     # ... pass e and q if they differ from defaults
   );
+  my $ablocks = $decoder->{ablocks};
+  @aux_blocks = ( ( "\0" x $blocksize) x $ablocks);
 
   my ($done,@decoded) = (0);
   until ($done) {
@@ -134,16 +152,40 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
     push @check_blocks, $contents;
 
     $rng->seed($block_id);
-    ($done,@decoded) = $decoder->accept_check_block($rng);
+    $decoder->accept_check_block($rng);
 
-    # XOR check blocks together to decode each message block
-    foreach my $decoded_block (@decoded) {
-      my @xor_list = $decoder->xor_list($decoded_block);
-      my $block = $check_blocks[shift @xor_list];
-      fast_xor_strings(\$block, map { $check_blocks[$_] } @xor_list);
+    # keep calling resolve until it solves no more nodes or we've
+    # decoded all the message blocks
+    while(1) {
+      ($done,@decoded) = $decoder->resolve;
+      last unless @decoded;
 
-      # save contents of decoded block
-      substr($message, $decoded_block * $blocksize, $blocksize) = $block;
+      # XOR check/aux blocks together to decode message/aux block
+      foreach my $decoded_block (@decoded) {
+        my $block = "\0" x $blocksize;
+
+        # XOR all component blocks
+        foreach my $node ($decoder->xor_list($decoded_block)) {
+          if ($node < $mblocks) {                 # message block
+            fast_xor_strings(\$block, 
+              substr($message, $node * $blocksize, $blocksize))
+          } elsif ($node < $mblocks + $ablocks) { # auxiliary block
+            fast_xor_strings(\$block, 
+              $aux_blocks[$node - $mblocks]);
+          } else {                                # check block
+            fast_xor_strings(\$block, 
+              $check_blocks[$node - ($mblocks + $ablocks)]);
+          }
+        }
+
+	# save newly-decoded message/aux block
+        if ($decoded_block < $mblocks) {          # message block
+          substr($message, $decoded_block * $blocksize, $blocksize) = $block;
+        } else {                                  # auxiliary block
+          $aux_blocks[$decoded_block - $mblocks] = $block;
+        }
+      }
+      last if $done;
     }
   }
   $message = substr($message, 0, $msg_size);  # truncate to correct size
@@ -172,7 +214,7 @@ Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2013 by Declan Malone
+Copyright (C) 2013-2015 by Declan Malone
 
 This package is free software; you can redistribute it and/or modify
 it under the terms of the "GNU General Public License" ("GPL").

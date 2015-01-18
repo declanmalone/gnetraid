@@ -138,24 +138,31 @@ for my $trial (1 .. $trials) {
   my $i = 0;
   until ($done) {
     ++$i;
-    ($done,@A) =$o->accept_check_block($rng);
-    map { ++$composites_solved } @A;
+    $o->accept_check_block($rng);
 
-    die "solved $composites_solved blocks, but there are only $coblocks to solve\n"
-      if $composites_solved > $coblocks;
+    while(1) {
+      ($done,@A) = $o->resolve;
+      last unless @A;
+      
+      map { ++$composites_solved } @A;
 
-    # promise 1 says that if we know 1-e/2 fraction of the composite
-    # blocks, it's enough to decode the entire message with failure
-    # probability (e/2)**(q+1)
-    unless (defined($composite_promise)) {
-      if ($composites_solved >= $coblocks * $composite_fraction) {
-	if ($done) {
-	  $composite_promise = "true";
-	  ++$promise_1_total;
-	} else {
-	  $composite_promise = "false";
+      die "solved $composites_solved blocks, but there are only $coblocks to solve\n"
+	if $composites_solved > $coblocks;
+
+      # promise 1 says that if we know 1-e/2 fraction of the composite
+      # blocks, it's enough to decode the entire message with failure
+      # probability (e/2)**(q+1)
+      unless (defined($composite_promise)) {
+	if ($composites_solved >= $coblocks * $composite_fraction) {
+	  if ($done) {
+	    $composite_promise = "true";
+	    ++$promise_1_total;
+	  } else {
+	    $composite_promise = "false";
+	  }
 	}
       }
+      last if $done;
     }
   }
 
