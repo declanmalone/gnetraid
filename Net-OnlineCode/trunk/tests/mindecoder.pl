@@ -39,8 +39,10 @@ until ($done) {
     ($done,@A) =$o->resolve;
     last unless @A;
 
-    ++$i;
-    print $i . " ($done): " . (join " ", @A) . "\n" if @A;
+    for my $node (@A) {
+      ++$i;
+      print $i . " ($done): $node -> " . (join " ", $o->xor_list($node)) . "\n";
+    }
 
     last if $done;
   }
