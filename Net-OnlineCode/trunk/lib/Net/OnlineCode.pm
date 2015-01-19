@@ -176,6 +176,7 @@ sub new {
 
   my $self = { q => $q, e => $e, f => $f, P => $P,
 	       mblocks => $mblocks, ablocks => $ablocks,
+	       coblocks => $mblocks + $ablocks,
                chblocks => 0, expand_aux=> $args{expand_aux},
 	       e_changed => $e_changed, unique => {},
 	       fisher_string => pack("L*", (0 .. $mblocks + $ablocks -1)),

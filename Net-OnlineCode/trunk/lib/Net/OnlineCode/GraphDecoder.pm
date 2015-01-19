@@ -90,75 +90,6 @@ sub delete_edge {
 
 }
 
-sub xor_hash_list {
-  my ($self,$node) = @_;
-  keys %{$self->{xor_hash}->[$node]}
-}
-
-sub add_to_xor_hash {
-  my ($self,$node,$adding) = @_;
-
-  if (DEBUG) {
-    print "Adding $adding to node $node\'s xor hash\n";
-    print "Previous XOR list: " . (join ", ", sort $self->xor_hash_list($node)) . "\n";
-  }
-
-  if (ASSERT and exists($self->{xor_hash}->[$node]->{$adding})) {
-    die "ASSERT: asked to add $adding to node $node\'s xor hash, but it already exists\n";
-  }
-
-  $self->{xor_hash}->[$node]->{$adding}=undef;
-  print "Updated XOR list: " . (join ", ", sort $self->xor_hash_list($node)) .
-    "\n" if DEBUG;
-
-}
-
-
-sub free_xor_hash {
-  my ($self,$from) = @_;
-  $self->{xor_hash}->[$from] = undef;
-}
-
-sub incorporate_solved {
-
-  my ($self,$node,$solved) = @_;
-
-  # this routine deletes solved edges and updates the XOR list as appropriate
-  # if the solved node is an aux block, we xor the node with its node number
-  # if the solved node is a message block, we xor in all of its xor list
-
-  # This means that eventually all solutions will be in terms of
-  # auxiliary blocks and check blocks, but never message blocks.
-
-  #if (ASSERT and $self->is_message($node)) {
-  #  die "Message blocks can't have other nodes incorporated into them\n";
-  #}
-
-  #if (ASSERT and $self->is_check($node)) {
-  #  die "Check blocks can't be incorporated into other nodes\n";
-  #}
-
-#  if (ASSERT and !$self->is_solved($solved)) {
-#    die "Asked to incorporate a non-solved block $solved\n";
-#  }
-
-  print "Incorporating previously solved node $solved into node $node\n" if DEBUG;
-
-  $self->delete_edge($node,$solved);
-
-  if ($self->is_message($solved)) {
-
-    print "Incorporating expansion of message block $solved into $node\n" 
-      if DEBUG;
-    map { $self->toggle_xor($node,$_) } $self->xor_hash_list($solved);
-
-  } else {
-
-    print "Incorporating auxiliary block number $solved into $node\n" if DEBUG;
-    $self->toggle_xor($node,$solved);
-  }
-
-}
 
 # Rather than referring to left and right neighbours, I used the
 # ordering of the array and higher/lower to indicate the relative
@@ -182,7 +113,8 @@ sub new {
   my $class = shift;
 
   # constructor starts off knowing only about auxiliary block mappings
-  my ($mblocks, $ablocks, $auxlist, $expand_aux) = @_;
+  # my ($mblocks, $ablocks, $auxlist, $expand_aux) = @_;
+  my ($mblocks, $ablocks, $auxlist) = @_;
 
   unless ($mblocks >= 1) {
     carp "$class->new: argument 1 (mblocks) invalid\n";
@@ -204,20 +136,19 @@ sub new {
     return undef;
   }
 
-  $expand_aux = 1 unless defined($expand_aux);
-
   my $self =
     {
      mblocks    => $mblocks,
      ablocks    => $ablocks,
      coblocks   => $mblocks + $ablocks, # "composite"
-     expand_aux => $expand_aux,
+     # expand_aux => $expand_aux,
      neighbours     => undef,	# will only store aux block mappings
      edges          => [],	# stores both check, aux block mappings
      solved         => [],
      unsolved_count => $mblocks,
      nodes          => $mblocks + $ablocks, # running count
-     xor_hash       => [],
+     # xor_hash       => [],    # replaced by xor_list below
+     xor_list       => [],
      iter           => 0,	# debug use
      unresolved     => [],      # queue of nodes needing resolution
      done           => 0,       # all message nodes decoded?
@@ -232,8 +163,8 @@ sub new {
   for my $i (0..$mblocks + $ablocks - 1) {
     # mark blocks as unsolved, and having no XOR expansion
     $self->mark_as_unsolved($i);
-    $self->{xor_hash} ->[$i] = {};
-
+    # $self->{xor_hash} ->[$i] = {};
+    $self->{xor_list} ->[$i] = [];
     # empty edge structure
     push @{$self->{edges}}, {}; # 5.14
   }
@@ -269,102 +200,7 @@ sub is_check {
 }
 
 
-# Set operator: inverts membership
-sub toggle_xor {
-  my ($self, $node, $member, @junk) = @_;
 
-  # updates target by xoring value into it
-
-  croak "toggle_xor got extra junk parameter" if @junk;
-
-  print "Toggling $member into $node\n" if DEBUG;
-
-  # Profiling indicates that this is a very heavily-used sub, so a
-  # simple change to avoid various object dereferences should help:
-  my $href=$self->{xor_hash}->[$node];
-
-  if (exists($href->{$member})) {
-    delete $href->{$member};
-  } else {
-    $href->{$member} = undef;
-  }
-
-  print "Updated XOR list: " . (join ", ", sort $self->xor_hash_list($node)) .
-    "\n" if DEBUG;
-
-}
-
-# toggle all keys from a hashref into a solved node
-sub merge_xor_hash {
-  my ($self, $target, $href) = @_;
-
-  unless (ref($href) eq 'HASH') {
-    carp "merge_xor_hash: need a hashref as second argument\n";
-    return;
-  }
-
-  print "merging node numbers: " . (join ",", keys %$href) . "\n" if DEBUG;
-  foreach (keys %$href) {
-    print "toggling term: $_\n" if DEBUG;
-    $self->toggle_xor($target,$_);
-  }
-}
-
-# return a reference to the hash so that caller may modify values
-sub xor_hash {
-  my ($self,$i) = @_;
-  if (defined ($i)) {
-    return $self->{xor_hash}->[$i];
-  } else {
-    croak "xor_hash: need an index parameter\n";
-    # return $self->{xor_hash};
-  }
-}
-
-# return the keys of xor_hash as a list, honouring expand_aux flag
-sub xor_list {
-  my ($self,$i) = @_;
-
-  croak "xor_list requires a numeric argument (message block index)\n"
-    unless defined($i);
-
-  my $href   = $self->{xor_hash}->[$i];
-  return (keys %$href);
-
-  if (0 and $self->{expand_aux}) {
-
-    my $mblocks  = $self->{mblocks};
-    my $coblocks = $self->{coblocks};
-    my %xors = ();
-    my @queue = keys %$href;
-
-    while (@queue) {
-      my $block = shift @queue;
-      if ($block >= $coblocks) { # check block -> no expand
-	if (exists($xors{$block})) {
-	  delete $xors{$block};
-	} else {
-	  $xors{$block} = 1;
-	}
-      } elsif ($block >= $mblocks) { # aux block
-	push @queue, $self->xor_hash_list($block);
-      } else {
-#	die "BUG: message block found in xor list!\n";
-	if (exists($xors{$block})) {
-	  delete $xors{$block};
-	} else {
-	  $xors{$block} = 1;
-	}
-      }
-    }
-	
-   return keys %xors;
-
-  } else {
-    # return unfiltered list
-    return (keys %$href);
-  }
-}
 
 # the decoding algorithm is divided into two steps. The first adds a
 # new check block to the graph, while the second resolves the graph to
@@ -400,7 +236,8 @@ sub add_check_block {
   my $node = $self->{nodes}++;
 
   # set up new array elements
-  push @{$self->{xor_hash}}, { $node => undef };
+  #push @{$self->{xor_hash}}, { $node => undef };
+  push @{$self->{xor_list}}, [$node];
   $self->mark_as_solved($node);
   push @{$self->{edges}}, {};
 
@@ -413,7 +250,8 @@ sub add_check_block {
       ++$solved;
       push @solved, $i;
       # solved, so add node $i to our xor list
-      $self->{xor_hash}->[$node]->{$i} = undef;
+      #$self->{xor_hash}->[$node]->{$i} = undef;
+      push @{$self->{xor_list}->[$node]}, $i;
       
     } else {
       # unsolved, so add edge to $i
@@ -463,12 +301,15 @@ sub aux_rule {
     }
 
     $self->mark_as_solved($from);
+    
+    push @{$self->{xor_list}->[$from]}, @$solved;
     for my $to (@$solved) {
-      my @expanded = (keys %{$self->{xor_hash}->[$to]});
-      print "Expansion: $to -> " . (join " ", @expanded) . "\n" if DEBUG;
-      map {
-	$self->toggle_xor($from,$_);
-      } @expanded;
+      # don't do expansion; it takes up too much memory
+      #my @expanded = @{$self->{xor_list}->[$to]};
+      #push @{$self->{xor_list}->[$from]}, @expanded;
+      #if (DEBUG) {
+      #	print "Expansion: $to -> " . (join " ", @expanded) . "\n";
+      #}
       $self->delete_edge($from,$to);
     }
     return $from;		# newly solved
@@ -522,8 +363,10 @@ sub resolve {
     my @unsolved_nodes;
     my $count_unsolved = 0;	# size of above array
 
-    print "XOR list for $from is " . (join ", ", $self->xor_list($from)) .
-      "\n" if DEBUG;
+    if (DEBUG) {
+      print "XOR list for $from is " . 
+	(join ", ", @{$self->{xor_list}->[$from]}) . "\n";
+    }
 
     my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
 
@@ -580,7 +423,7 @@ sub resolve {
 
       next unless $self->is_solved($from);
 
-      push @solved_nodes, keys %{$self->{xor_hash}->[$from]}; 
+      push @solved_nodes, @{$self->{xor_list}->[$from]}; 
 
       # Propagation rule matched
       $to = shift @unsolved_nodes;
@@ -592,8 +435,10 @@ sub resolve {
 
       # create XOR list for the newly-solved node
 
-      print "Node $from has XOR list: " . 
-	(join ", ", $self->xor_hash_list($from)) . "\n" if DEBUG;
+      if (DEBUG) {
+	print "Node $from has XOR list: " . 
+	  (join ", ", @{$self->{xor_list}->[$from]}) . "\n";
+      }
 						   
       $self->delete_edge($from,$to);
 
@@ -601,21 +446,19 @@ sub resolve {
 	
 	print "=> Adding $i to ${to}'s XOR list\n" if DEBUG;
 
-	if ($self->is_message($i)) {
-	  my @expanded = (keys %{$self->{xor_hash}->[$i]});
-	  print "Expansion: $i -> " . (join " ", @expanded) . "\n" if DEBUG;
-	  map {
-	    $self->toggle_xor($to,$_);
-	  } @expanded;
+	if (0 and $self->is_message($i)) { # don't expand message nodes any more
+	  my @expanded = @{$self->{xor_list}->[$i]};
+	  if (DEBUG) {
+	    print "Expansion: $i -> " . (join " ", @expanded) . "\n";
+	  }
+	  push @{$self->{xor_list}->[$to]}, @expanded;
 	} else {
-	  $self->toggle_xor($to,$i);
+	  #$self->toggle_xor($to,$i);
+	  push @{$self->{xor_list}->[$to]}, $i;
 	}
 	$self->delete_edge($from,$i);
 
       }
-
-      # write completed XOR list into solved node
-      #$self->{xor_hash}->[$to]= $self->{xor_hash}->[$from];
 
       # Update global structure and decide if we're done
 
@@ -640,7 +483,7 @@ sub resolve {
 
       # if this is a checkblock, free space reserved for xor_hash
       if ($from > $mblocks + $ablocks) {
-	$self->free_xor_hash($from);
+	#$self->free_xor_hash($from);
       }
 
       if (@higher_nodes) {

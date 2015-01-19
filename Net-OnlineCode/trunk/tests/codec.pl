@@ -157,7 +157,8 @@ until ($done) {
 
     foreach my $decoded_block (@decoded) {
 
-      my @dec_xor_list = $dec->xor_list($decoded_block);
+      #my @dec_xor_list = $dec->xor_list($decoded_block);
+      my @dec_xor_list = $dec->expansion($decoded_block);
 
       print "Decoded message block $decoded_block is composed of: ",
 	(join ", ", @dec_xor_list) . "\n";

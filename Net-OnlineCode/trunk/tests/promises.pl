@@ -144,7 +144,7 @@ for my $trial (1 .. $trials) {
       ($done,@A) = $o->resolve;
       last unless @A;
       
-      map { ++$composites_solved } @A;
+      $composites_solved += @A;
 
       die "solved $composites_solved blocks, but there are only $coblocks to solve\n"
 	if $composites_solved > $coblocks;

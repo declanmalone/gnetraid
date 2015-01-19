@@ -27,6 +27,8 @@ sub new {
 
   my %opts = (
 	      # decoder-specific arguments:
+	      expand_aux  => 0,    # override parent class's default
+	      expand_msg  => 1,    # expand_* options used by expansion()
 	      initial_rng => undef,
 	      # user-supplied arguments:
 	      @_
@@ -51,7 +53,7 @@ sub new {
      $self->{mblocks},
      $self->{ablocks},
      $self->auxiliary_mapping($opts{initial_rng}),
-     $self->{expand_aux},
+     # $self->{expand_aux},  # expansion only done in this object now
     );
   $self->{graph} = $graph;
 
@@ -92,9 +94,79 @@ sub resolve {
   $self->{graph}->resolve(@args);
 }
 
+# new routine to replace xor_list; does "lazy" expansion of node lists
+# from graph object, honouring the expand_aux and (new) expand_msg
+# flags.
+sub expansion {
 
+  my ($self, $node) = @_;
 
-# expand_aux already handled in graph object
+  # pull out frequently-used variables (using hash slice)
+  my ($expand_aux,$expand_msg) = @{$self}{"expand_aux","expand_msg"};
+  my ($mblocks,$coblocks)      = @{$self}{"mblocks","coblocks"};
+
+  # Stage 1: collect list of nodes in the expansion, honouring flags
+  my ($in,$out,$expanded,$done) =
+    ($self->{graph}->{xor_list}->[$node],[],0,0);
+
+  if (DEBUG) {
+    print "Expansion: node ${node}'s input list is " . (join " ", @$in) . "\n";
+  }
+
+  until ($done) {
+    # we may need several loops to expand everything since aux blocks
+    # may appear in the expansion of message blocks and vice-versa.
+    # It's possible to do the expansion with just one loop, but the
+    # code is more messy/complicated.
+
+    for my $i (@$in) {
+      if ($expand_msg and $i < $mblocks) {
+	++$expanded;
+	push @$out, @{$self->{graph}->{xor_list}->[$i]};
+      } elsif ($expand_aux and $i >= $mblocks and $i < $coblocks) {
+	++$expanded;
+	push @$out, @{$self->{graph}->{xor_list}->[$i]};
+      } else {
+	push @$out, $i;
+      }
+    }
+    $done = 1 if !$expanded;
+  } continue {
+    ($in,$out) = ($out,[]);
+    $expanded = 0;
+  }
+
+  if (DEBUG) {
+    print "Expansion: list after expand_* is " . (join " ", @$in) . "\n";
+  }
+
+  # Stage 2: sort the list
+  my @sorted = sort { $a <=> $b } @$in;
+
+  # Stage 3: create output list containing only nodes that appear an
+  # odd number of times
+  die "expanded list was empty\n" unless @sorted;
+
+  my ($previous, $runlength) = ($sorted[0], 0);
+  my @output = ();
+
+  foreach my $i (@sorted) {
+    if ($i == $previous) {
+      ++$runlength;
+    } else {
+      push @output, $previous if $runlength & 1;
+      $previous = $i;
+      $runlength = 1;
+    }
+  }
+  push @output, $previous if $runlength & 1;
+
+  # Finish: return list
+  return @output;
+
+}
+
+# expand_aux already handled in graph object (DELETEME)
 sub xor_list {
   my $self = shift;
   my $i = shift;
