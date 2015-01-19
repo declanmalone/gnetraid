@@ -10,7 +10,7 @@ my $arg=20; # block size argument to codec.pl
 my $expected = "Decoded text: 'The quick brown fox jumps over a lazy dogxxxxxxxxxxxxxxxxxxx'";
 
 my $fails = 0;
-my $trials = 100;
+my $trials = 1000;
 for (1..$trials) {
 
   $op = `./codec.pl $arg 2>/dev/null | perl -nle 'print if eof or /SEED/'`;

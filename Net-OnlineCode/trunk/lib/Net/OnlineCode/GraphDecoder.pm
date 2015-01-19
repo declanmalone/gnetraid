@@ -166,6 +166,17 @@ sub incorporate_solved {
 # ordering is:
 #
 #   message < auxiliary < check	
+#
+# Using this ordering, message blocks are "lower" than auxiliary and
+# check blocks and vice-versa. Equivalently, message blocks have no
+# "lower" nodes and check blocks have no "higher" nodes, while
+# auxiliary blocks have both.
+#
+# This can be used as a mnemonic: there is nothing lower than message
+# blocks since without them, the sender would not be able to construct
+# auxiliary or check blocks and the receiver would not be able to
+# receive anything. Equivalently, think of aux and check blocks as
+# "higher-level" constructs.
 
 sub new {
   my $class = shift;
@@ -401,7 +412,6 @@ sub add_check_block {
     if ($self->is_solved($i)) {
       ++$solved;
       push @solved, $i;
-
       # solved, so add node $i to our xor list
       $self->{xor_hash}->[$node]->{$i} = undef;
       
@@ -515,9 +525,9 @@ sub resolve {
     print "XOR list for $from is " . (join ", ", $self->xor_list($from)) .
       "\n" if DEBUG;
 
-    my @right_nodes = grep { $_ < $from } $self->edge_list($from);
+    my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
 
-    foreach $to (@right_nodes) {
+    foreach $to (@lower_nodes) {
       if ($self->is_solved($to)) {
 	push @solved_nodes, $to;
       } else {
@@ -526,17 +536,17 @@ sub resolve {
       }
     }
 
-#    print "\nStarting node: $from has right nodes: " . (join " ", @right_nodes) . "\n"
+#    print "\nStarting node: $from has lower nodes: " . (join " ", @lower_nodes) . "\n"
 #      if DEBUG;
 
-    print "Unsolved right degree: $count_unsolved\n" if DEBUG;
+    print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
 
 
     if ($count_unsolved == 0) {
 
-#      next;
 
       if ($self->is_check($from)) {
+
 	next;			# we could free this node's memory
                                 # here if we wanted
       } else {
@@ -551,16 +561,16 @@ sub resolve {
 	  # Cascade to potentially find more solvable blocks
 
 	  # queue up check blocks
-	  my @left_nodes = grep { $_ > $from } $self->edge_list($from);
+	  my @higher_nodes = grep { $_ > $from } $self->edge_list($from);
 
-	  if (@left_nodes) {
-	    print "Solved node $from still has left nodes " . (join " ", @left_nodes)
+	  if (@higher_nodes) {
+	    print "Solved node $from still has higher nodes " . (join " ", @higher_nodes)
 	      . "\n\n" if DEBUG;
 	  } else {
-	    print "Solved node $from has no left nodes (no cascade)\n\n" if DEBUG;
+	    print "Solved node $from has no higher nodes (no cascade)\n\n" if DEBUG;
 	  }
 
-	  push @$pending, @left_nodes;
+	  push @$pending, @higher_nodes;
 	}
       }
 
@@ -570,9 +580,7 @@ sub resolve {
 
       next unless $self->is_solved($from);
 
-#      if ($self->is_check($from)) {
-	push @solved_nodes, keys %{$self->{xor_hash}->[$from]}; 
-#      }
+      push @solved_nodes, keys %{$self->{xor_hash}->[$from]}; 
 
       # Propagation rule matched
       $to = shift @unsolved_nodes;
@@ -627,24 +635,22 @@ sub resolve {
       }
 
       # Cascade to potentially find more solvable blocks
-
-      # left nodes are to's left nodes
-      my @left_nodes = grep { $_ > $to } $self->edge_list($to);
+      my @higher_nodes = grep { $_ > $to } $self->edge_list($to);
 
 
       # if this is a checkblock, free space reserved for xor_hash
       if ($from > $mblocks + $ablocks) {
-#	$self->free_xor_hash($from);
+	$self->free_xor_hash($from);
       }
 
-      if (@left_nodes) {
-	print "Solved node $to still has left nodes " . (join " ", @left_nodes)
+      if (@higher_nodes) {
+	print "Solved node $to still has higher nodes " . (join " ", @higher_nodes)
 	  . "\n\n" if DEBUG;
       } else {
-	print "Solved node $to has no left nodes (no cascade)\n\n" if DEBUG;
+	print "Solved node $to has no higher nodes (no cascade)\n\n" if DEBUG;
       }
 
-      push @$pending, @left_nodes;
+      push @$pending, @higher_nodes;
 
     }
 

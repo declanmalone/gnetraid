@@ -35,14 +35,12 @@ my $done = 0;
 my $i = 0;
 until ($done) {
   $o->accept_check_block($rng);
+  ++$i;
   while (1) {
     ($done,@A) =$o->resolve;
     last unless @A;
 
-    for my $node (@A) {
-      ++$i;
-      print $i . " ($done): $node -> " . (join " ", $o->xor_list($node)) . "\n";
-    }
+    print $i . " ($done): $node solves " . (join (", ", @A)).  "\n";
 
     last if $done;
   }
