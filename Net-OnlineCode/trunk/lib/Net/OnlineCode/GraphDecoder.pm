@@ -24,12 +24,6 @@ use constant ASSERT => 1;	# Enable extra-paranoid checks
 # Simple low-level operations to improve readability (and allow for
 # single debugging points)
 
-sub is_solved {
-  my ($self,$node) = @_;
-
-  $self->{solved}->[$node];
-}
-
 sub mark_as_unsolved {
   my ($self,$node) = @_;
 
@@ -246,7 +240,7 @@ sub add_check_block {
 
   # set up graph edges and/or xor list
   foreach my $i (@$nodelist) {
-    if ($self->is_solved($i)) {
+    if ($self->{solved}->[$i]) {
       ++$solved;
       push @solved, $i;
       # solved, so add node $i to our xor list
@@ -286,7 +280,7 @@ sub propagation_rule {
 sub aux_rule {
   my ($self, $from, $solved) = @_;
 
-  if ($self->is_solved($from)) {
+  if ($self->{solved}->[$from]) {
     # was previously solved (by propagation rule), so we don't need to
     # solve again. Delete the graph edges
 
@@ -354,7 +348,7 @@ sub resolve {
 
     my ($from, $to) = (shift @$pending);
 
-    unless ($self->is_auxiliary($from) or $self->is_solved($from)) {
+    unless ($self->is_auxiliary($from) or $self->{solved}->[$from]) {
       print "skipping unproductive node $from\n" if DEBUG;
       next;
     }
@@ -371,7 +365,7 @@ sub resolve {
     my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
 
     foreach $to (@lower_nodes) {
-      if ($self->is_solved($to)) {
+      if ($self->{solved}->[$to]) {
 	push @solved_nodes, $to;
       } else {
 	push @unsolved_nodes, $to;
@@ -421,7 +415,7 @@ sub resolve {
 
     if ($count_unsolved == 1) {
 
-      next unless $self->is_solved($from);
+      next unless $self->{solved}->[$from];
 
       push @solved_nodes, @{$self->{xor_list}->[$from]}; 
 
