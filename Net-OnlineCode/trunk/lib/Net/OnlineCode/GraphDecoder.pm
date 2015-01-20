@@ -368,8 +368,8 @@ sub resolve {
       if ($self->{solved}->[$to]) {
 	push @solved_nodes, $to;
       } else {
+	last if ++$count_unsolved > 1;
 	push @unsolved_nodes, $to;
-	++$count_unsolved;
       }
     }
 
