@@ -619,7 +619,7 @@ sub checkblock_mapping {
     $key = join " ", sort { $a <=> $b } @unpacked;
     if (exists $self->{unique}->{$key}) {
       warn "quashed duplicate check block\n" if DEBUG;
-      next;
+      #next;
     }
 
     # print "check_mapping: raw composite block list: ", 
@@ -649,6 +649,7 @@ sub checkblock_mapping {
 	#push @xor_list, @expanded;
       }
     }
+    last;
   }
 
   # prevent generating this block again

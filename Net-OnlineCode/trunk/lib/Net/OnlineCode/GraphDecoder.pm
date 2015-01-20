@@ -298,7 +298,7 @@ sub aux_rule {
     
     push @{$self->{xor_list}->[$from]}, @$solved;
     for my $to (@$solved) {
-      # don't do expansion; it takes up too much memory
+      # don't do expansion yet; it takes up too much memory
       #my @expanded = @{$self->{xor_list}->[$to]};
       #push @{$self->{xor_list}->[$from]}, @expanded;
       #if (DEBUG) {
@@ -411,9 +411,7 @@ sub resolve {
 	}
       }
 
-    }
-
-    if ($count_unsolved == 1) {
+    } elsif ($count_unsolved == 1) {
 
       next unless $self->{solved}->[$from];
 

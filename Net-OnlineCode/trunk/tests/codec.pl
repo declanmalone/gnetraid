@@ -124,8 +124,14 @@ until ($done) {
   print "Encoder check block (after expansion): " . (join ", ", @$enc_xor_list) . "\n";
 
 
-  # xor check block (just a list of message blocks thanks to expand_aux flag)
-  my $contents = substr($istring,  $blksiz * shift @$enc_xor_list, $blksiz);
+  # xor check block (just a list of message blocks thanks to
+  # expand_aux flag). Note that after removing the check for empty
+  # check blocks (those expanding to a null list of messages) in the
+  # OnlineCode module, the code below had to be changed to start off
+  # with a null string rather than assuming that the message list
+  # could be shifted from
+  # my $contents = substr($istring, $blksiz * shift @$enc_xor_list, $blksiz);
+  my $contents = "\0" x 20;
   foreach (@$enc_xor_list) {
     xor_strings(\$contents,
 		substr($istring,  $blksiz * $_, $blksiz));
