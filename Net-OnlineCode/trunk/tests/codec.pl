@@ -95,7 +95,7 @@ print "Setting up decoder with e=$e, q=$q, mblocks=$mblocks\n";
 # set up decoder with same parameters
 my $dec = Net::OnlineCode::Decoder
   ->new(mblocks => $mblocks, initial_rng => $drng,
-	e => $e, q=> $q, expand_aux => 1);
+	e => $e, q=> $q, expand_aux => 1, expand_msg => 1);
 die "Failed to create decoder. Quitting\n" unless ref($dec);
 
 # Create arrays to store received/decoded message, aux and check blocks
@@ -131,7 +131,7 @@ until ($done) {
   # with a null string rather than assuming that the message list
   # could be shifted from
   # my $contents = substr($istring, $blksiz * shift @$enc_xor_list, $blksiz);
-  my $contents = "\0" x 20;
+  my $contents = "\0" x $blksiz;
   foreach (@$enc_xor_list) {
     xor_strings(\$contents,
 		substr($istring,  $blksiz * $_, $blksiz));
@@ -166,7 +166,7 @@ until ($done) {
       #my @dec_xor_list = $dec->xor_list($decoded_block);
       my @dec_xor_list = $dec->expansion($decoded_block);
 
-      print "Decoded message block $decoded_block is composed of: ",
+      print "\nDecoded message block $decoded_block is composed of: ",
 	(join ", ", @dec_xor_list) . "\n";
       die "Decoded message block $decoded_block had empty XOR list\n"
 	unless @dec_xor_list;

@@ -95,6 +95,13 @@ sub delete_edge {
   delete $self->{edges}->[$from]->{$to};
   delete $self->{edges}->[$to]->{$from};
 
+  # my counting arrays don't include entries for message blocks
+  my $mblocks = $self->{mblocks};
+  if ($from >= $mblocks) {
+    die "Count for node $from went negative\n" unless
+      ($self->{edge_count}->[$from - $mblocks])--;
+  }
+
 }
 
 
@@ -114,7 +121,7 @@ sub delete_edge {
 # blocks since without them, the sender would not be able to construct
 # auxiliary or check blocks and the receiver would not be able to
 # receive anything. Equivalently, think of aux and check blocks as
-# "higher-level" constructs.
+# "higher-level" constructs moving "up" the software stack.
 
 sub new {
   my $class = shift;
@@ -283,14 +290,11 @@ sub add_check_block {
 
 }
 
-# resolve graph
+# Graph resolution. Resolution of the graph has a "downward" part
+# (resolve()) where nodes with one unsolved edge solve a message or
+# aux block, and an upward part (cascade()) that works up from a
+# newly-solved node.
 
-# Helper function called when a solved node has one unsolved neighbour
-sub propagation_rule {
-  my ($self, $from, $to, $solved) = @_;
-
-  
-}
 
 # an unsolved aux block can be solved if it has no unsolved neighbours
 sub aux_rule {
@@ -310,33 +314,47 @@ sub aux_rule {
   }
 }
 
-# Resolution of the graph has a "downward" part (resolve()) where
-# nodes with one unsolved edge solve a message or aux block, and an
-# upward part (cascade()) that works up from a newly-solved node.
 
 # Work up from a newly-solved message or auxiliary block
 
 sub cascade {
   my ($self,$node) = @_;
 
+  my $mblocks = $self->{mblocks};
+  my $ablocks = $self->{ablocks};
   my $pending = $self->{unresolved};
   my @higher_nodes = grep { $_ > $node } $self->edge_list($node);
 
   if (DEBUG) {
     if (@higher_nodes) {
-      print "Solved node $node still has higher nodes " . (join " ", @higher_nodes)
+      print "Solved node $node cascades to nodes " . (join " ", @higher_nodes)
 	. "\n\n";
     } else {
-      print "Solved node $node has no higher nodes (no cascade)\n\n";
+      print "Solved node $node has no cascade\n\n";
     }
   }
-
 
   for my $to (@higher_nodes) {
 
     # solve these edges
     
-    
+    #if ($self->{solved}->[$to]) {
+    if ($self->is_check($to)) {
+
+      push @{$self->{xor_list}->[$to]}, $node;
+      $self->delete_edge($to,$node);
+    }
+
+    if (0) {
+
+      # we get here if this is an aux block that hasn't been solved by
+      # either the propagation rule or the aux rule. We should still
+      # update the count of unsolved nodes even if we're not deleting
+      # the edges or modifying the XOR list.
+
+      ($self->{edge_count}->[$to - $mblocks])--;
+    }
+
     push @$pending, $to;
     
 
@@ -393,9 +411,12 @@ sub resolve {
     my $count_unsolved = 0;	# size of above array
 
     if (DEBUG) {
-      print "XOR list for $from is " . 
+      print "\nStarting resolve at $from; XOR list is " . 
 	(join ", ", @{$self->{xor_list}->[$from]}) . "\n";
     }
+
+    next unless $self->{edge_count}->[$from - $mblocks] < 2 
+      or $self->is_auxiliary($from);
 
     my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
 
@@ -407,10 +428,6 @@ sub resolve {
 	push @unsolved_nodes, $to;
       }
     }
-
-#    print "\nStarting node: $from has lower nodes: " .
-#      (join " ", @lower_nodes) . "\n"
-#        if DEBUG;
 
     print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
 
@@ -424,13 +441,13 @@ sub resolve {
 
 	if ($self->{solved}->[$from]) {
 	  # was previously solved (by propagation rule), so we don't need to
-	  # solve again. Delete the graph edges
+	  # solve again. Delete the graph edges (since they're all solved too)
 
 	  foreach (@solved_nodes) { $self->delete_edge($from, $_) };
 	} else {
 	  # otherwise solve it here by expanding message blocks' xor lists
 	  $self->aux_rule($from, \@solved_nodes);
-	
+
 	  print "Aux rule solved auxiliary block $from completely\n" if DEBUG;
 
 	  push @newly_solved, $from;

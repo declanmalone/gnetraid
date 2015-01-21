@@ -8,6 +8,8 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
+use constant DEBUG => 0;
+
 require Exporter;
 
 @ISA = qw(Exporter);
@@ -27,8 +29,6 @@ require XSLoader;
 XSLoader::load('Net::OnlineCode', $VERSION);
 
 # on to our stuff ...
-
-use constant DEBUG => 0;
 
 
 # Codec parameters
@@ -529,7 +529,12 @@ sub blklist_to_msglist {
       }
     } else {
       # aux block : push all message blocks it's composed of
-      push @xor_list, @{$self->{aux_mapping}->[$entry]};
+      my @expansion = @{$self->{aux_mapping}->[$entry]};
+      if (DEBUG) {
+	print "expand_aux: expanding $entry to " .
+	  (join " ", @expansion) . "\n";
+      }
+      push @xor_list, @expansion;
     }
   }
   return keys %blocks;
