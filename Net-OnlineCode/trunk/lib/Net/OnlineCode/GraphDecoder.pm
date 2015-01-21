@@ -79,6 +79,19 @@ sub delete_edge {
 
   print "Deleting edge $from, $to\n" if DEBUG;
 
+  # I want to clean up calling code, so die here to find places to fix
+  if (ASSERT and $to == $from) {
+    my ($parent,$line) = (caller(1)) [3,2];
+    warn "called from sub $parent, line $line\n";
+    die "Asked to delete edge from $from to itself\n";
+  }
+
+  # I might also want to incorporate updates to the count of unsolved
+  # edges here, and that would require that $from is greater than $to:
+  if (ASSERT and $to >= $from) {
+    die "delete_edge: from value $from not greater than to value $to\n";
+  }
+
   delete $self->{edges}->[$from]->{$to};
   delete $self->{edges}->[$to]->{$from};
 
@@ -135,39 +148,38 @@ sub new {
      mblocks    => $mblocks,
      ablocks    => $ablocks,
      coblocks   => $mblocks + $ablocks, # "composite"
-     # expand_aux => $expand_aux,
-     neighbours     => undef,	# will only store aux block mappings
      edges          => [],	# stores both check, aux block mappings
+     edge_count     => [],	# count unsolved edges (aux, check only)
+     edge_count_x   => [],	# "transparent" edge count (check only)
      solved         => [],
      unsolved_count => $mblocks,
      nodes          => $mblocks + $ablocks, # running count
-     # xor_hash       => [],    # replaced by xor_list below
      xor_list       => [],
      iter           => 0,	# debug use
      unresolved     => [],      # queue of nodes needing resolution
      done           => 0,       # all message nodes decoded?
     };
 
-  # work already done in auxiliary_mapping in Decoder
-  $self->{neighbours} = $auxlist;
-
   bless $self, $class;
 
-  # update internal structures
+  # set up basic structures
   for my $i (0..$mblocks + $ablocks - 1) {
     # mark blocks as unsolved, and having no XOR expansion
     $self->mark_as_unsolved($i);
-    # $self->{xor_hash} ->[$i] = {};
     $self->{xor_list} ->[$i] = [];
-    # empty edge structure
     push @{$self->{edges}}, {}; # 5.14
   }
 
-  # set up edge structure (same as neighbours, but using hashes)
+  # set up edge structure (convert from auxlist's list of lists)
   for my $i (0..$mblocks + $ablocks - 1) {
     for my $j (@{$auxlist->[$i]}) {
       $self->add_half_edge($i,$j);
     }
+  }
+
+  # set up edge counts for aux blocks
+  for my $i (0 .. $ablocks - 1) {
+    push @{$self->{edge_count}}, scalar(@{$auxlist->[$mblocks + $i]});
   }
 
   $self;
@@ -224,8 +236,7 @@ sub add_check_block {
   # making them more error-prone) and using slightly more memory, I've
   # decided that the latter option is best. So this routine will now
   # revert to the original method and always add a check block,
-  # regardless of whether it adds more information or not.
-
+  # regardless of whether it adds new information or not.
 
   my $node = $self->{nodes}++;
 
@@ -237,6 +248,7 @@ sub add_check_block {
 
   my $solved = 0;		# just used for debug output
   my @solved = ();		# ditto
+  my $unsolved_count = 0;
 
   # set up graph edges and/or xor list
   foreach my $i (@$nodelist) {
@@ -244,14 +256,18 @@ sub add_check_block {
       ++$solved;
       push @solved, $i;
       # solved, so add node $i to our xor list
-      #$self->{xor_hash}->[$node]->{$i} = undef;
       push @{$self->{xor_list}->[$node]}, $i;
       
     } else {
       # unsolved, so add edge to $i
       $self->add_edge($node,$i);
+      ++$unsolved_count;
     }
   }
+  push @{$self->{edge_count}}, $unsolved_count;
+
+  # TODO: also expand any aux blocks and create separate edges
+  # pointing directly to message blocks
 
   if (DEBUG) {
     print "New check block $node: " . (join " ", @$nodelist) . "\n";
@@ -280,37 +296,56 @@ sub propagation_rule {
 sub aux_rule {
   my ($self, $from, $solved) = @_;
 
-  if ($self->{solved}->[$from]) {
-    # was previously solved (by propagation rule), so we don't need to
-    # solve again. Delete the graph edges
+  if (DEBUG) {
+    print "Solving aux block $from based on aux rule\n";
+    print "XORing expansion of these solved message blocks: " . 
+      (join " ", @$solved) . "\n";
+  }
 
-    map { $self->delete_edge($from, $_) } @$solved;
-    return undef;
-  } else {
-    # otherwise solve it here by expanding message blocks' xor lists
-    if (DEBUG) {
-      print "Solving aux block $from based on aux rule\n";
-      print "XORing expansion of these solved message blocks: " . 
-	(join " ", @$solved) . "\n";
-    }
+  $self->mark_as_solved($from);
 
-    $self->mark_as_solved($from);
-    
-    push @{$self->{xor_list}->[$from]}, @$solved;
-    for my $to (@$solved) {
-      # don't do expansion yet; it takes up too much memory
-      #my @expanded = @{$self->{xor_list}->[$to]};
-      #push @{$self->{xor_list}->[$from]}, @expanded;
-      #if (DEBUG) {
-      #	print "Expansion: $to -> " . (join " ", @expanded) . "\n";
-      #}
-      $self->delete_edge($from,$to);
-    }
-    return $from;		# newly solved
+  push @{$self->{xor_list}->[$from]}, @$solved;
+  for my $to (@$solved) {
+    $self->delete_edge($from,$to);
   }
 }
 
+# Resolution of the graph has a "downward" part (resolve()) where
+# nodes with one unsolved edge solve a message or aux block, and an
+# upward part (cascade()) that works up from a newly-solved node.
 
+# Work up from a newly-solved message or auxiliary block
+
+sub cascade {
+  my ($self,$node) = @_;
+
+  my $pending = $self->{unresolved};
+  my @higher_nodes = grep { $_ > $node } $self->edge_list($node);
+
+  if (DEBUG) {
+    if (@higher_nodes) {
+      print "Solved node $node still has higher nodes " . (join " ", @higher_nodes)
+	. "\n\n";
+    } else {
+      print "Solved node $node has no higher nodes (no cascade)\n\n";
+    }
+  }
+
+
+  for my $to (@higher_nodes) {
+
+    # solve these edges
+    
+    
+    push @$pending, $to;
+    
+
+  }
+
+
+}
+
+# Work down from a check or auxiliary block
 sub resolve {
 
   # now doesn't take any arguments (uses unresolved queue instead)
@@ -373,14 +408,13 @@ sub resolve {
       }
     }
 
-#    print "\nStarting node: $from has lower nodes: " . (join " ", @lower_nodes) . "\n"
-#      if DEBUG;
+#    print "\nStarting node: $from has lower nodes: " .
+#      (join " ", @lower_nodes) . "\n"
+#        if DEBUG;
 
     print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
 
-
     if ($count_unsolved == 0) {
-
 
       if ($self->is_check($from)) {
 
@@ -388,34 +422,26 @@ sub resolve {
                                 # here if we wanted
       } else {
 
-	my $newly_solved = $self->aux_rule($from, \@solved_nodes);
+	if ($self->{solved}->[$from]) {
+	  # was previously solved (by propagation rule), so we don't need to
+	  # solve again. Delete the graph edges
+
+	  foreach (@solved_nodes) { $self->delete_edge($from, $_) };
+	} else {
+	  # otherwise solve it here by expanding message blocks' xor lists
+	  $self->aux_rule($from, \@solved_nodes);
 	
-	if (defined($newly_solved)) {
 	  print "Aux rule solved auxiliary block $from completely\n" if DEBUG;
 
-	  push @newly_solved, $newly_solved;
+	  push @newly_solved, $from;
 
-	  # Cascade to potentially find more solvable blocks
-
-	  # queue up check blocks
-	  my @higher_nodes = grep { $_ > $from } $self->edge_list($from);
-
-	  if (@higher_nodes) {
-	    print "Solved node $from still has higher nodes " . (join " ", @higher_nodes)
-	      . "\n\n" if DEBUG;
-	  } else {
-	    print "Solved node $from has no higher nodes (no cascade)\n\n" if DEBUG;
-	  }
-
-	  push @$pending, @higher_nodes;
+	  $self->cascade($from);
 	}
       }
 
     } elsif ($count_unsolved == 1) {
 
       next unless $self->{solved}->[$from];
-
-      push @solved_nodes, @{$self->{xor_list}->[$from]}; 
 
       # Propagation rule matched
       $to = shift @unsolved_nodes;
@@ -425,7 +451,8 @@ sub resolve {
       $self->mark_as_solved($to);
       push @newly_solved, $to;
 
-      # create XOR list for the newly-solved node
+      # create XOR list for the newly-solved node, comprising this
+      # node's XOR list plus all nodes in the @solved array
 
       if (DEBUG) {
 	print "Node $from has XOR list: " . 
@@ -433,23 +460,10 @@ sub resolve {
       }
 						   
       $self->delete_edge($from,$to);
-
+      push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
+      push @{$self->{xor_list}->[$to]}, @solved_nodes;
       foreach my $i (@solved_nodes) {
-	
-	print "=> Adding $i to ${to}'s XOR list\n" if DEBUG;
-
-	if (0 and $self->is_message($i)) { # don't expand message nodes any more
-	  my @expanded = @{$self->{xor_list}->[$i]};
-	  if (DEBUG) {
-	    print "Expansion: $i -> " . (join " ", @expanded) . "\n";
-	  }
-	  push @{$self->{xor_list}->[$to]}, @expanded;
-	} else {
-	  #$self->toggle_xor($to,$i);
-	  push @{$self->{xor_list}->[$to]}, $i;
-	}
 	$self->delete_edge($from,$i);
-
       }
 
       # Update global structure and decide if we're done
@@ -470,22 +484,7 @@ sub resolve {
       }
 
       # Cascade to potentially find more solvable blocks
-      my @higher_nodes = grep { $_ > $to } $self->edge_list($to);
-
-
-      # if this is a checkblock, free space reserved for xor_hash
-      if ($from > $mblocks + $ablocks) {
-	#$self->free_xor_hash($from);
-      }
-
-      if (@higher_nodes) {
-	print "Solved node $to still has higher nodes " . (join " ", @higher_nodes)
-	  . "\n\n" if DEBUG;
-      } else {
-	print "Solved node $to has no higher nodes (no cascade)\n\n" if DEBUG;
-      }
-
-      push @$pending, @higher_nodes;
+      $self->cascade($to);
 
     }
 
