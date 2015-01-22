@@ -34,11 +34,6 @@ sub mark_as_unsolved {
 sub mark_as_solved {
   my ($self,$node) = @_;
 
-  if (0 and DEBUG) {		# wasn't a bug after all
-    my ($parent,$line) = (caller(1)) [3,2];
-    print "mark_as_solved called from sub $parent, line $line\n";
-  }
-
   print "Marking block $node as solved\n" if DEBUG;
 
   $self->{solved}->[$node] = 1;
@@ -67,8 +62,8 @@ sub delete_up_edge {
 
   print "Deleting edge $high, $low\n" if DEBUG;
 
-  # I might also want to incorporate updates to the count of unsolved
-  # edges here, and that would require that $high is greater than $low:
+  # I also want to incorporate updates to the count of unsolved edges
+  # here, and that would require that $high is greater than $low:
   if (ASSERT and $low >= $high) {
     die "delete_edge: 1st arg $high not greater than 2nd arg $low\n";
   }
@@ -137,8 +132,8 @@ sub new {
      coblocks   => $mblocks + $ablocks, # "composite"
 #     edges          => [],	# stores both check, aux block mappings
 
-     # Replace single edges list with egdes_n (up) and v_edges (down)
-     # lists. Up edges will continue to be tracked as a list of
+     # Replace single edges list with lists of v_edges (down) and
+     # n_egdes (up). Up edges will continue to be tracked as a list of
      # hashes, but down edges will move to being a list of lists since
      # we never need to delete single edges from it. These lists will
      # also be indexed differently: the up edge list starts with
@@ -147,7 +142,6 @@ sub new {
      v_edges        => [],	# down: mnemonic "v" points down
      n_edges        => [],	# up: mnemonic "n" is like upside-down "v"
 
-     
      edge_count     => [],	# count unsolved "v" edges (aux, check only)
      edge_count_x   => [],	# "transparent" edge count (check only)
      solved         => [],
@@ -322,7 +316,7 @@ sub cascade {
   my $mblocks = $self->{mblocks};
   my $ablocks = $self->{ablocks};
   my $pending = $self->{unresolved};
-#  my @higher_nodes = grep { $_ > $node } $self->edge_list($node);
+
   my @higher_nodes = keys %{$self->{n_edges}->[$node]};
 
   if (DEBUG) {
@@ -339,6 +333,24 @@ sub cascade {
     ($self->{edge_count}->[$to - $mblocks])--;
   }
   push @$pending, @higher_nodes;
+
+}
+
+# helper function to delete (solved) edges from a solved node and
+# optionally free the XOR list
+sub decommission_node {
+
+  my ($self, $node, $solved_list) = @_;
+
+  foreach (@$solved_list) { 
+    delete $self->{n_edges}->[$_]->{$node};
+  }
+  $self->{v_edges}->[$node - $self->{mblocks}] = [];
+
+  # we can free XOR list only if this is a check block
+  if ($node >= $self->{coblocks}) {
+    $self->{xor_list}->[$node] = undef;
+  }
 
 }
 
@@ -387,67 +399,44 @@ sub resolve {
 
     my @solved_nodes = ();
     my @unsolved_nodes;
-    my $count_unsolved = 0;	# size of above array
+    my $count_unsolved = $self->{edge_count}->[$from - $mblocks];
 
     if (DEBUG) {
       print "\nStarting resolve at $from; XOR list is " . 
 	(join ", ", @{$self->{xor_list}->[$from]}) . "\n";
     }
 
-    my $static_count=$self->{edge_count}->[$from - $mblocks];
-    next unless  $static_count < 2 
-      or $self->is_auxiliary($from);
+    next unless $count_unsolved < 2;
 
-#    my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
     my @lower_nodes = @{$self->{v_edges}->[$from-$mblocks]};
 
-    foreach $to (@lower_nodes) {
-      if ($self->{solved}->[$to]) {
-	push @solved_nodes, $to;
-      } else {
-	# don't need this optimisation any more since we should only
-	# ever have unsolved count < 2 now
-	#
-	last if ++$count_unsolved > 1;
-#	++$count_unsolved;
-	push @unsolved_nodes, $to;
-      }
-    }
-
-    # make sure that both ways of counting unsolved agree
-    if (0 and ASSERT) {
-      my $type=$self->is_check($from) ? "check" : "auxiliary";
-      warn "($type) lower nodes has $#lower_nodes elements vs $static_count\n";
-      die "unsolved count mismatch\n" if $count_unsolved != $static_count;
-    }
-
-    print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
+    print "Node links to $count_unsolved unsolved nodes\n" if DEBUG;
 
     if ($count_unsolved == 0) {
 
       if ($self->is_check($from)) {
 
-	next;			# we could free this node's memory
-                                # here if we wanted
+	# This check block can't provide any more useful information,
+	# so delete any remaining edges and free xor space
+
+	$self->decommission_node($from, \@lower_nodes);
+	next;
+
       } else {
 
 	if ($self->{solved}->[$from]) {
-	  # was previously solved (by propagation rule), so we don't need to
-	  # solve again. Delete the graph edges (since they're all solved too)
-
-	  foreach (@solved_nodes) { 
-	    delete $self->{n_edges}->[$_]->{$from};
-	  }
-	  $self->{v_edges}->[$from - $self->{mblocks}] = []
+	  # Was previously solved by propagation resolve, so we don't
+	  # solve again. Delete the graph edges since they're all
+	  # solved too.
+	  $self->decommission_node($from, \@lower_nodes);
 
 	} else {
-	  # otherwise solve it here by expanding message blocks' xor lists
-	  $self->aux_rule($from, \@solved_nodes);
+	  # Otherwise solve it with aux rule
+	  $self->aux_rule($from, \@lower_nodes);
 
 	  print "Aux rule solved auxiliary block $from completely\n" if DEBUG;
 
 	  push @newly_solved, $from;
-
 	  $self->cascade($from);
 	}
       }
@@ -456,8 +445,17 @@ sub resolve {
 
       next unless $self->{solved}->[$from];
 
-      # Propagation rule matched
-      $to = shift @unsolved_nodes;
+      # Propagation rule matched; separate solved from unsolved
+
+      # TODO: this whole section (up to "Update global structure") can
+      # be rewritten to only scan @lower_nodes list once
+      for my $i (@lower_nodes) {
+	if ($self->{solved}->[$i]) {
+	  push @solved_nodes, $i;
+	} else {
+	  $to = $i; 
+	}
+      }
 
       print "Node $from solves node $to\n" if DEBUG;
 
@@ -475,13 +473,10 @@ sub resolve {
       $self->delete_up_edge($from,$to);
       push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
       push @{$self->{xor_list}->[$to]}, @solved_nodes;
-      foreach my $i (@solved_nodes) {
-	delete $self->{n_edges}->[$i]->{$from};
-      }
-      $self->{v_edges}->[$from - $self->{mblocks}] = [];
+
+      $self->decommission_node($from, \@solved_nodes);
 
       # Update global structure and decide if we're done
-
       if ($to < $mblocks) {
 	print "Solved message block $to completely\n" if DEBUG;
 	unless (--($self->{unsolved_count})) {
@@ -491,7 +486,6 @@ sub resolve {
 	  @$pending = ();
 	  last;			# finish searching
 	}
-
       } else {
 	print "Solved auxiliary block $to completely\n" if DEBUG;
 	push @$pending, $to;
@@ -501,8 +495,6 @@ sub resolve {
       $self->cascade($to);
 
     }
-
-
 
   }
 
