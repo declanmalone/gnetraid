@@ -55,7 +55,7 @@ if (defined($opt_s)) {
 my ($mblocks, $trials, @junk) = @ARGV;
 
 use lib '../lib';
-use Net::OnlineCode::Encoder;
+use Net::OnlineCode;
 use Net::OnlineCode::Decoder;
 use Net::OnlineCode::RNG;
 
@@ -73,9 +73,13 @@ if (defined($seed)) {
 }
 print "RNG seed: ". $rng->as_hex() . "\n";
 
-# use a trial Decoder object to fix e, q, ablocks parameters
-my $o=Net::OnlineCode::Decoder->
-  new(mblocks=>$mblocks, initial_rng=>$rng, expand_aux=>0);
+# use a trial Net::OnlineCode object to fix e, q, ablocks
+# parameters. By using Net::OnlineCode instead of a Decoder object, we
+# avoid overheads involved with creating the auxiliary blocks (though
+# not the probability table)
+
+my $o=Net::OnlineCode->
+  new(mblocks=>$mblocks, initial_rng=>$rng);
 
 my $e = $o->get_e;
 my $q =	$o->get_q;
