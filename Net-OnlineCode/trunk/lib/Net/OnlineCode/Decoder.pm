@@ -26,13 +26,13 @@ sub new {
   my $class = shift;
 
   my %opts = (
-	      # decoder-specific arguments:
-	      expand_aux  => 0,    # override parent class's default
-	      expand_msg  => 1,    # expand_* options used by expansion()
-	      initial_rng => undef,
-	      # user-supplied arguments:
-	      @_
-	     );
+              # decoder-specific arguments:
+              expand_aux  => 0,    # override parent class's default
+              expand_msg  => 1,    # expand_* options used by expansion()
+              initial_rng => undef,
+              # user-supplied arguments:
+              @_
+             );
   unless (ref($opts{initial_rng})) {
     carp "$class->new requires an initial_rng => \$rng parameter\n";
     return undef;
@@ -121,13 +121,13 @@ sub expansion {
 
     for my $i (@$in) {
       if ($expand_msg and $i < $mblocks) {
-	++$expanded;
-	push @$out, @{$self->{graph}->{xor_list}->[$i]};
+        ++$expanded;
+        push @$out, @{$self->{graph}->{xor_list}->[$i]};
       } elsif ($expand_aux and $i >= $mblocks and $i < $coblocks) {
-	++$expanded;
-	push @$out, @{$self->{graph}->{xor_list}->[$i]};
+        ++$expanded;
+        push @$out, @{$self->{graph}->{xor_list}->[$i]};
       } else {
-	push @$out, $i;
+        push @$out, $i;
       }
     }
     $done = 1 if !$expanded;
@@ -250,7 +250,7 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
           }
         }
 
-	# save newly-decoded message/aux block
+        # save newly-decoded message/aux block
         if ($decoded_block < $mblocks) {          # message block
           substr($message, $decoded_block * $blocksize, $blocksize) = $block;
         } else {                                  # auxiliary block

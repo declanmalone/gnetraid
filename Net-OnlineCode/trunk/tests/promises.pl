@@ -62,7 +62,7 @@ use Net::OnlineCode::RNG;
 print "Testing: PROMISES\n";
 
 $mblocks = 100 unless defined($mblocks);
-$trials  = 10  unless defined($trials);
+$trials  = 1   unless defined($trials);
 
 # set up RNG
 my $rng;
@@ -79,10 +79,10 @@ print "RNG seed: ". $rng->as_hex() . "\n";
 # not the probability table)
 
 my $o=Net::OnlineCode->
-  new(mblocks=>$mblocks, initial_rng=>$rng);
+  new(mblocks=>$mblocks);
 
 my $e = $o->get_e;
-my $q =	$o->get_q;
+my $q = $o->get_q;
 my $coblocks = $o->get_coblocks;
 my $ablocks  = $o->get_ablocks;
 
@@ -98,7 +98,7 @@ print "Expected number of check blocks: " .
 #print "Alt. check block count: " .
   int (0.5 + (1 + $e) * $coblocks) . "\n";
 
-$o = undef;			# destroy trial decoder
+$o = undef;                     # destroy trial decoder
 
 
 # variable to track actual results versus the promises made
@@ -151,20 +151,20 @@ for my $trial (1 .. $trials) {
       $composites_solved += @A;
 
       die "solved $composites_solved blocks, but there are only $coblocks to solve\n"
-	if $composites_solved > $coblocks;
+        if $composites_solved > $coblocks;
 
       # promise 1 says that if we know 1-e/2 fraction of the composite
       # blocks, it's enough to decode the entire message with failure
       # probability (e/2)**(q+1)
       unless (defined($composite_promise)) {
-	if ($composites_solved >= $coblocks * $composite_fraction) {
-	  if ($done) {
-	    $composite_promise = "true";
-	    ++$promise_1_total;
-	  } else {
-	    $composite_promise = "false";
-	  }
-	}
+        if ($composites_solved >= $coblocks * $composite_fraction) {
+          if ($done) {
+            $composite_promise = "true";
+            ++$promise_1_total;
+          } else {
+            $composite_promise = "false";
+          }
+        }
       }
       last if $done;
     }
