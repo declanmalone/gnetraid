@@ -44,62 +44,42 @@ sub mark_as_solved {
   $self->{solved}->[$node] = 1;
 }
 
-sub edge_list {
-  my ($self,$node) = @_;
-  keys %{$self->{edges}->[$node]};
-}
-
-sub add_half_edge {
-  my ($self,$from,$to) = @_;
-
-  die "Tried to add half-edge from node $from to itself\n"
-    if (ASSERT and $from == $to);
-
-  die "Tried to add existing half-edge from $from to $to\n"
-    if (ASSERT and exists($self->{edges}->[$from]->{$to}));
-
-  print "Adding half-edge $from, $to\n" if DEBUG;
-
-  $self->{edges}->[$from]->{$to} = undef;
-}
-
 
 sub add_edge {
 
-  my ($self,$from,$to) = @_;
+  my ($self,$high,$low) = @_;
 
-  $self->add_half_edge($to,$from);
-  $self->add_half_edge($from,$to);
+  # moving to up and down edges means order is important
+  if (ASSERT) {
+    die "add_edge: from must be greater than to" unless $high > $low;
+  }
 
+  my $mblocks = $self->{mblocks};
+
+  $self->{n_edges}->[$low]->{$high} = undef;
+  push @{$self->{v_edges}->[$high-$mblocks]}, $low;
+  
 }
 
-sub delete_edge {
+sub delete_up_edge {
 
-  my ($self,$from,$to) = @_;
+  my ($self,$high,$low) = @_;
 
-  print "Deleting edge $from, $to\n" if DEBUG;
-
-  # I want to clean up calling code, so die here to find places to fix
-  if (ASSERT and $to == $from) {
-    my ($parent,$line) = (caller(1)) [3,2];
-    warn "called from sub $parent, line $line\n";
-    die "Asked to delete edge from $from to itself\n";
-  }
+  print "Deleting edge $high, $low\n" if DEBUG;
 
   # I might also want to incorporate updates to the count of unsolved
-  # edges here, and that would require that $from is greater than $to:
-  if (ASSERT and $to >= $from) {
-    die "delete_edge: from value $from not greater than to value $to\n";
+  # edges here, and that would require that $high is greater than $low:
+  if (ASSERT and $low >= $high) {
+    die "delete_edge: 1st arg $high not greater than 2nd arg $low\n";
   }
 
-  delete $self->{edges}->[$from]->{$to};
-  delete $self->{edges}->[$to]->{$from};
+  delete $self->{n_edges}->[$low]->{$high};
 
   # my counting arrays don't include entries for message blocks
   my $mblocks = $self->{mblocks};
-  if ($from >= $mblocks) {
-    die "Count for node $from went negative\n" unless
-      ($self->{edge_count}->[$from - $mblocks])--;
+  if ($high >= $mblocks) {
+    die "Count for node $high went negative\n" unless
+      ($self->{edge_count}->[$high - $mblocks])--;
   }
 
 }
@@ -155,15 +135,27 @@ sub new {
      mblocks    => $mblocks,
      ablocks    => $ablocks,
      coblocks   => $mblocks + $ablocks, # "composite"
-     edges          => [],	# stores both check, aux block mappings
-     edge_count     => [],	# count unsolved edges (aux, check only)
+#     edges          => [],	# stores both check, aux block mappings
+
+     # Replace single edges list with egdes_n (up) and v_edges (down)
+     # lists. Up edges will continue to be tracked as a list of
+     # hashes, but down edges will move to being a list of lists since
+     # we never need to delete single edges from it. These lists will
+     # also be indexed differently: the up edge list starts with
+     # message blocks (as before) but the down edge list starts with
+     # aux blocks (since message blocks have no down edges)
+     v_edges        => [],	# down: mnemonic "v" points down
+     n_edges        => [],	# up: mnemonic "n" is like upside-down "v"
+
+     
+     edge_count     => [],	# count unsolved "v" edges (aux, check only)
      edge_count_x   => [],	# "transparent" edge count (check only)
      solved         => [],
-     unsolved_count => $mblocks,
      nodes          => $mblocks + $ablocks, # running count
      xor_list       => [],
-     iter           => 0,	# debug use
      unresolved     => [],      # queue of nodes needing resolution
+
+     unsolved_count => $mblocks,# count unsolved message blocks
      done           => 0,       # all message nodes decoded?
     };
 
@@ -174,15 +166,20 @@ sub new {
     # mark blocks as unsolved, and having no XOR expansion
     $self->mark_as_unsolved($i);
     $self->{xor_list} ->[$i] = [];
-    push @{$self->{edges}}, {}; # 5.14
+    push @{$self->{n_edges}}, {};
+    push @{$self->{v_edges}}, [] if $i >= $mblocks;
   }
 
   # set up edge structure (convert from auxlist's list of lists)
-  for my $i (0..$mblocks + $ablocks - 1) {
+  for my $i (0..$mblocks -1) {
     for my $j (@{$auxlist->[$i]}) {
-      $self->add_half_edge($i,$j);
+      $self->{n_edges}->[$i]->{$j} = undef;
     }
   }
+  for my $i ($mblocks .. $mblocks + $ablocks - 1) {
+    push @{$self->{v_edges}->[$i-$mblocks]}, @{$auxlist->[$i]}
+  }
+
 
   # set up edge counts for aux blocks
   for my $i (0 .. $ablocks - 1) {
@@ -251,7 +248,7 @@ sub add_check_block {
   #push @{$self->{xor_hash}}, { $node => undef };
   push @{$self->{xor_list}}, [$node];
   $self->mark_as_solved($node);
-  push @{$self->{edges}}, {};
+  push @{$self->{v_edges}}, [];
 
   my $solved = 0;		# just used for debug output
   my @solved = ();		# ditto
@@ -311,9 +308,9 @@ sub aux_rule {
   push @{$self->{xor_list}->[$from]}, @$solved;
   for my $to (@$solved) {
     # don't call delete_edge: unsolved counts would be wrong
-    delete $self->{edges}->[$from]->{$to};
-    delete $self->{edges}->[$to]->{$from};
+    delete $self->{n_edges}->[$to]->{$from};
   }
+  $self->{v_edges}->[$from - $self->{mblocks}] = [];
 }
 
 
@@ -325,7 +322,8 @@ sub cascade {
   my $mblocks = $self->{mblocks};
   my $ablocks = $self->{ablocks};
   my $pending = $self->{unresolved};
-  my @higher_nodes = grep { $_ > $node } $self->edge_list($node);
+#  my @higher_nodes = grep { $_ > $node } $self->edge_list($node);
+  my @higher_nodes = keys %{$self->{n_edges}->[$node]};
 
   if (DEBUG) {
     if (@higher_nodes) {
@@ -399,15 +397,26 @@ sub resolve {
     next unless $self->{edge_count}->[$from - $mblocks] < 2 
       or $self->is_auxiliary($from);
 
-    my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
+#    my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
+    my @lower_nodes = @{$self->{v_edges}->[$from-$mblocks]};
 
     foreach $to (@lower_nodes) {
       if ($self->{solved}->[$to]) {
 	push @solved_nodes, $to;
       } else {
-	last if ++$count_unsolved > 1;
+	# don't need this optimisation any more since we should only
+	# ever have unsolved count < 2 now
+	#
+	# last if ++$count_unsolved > 1;
+	++$count_unsolved;
 	push @unsolved_nodes, $to;
       }
+    }
+
+    # make sure that both ways of counting unsolved agree
+    if (0 and ASSERT) {
+      die "unsolved count mismatch\n" if
+	$count_unsolved != $self->{edge_count}->[$from - $mblocks];
     }
 
     print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
@@ -425,10 +434,10 @@ sub resolve {
 	  # solve again. Delete the graph edges (since they're all solved too)
 
 	  foreach (@solved_nodes) { 
-	    # don't call delete_edge: unsolved counts would be wrong
-	    delete $self->{edges}->[$from]->{$_};
-	    delete $self->{edges}->[$_]->{$from};
-	  };
+	    delete $self->{n_edges}->[$_]->{$from};
+	  }
+	  $self->{v_edges}->[$from - $self->{mblocks}] = []
+
 	} else {
 	  # otherwise solve it here by expanding message blocks' xor lists
 	  $self->aux_rule($from, \@solved_nodes);
@@ -461,14 +470,13 @@ sub resolve {
 	  (join ", ", @{$self->{xor_list}->[$from]}) . "\n";
       }
 						   
-      $self->delete_edge($from,$to);
+      $self->delete_up_edge($from,$to);
       push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
       push @{$self->{xor_list}->[$to]}, @solved_nodes;
       foreach my $i (@solved_nodes) {
-	# don't call delete_edge: unsolved counts would be wrong
-	delete $self->{edges}->[$from]->{$to};
-	delete $self->{edges}->[$to]->{$from};
+	delete $self->{n_edges}->[$i]->{$from};
       }
+      $self->{v_edges}->[$from - $self->{mblocks}] = [];
 
       # Update global structure and decide if we're done
 
