@@ -341,12 +341,12 @@ sub cascade {
     #if ($self->{solved}->[$to]) {
     if ($self->is_check($to)) {
 
-      push @{$self->{xor_list}->[$to]}, $node;
-      $self->delete_edge($to,$node);
+#      push @{$self->{xor_list}->[$to]}, $node;
+#      $self->delete_edge($to,$node);
 
       # Instead of doing XOR and delete, just decrement the count of
       # unsolved edges.
-#      ($self->{edge_count}->[$to - $mblocks])--;
+      ($self->{edge_count}->[$to - $mblocks])--;
 
     }
 
@@ -485,12 +485,12 @@ sub resolve {
       push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
       push @{$self->{xor_list}->[$to]}, @solved_nodes;
       foreach my $i (@solved_nodes) {
-	$self->delete_edge($from,$i);
+#	$self->delete_edge($from,$i);
 	
 	# don't call delete_edge because that decrements the unsolved
 	# count and that's already been done in cascade
-#	delete $self->{edges}->[$from]->{$to};
-#	delete $self->{edges}->[$to]->{$from};
+	delete $self->{edges}->[$from]->{$to};
+	delete $self->{edges}->[$to]->{$from};
       }
 
       # Update global structure and decide if we're done
