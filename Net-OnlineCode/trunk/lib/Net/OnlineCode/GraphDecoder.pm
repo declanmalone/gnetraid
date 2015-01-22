@@ -11,7 +11,7 @@ $VERSION = '0.02';
 
 use constant DEBUG => 0;
 use constant TRACE => 0;
-use constant ASSERT => 1;	# Enable extra-paranoid checks
+use constant ASSERT => 1;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -394,7 +394,8 @@ sub resolve {
 	(join ", ", @{$self->{xor_list}->[$from]}) . "\n";
     }
 
-    next unless $self->{edge_count}->[$from - $mblocks] < 2 
+    my $static_count=$self->{edge_count}->[$from - $mblocks];
+    next unless  $static_count < 2 
       or $self->is_auxiliary($from);
 
 #    my @lower_nodes = grep { $_ < $from } $self->edge_list($from);
@@ -407,16 +408,17 @@ sub resolve {
 	# don't need this optimisation any more since we should only
 	# ever have unsolved count < 2 now
 	#
-	# last if ++$count_unsolved > 1;
-	++$count_unsolved;
+	last if ++$count_unsolved > 1;
+#	++$count_unsolved;
 	push @unsolved_nodes, $to;
       }
     }
 
     # make sure that both ways of counting unsolved agree
     if (0 and ASSERT) {
-      die "unsolved count mismatch\n" if
-	$count_unsolved != $self->{edge_count}->[$from - $mblocks];
+      my $type=$self->is_check($from) ? "check" : "auxiliary";
+      warn "($type) lower nodes has $#lower_nodes elements vs $static_count\n";
+      die "unsolved count mismatch\n" if $count_unsolved != $static_count;
     }
 
     print "Unsolved lower degree: $count_unsolved\n" if DEBUG;
