@@ -617,8 +617,14 @@ sub checkblock_mapping {
     # select i composite blocks uniformly
 #    $check_mapping = [ (0 .. $coblocks-1) ];
 #    print "Calling fisher 2\n";
-    my $string = $self->{fisher_string};
-    @unpacked = fisher_yates_shuffle($rng, $string , $i);
+
+#   profiling indicates creating a new string here is costly (eg, ~34s
+#   on a 1.7GHz ARM v7 machine with 100,000 check blocks), probably
+#   because it can be quite big; hopefully passing as arg will
+#   eliminate this delay.
+#
+#    my $string = $self->{fisher_string};
+    @unpacked = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
 
     # check block for uniqueness before expansion
     $key = join " ", sort { $a <=> $b } @unpacked;
