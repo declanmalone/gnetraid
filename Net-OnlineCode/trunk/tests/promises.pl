@@ -130,7 +130,7 @@ for my $trial (1 .. $trials) {
 
   # check that parameters are still the same as for our trial decoder
   die "e changed\n"        unless $e == $o->get_e;
-  die "q changed\n"        unless $q =	$o->get_q;
+  die "q changed\n"        unless $q == $o->get_q;
   die "coblocks changed\n" unless $coblocks = $o->get_coblocks;
   die "ablocks  changed\n" unless $ablocks  = $o->get_ablocks;
 
