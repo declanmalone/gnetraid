@@ -310,7 +310,9 @@ sub aux_rule {
 
   push @{$self->{xor_list}->[$from]}, @$solved;
   for my $to (@$solved) {
-    $self->delete_edge($from,$to);
+    # don't call delete_edge: unsolved counts would be wrong
+    delete $self->{edges}->[$from]->{$to};
+    delete $self->{edges}->[$to]->{$from};
   }
 }
 
@@ -334,37 +336,11 @@ sub cascade {
     }
   }
 
+  # update the count of unsolved edges.
   for my $to (@higher_nodes) {
-
-    # solve these edges
-    
-    #if ($self->{solved}->[$to]) {
-    if ($self->is_check($to)) {
-
-#      push @{$self->{xor_list}->[$to]}, $node;
-#      $self->delete_edge($to,$node);
-
-      # Instead of doing XOR and delete, just decrement the count of
-      # unsolved edges.
-      ($self->{edge_count}->[$to - $mblocks])--;
-
-    }
-
-    if (0) {
-
-      # we get here if this is an aux block that hasn't been solved by
-      # either the propagation rule or the aux rule. We should still
-      # update the count of unsolved nodes even if we're not deleting
-      # the edges or modifying the XOR list.
-
-      ($self->{edge_count}->[$to - $mblocks])--;
-    }
-
-    push @$pending, $to;
-    
-
+    ($self->{edge_count}->[$to - $mblocks])--;
   }
-
+  push @$pending, @higher_nodes;
 
 }
 
@@ -448,7 +424,11 @@ sub resolve {
 	  # was previously solved (by propagation rule), so we don't need to
 	  # solve again. Delete the graph edges (since they're all solved too)
 
-	  foreach (@solved_nodes) { $self->delete_edge($from, $_) };
+	  foreach (@solved_nodes) { 
+	    # don't call delete_edge: unsolved counts would be wrong
+	    delete $self->{edges}->[$from]->{$_};
+	    delete $self->{edges}->[$_]->{$from};
+	  };
 	} else {
 	  # otherwise solve it here by expanding message blocks' xor lists
 	  $self->aux_rule($from, \@solved_nodes);
@@ -485,10 +465,7 @@ sub resolve {
       push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
       push @{$self->{xor_list}->[$to]}, @solved_nodes;
       foreach my $i (@solved_nodes) {
-#	$self->delete_edge($from,$i);
-	
-	# don't call delete_edge because that decrements the unsolved
-	# count and that's already been done in cascade
+	# don't call delete_edge: unsolved counts would be wrong
 	delete $self->{edges}->[$from]->{$to};
 	delete $self->{edges}->[$to]->{$from};
       }
