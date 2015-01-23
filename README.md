@@ -63,7 +63,7 @@ The k and n values can also calculate three other important figures:
 * the *fraction* of disk failures tolerated = (n - k) / n
 * the degree of space overhead = (n - k) / k
 
-Following on from the previous example, we can see that the (k=3, n=4) scheme can tolerate n - k = 1 disk failure, and expressed as a fraction this is (4 - 3) / 4 or one quarter of the disks. The amount of spce overhead is ( 4 - 3 ) / 3 = one third.
+Following on from the previous example, we can see that the (k=3, n=4) scheme can tolerate n - k = 1 disk failure, and expressed as a fraction this is (4 - 3) / 4 or one quarter of the disks. The amount of space overhead is ( 4 - 3 ) / 3 = one third (or 20Mb).
 
 One of the major benefits of IDA over RAID is that it can be tuned depending on whether the goal is improved redundancy or improved space efficiency. RAID restricts you to certain standard configurations, each with their own fixed k and n values. Hybrid RAID systems are possible, but they generally involve layering one RAID system (including RAID-0, which is striped only, but has no redundancy) on top of another. The space overheads of such hybrid RAID arrays is the accumumalation of the overheads *at each level*. This leads to the fact that for a given required level of redundancy, there is probably a set of IDA parameters which is more efficient than RAID.
 
@@ -100,8 +100,9 @@ Minus points:
 * software-based implementation (slow)
 * mathematically more complicated than RAID (which often just uses XOR)
 * slight file size increase (if decoding matrix needs to be stored with shares, though it need not be)
-* decoding complexity is O(k) compared to RAID's O(1)
+* decoding complexity is O(k) compared to RAID's O(1) (IDA's encoding complexity is O(n))
 * also need to invert a k by k matrix before decoding, depending on which shares are selected during reconstruction
+* increasing k at a later time requires rebuilding the entire IDA scheme (analogous to rebuilding a RAID array, but more costly)
 * not a complete security solution (requires external key management protocols, secure transmission channels, protocols to prevent silos presenting damaged or deliberately wrong shares, and also optionally encryption of data before share creation)
 * encoding and decoding costs increase latency
 * very low level (needs software stack or applications to make good use of it)
@@ -112,9 +113,12 @@ Interesting points:
 * since it's not implemented in hardware (eg, a RAID controller) it may make sense in a distributed network environment (potentially turning a minus into a plus)
 * might be useful as a component in a reliable ACK-free multicast protocol (in fact, [udpcast](https://www.udpcast.linux.lu/) uses a scheme like this (Luigi Rizzo's [FEC](http://www.iet.unipi.it/~luigi/fec.html), along with striping of blocks), and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
 * implementation using cheap, low-powered commodity hardware (eg, Raspberry Pi with attached USB disks)
+* when used for "cold" storage (ie, archival data), machines and/or disks can be powered down when not needed (or data could be stored on media such as tapes or optical disks)
+* shares need not be stored in silos on a 1:1 basis (particularly useful if n is modified dynamically in response to frequent accesses, so shares can form the basis of a "granular" cache&mdash;using filesize/k as the basic unit/quantum&mdash;providing good balance between availability and required storage space)
 * by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
 * possibility of implementation in hardware (eg, Parallella's Epiphany *or* FPGA part, PS3's SPU co-processors) or with specific versions optimised for certain CPUs (eg, ARM NEON or other SIMD architectures)
 * a hybrid share/replica system seems like both parts would complement each other and could be used for a variety of storage scenarios and work flows (dynamic scaling for both hot and cold data)
 * secret-sharing schemes are just way cool, and since there's no "key" as with traditional encryption schemes you can't be forced to divulge them (through legal or other means)
 
 ### A complete application: media-RAID
+
