@@ -57,17 +57,62 @@ The two fractions (1/k and n/k) should be multiplied by the total size of the fi
 * 60Mb * 1/3 = 20Mb per disk
 * 60Mb * 4/3 = 80Mb total
 
-The k and n values can also calculate two other important figures:
+The k and n values can also calculate three other important figures:
 
 * the number of disk failures tolerated = n - k
 * the *fraction* of disk failures tolerated = (n - k) / n
+* the degree of space overhead = (n - k) / k
 
-Following on from the previous example, we can see that the (k=3, n=4) scheme can tolerate n - k = 1 disk failure, and expressed as a fraction this is (4 - 3) / 4 or one quarter of the disks.
+Following on from the previous example, we can see that the (k=3, n=4) scheme can tolerate n - k = 1 disk failure, and expressed as a fraction this is (4 - 3) / 4 or one quarter of the disks. The amount of spce overhead is ( 4 - 3 ) / 3 = one third.
 
+One of the major benefits of IDA over RAID is that it can be tuned depending on whether the goal is improved redundancy or improved space efficiency. RAID restricts you to certain standard configurations, each with their own fixed k and n values. Hybrid RAID systems are possible, but they generally involve layering one RAID system (including RAID-0, which is striped only, but has no redundancy) on top of another. The space overheads of such hybrid RAID arrays is the accumumalation of the overheads *at each level*. This leads to the fact that for a given required level of redundancy, there is probably a set of IDA parameters which is more efficient than RAID.
 
+Another disadvantage of hybrid RAID arrays is that it is not possible to give a simple fraction describing the number of disk failures that the system can tolerate. Each layer will have its own tolerances, and the loss of certain key disks can render the entire array unreadable. Analysing the actual failure rates requires an exercise in figuring out all the permutations. By contrast, each share in an IDA scheme are fundametally interchangeable, with the probablity of failure of the entire system following naturally from the equation for the fraction of tolerated disk failures given above.
+
+(insert table of some sample k,n values here)
+
+One other fringe benefit of IDA is that it is easy to add more shares at a later time (increasing n) if more redundancy is required. Changing the overall redundacy level of a RAID array usually means rebuilding the entire array. This ability makes it interesting for, eg, dynamically altering the availability of a file in response to demand.
 
 ### Application Niches
 
 
 
 ### Summary of pros and cons
+
+As per De Bono's "PMI analysis" technique, here are some "plus", "minus" and "interesting" points for IDA.
+
+Plus points:
+
+* tunable
+* can be set up to be more space-efficient than RAID
+* can be set up to have better redundancy than RAID
+* even importance attached to all shares (no key points of failure)
+* lends itself well to distributed creation of shares (especially if combined with multicast)
+* very good for archival data
+* easy to analyse space and reliability metrics
+* extra redundancy easy to add later (requires reconstruction step or an existing replica)
+* security: individual shares leak little to no information if threshold is not met (so having a few silos cracked might not matter)
+* security: secure erase possible if decoding keys are kept secret (say in a central location)
+* with high redundancy levels, can be used in applications where high availability is more important than storage space (while still requiring less space than replica-based HA systems)
+
+Minus points:
+
+* software-based implementation (slow)
+* mathematically more complicated than RAID (which often just uses XOR)
+* slight file size increase (if decoding matrix needs to be stored with shares, though it need not be)
+* decoding complexity is O(k) compared to RAID's O(1)
+* also need to invert a k by k matrix before decoding, depending on which shares are selected during reconstruction
+* not a complete security solution (requires external key management protocols, secure transmission channels, protocols to prevent silos presenting damaged or deliberately wrong shares, and also optionally encryption of data before share creation)
+* encoding and decoding costs increase latency
+* very low level (needs software stack or applications to make good use of it)
+* no standard software stacks (and my Perl-based implementation is OK, but quite slow)
+
+Interesting points:
+
+* since it's not implemented in hardware (eg, a RAID controller) it may make sense in a distributed network environment
+* might be useful as a component in a reliable ACK-free multicast protocol (in fact, udpcast uses a scheme like this, and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
+* implementation using cheap, low-powered commodity hardware (eg, Raspberry Pi with attached USB disks)
+* by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
+* possibility of implementation in hardware (eg, Parallella's Epiphany *or* FPGA part, PS3's SPU co-processors) or with specific versions optimised for certain CPUs (eg, ARM NEON or other SIMD architectures)
+* a hybrid share/replica system seems like both parts would complement each other and could be used for a variety of storage scenarios and work flows (dynamic scaling for both hot and cold data)
+* 
