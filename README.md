@@ -4,7 +4,7 @@ A collection of files relating to distributed, RAID-like storage and transport m
 
 This repository contains various tools, libraries and demos for implementing a RAID-like storage system on a network. It's mostly written in Perl, though there are some elements written in C, including some Perl XS (C) code written to improve the performance of critical parts. All parts are licensed under version 2 (or later&mdash;your choice) of the GPL, except for any linkable C libraries, which are usable in other code under the terms of the Lesser GNU Public Licence (LGPL). Other parts may have slightly different licences depending on intended use (eg, Perl licence for any pure-Perl demo code).
 
-As it stands, the project is more of a loose collection of elements that can be used to create applications rather than a finished application itself. The one exception to this is the contents of the [Media-RAID/ folder](https://github.com/declanmalone/gnetraid/tree/master/Media-RAID/trunk), described below.
+As it stands, the project is more of a loose collection of elements that can be used to create applications rather than a finished application itself. The one exception to this is the contents of the [Media-RAID/](https://github.com/declanmalone/gnetraid/tree/master/Media-RAID/trunk) folder, described below.
 
 ## Project Focus
 
@@ -22,7 +22,7 @@ The goals for this project can be summed up with a nice acronym coming from an o
 
 In technical terms, this allows you to create a number of "shares" from an original file. These shares have the property that if you have a sufficient number of them (called a "threshold" or "quorum") then you can reconstruct the original file. Having fewer of the shares than this threshold number means that no part of the file can be recovered (though there might be *some* small amount of information leakage).
 
-The way this works is described in detail in the documentation for the Crypt::IDA perl module which is found in the [Crypt-IDA/trunk/ directory](https://github.com/declanmalone/gnetraid/tree/master/Crypt-IDA/trunk). A simpler explanation can be made by analogy to "secret-sharing schemes", which are mathematically quite similar to IDA.
+The way this works is described in detail in the documentation for the Crypt::IDA perl module which is found in the [Crypt-IDA/trunk/](https://github.com/declanmalone/gnetraid/tree/master/Crypt-IDA/trunk) folder. A simpler explanation can be made by analogy to "secret-sharing schemes", which are mathematically quite similar to IDA.
 
 In [Shamir's secret-sharing scheme](http://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing), we consider a case where a secret is to be shared among some number of people, which we can denote as "n". We want to give eacn of these people a part (or share) of the secret, but want also want to make it so that we require a minimum number of these shares (called the threshold, as above, and denoted as k) to be combined to recover the secret. This description can be seen to be almost identical to the description of Rabin's IDA as described above.
 
@@ -110,10 +110,11 @@ Minus points:
 Interesting points:
 
 * since it's not implemented in hardware (eg, a RAID controller) it may make sense in a distributed network environment (potentially turning a minus into a plus)
-* might be useful as a component in a reliable ACK-free multicast protocol (in fact, [udpcast](https://www.udpcast.linux.lu/) uses a scheme like this (Rizzo's FEC, along with striping of blocks), and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
+* might be useful as a component in a reliable ACK-free multicast protocol (in fact, [udpcast](https://www.udpcast.linux.lu/) uses a scheme like this (Luigi Rizzo's [FEC](http://www.iet.unipi.it/~luigi/fec.html), along with striping of blocks), and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
 * implementation using cheap, low-powered commodity hardware (eg, Raspberry Pi with attached USB disks)
 * by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
 * possibility of implementation in hardware (eg, Parallella's Epiphany *or* FPGA part, PS3's SPU co-processors) or with specific versions optimised for certain CPUs (eg, ARM NEON or other SIMD architectures)
 * a hybrid share/replica system seems like both parts would complement each other and could be used for a variety of storage scenarios and work flows (dynamic scaling for both hot and cold data)
 * secret-sharing schemes are just way cool, and since there's no "key" as with traditional encryption schemes you can't be forced to divulge them (through legal or other means)
 
+### A complete application: media-RAID
