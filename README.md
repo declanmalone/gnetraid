@@ -30,11 +30,11 @@ More concretely, imagine a scenario where we want to split up the secret among a
 
 - encoding the secret as a point in the 2-d plane (by, say, breaking it into two parts and treating each point as an X or Y coordinate);
 - generating a random line through that point for each person who will receive a share;
-- handing out the equations of the lines to all participants.
+- handing out the equation one line per participant.
 
 With this setup, any individual doesn't have enough information to recover the secret since there are an infinite number of points on their line. However, if two people put their equations together they can calculate the intersection of their respective lines. Since all lines go through the same point, any pair of lines will have the same point of intersection and so any pair of participants can combine their information to recover that point, which is the same as recovering the secret.
 
-The same scenario can be generalised for any value of k by considering a k-dimensional space, with lines being replaced by planes or hyperplanes and for other values of n by simply generating more random lines/planes/hyperplanes that pass through the secret point within that space.
+The same scenario can be generalised for any value of k by considering a k-dimensional space, with 2-d points being replaced with k-d points and lines being replaced with k-d planes or hyperplanes. It can be generalised for higher values of n by simply generating more random lines/planes/hyperplanes that pass through the secret point within that space.
 
 ### Applications of Rabin's IDA
 
@@ -109,8 +109,8 @@ Minus points:
 
 Interesting points:
 
-* since it's not implemented in hardware (eg, a RAID controller) it may make sense in a distributed network environment
-* might be useful as a component in a reliable ACK-free multicast protocol (in fact, udpcast uses a scheme like this, and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
+* since it's not implemented in hardware (eg, a RAID controller) it may make sense in a distributed network environment (potentially turning a minus into a plus)
+* might be useful as a component in a reliable ACK-free multicast protocol (in fact, [udpcast](https://www.udpcast.linux.lu/) uses a scheme like this (Rizzo's FEC, along with striping of blocks), and a [Digital Fountain scheme](http://en.wikipedia.org/wiki/Fountain_code) like [Online Codes](http://en.wikipedia.org/wiki/Online_codes) can use it as a "pre-coding" or "outer code" step)
 * implementation using cheap, low-powered commodity hardware (eg, Raspberry Pi with attached USB disks)
 * by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
 * possibility of implementation in hardware (eg, Parallella's Epiphany *or* FPGA part, PS3's SPU co-processors) or with specific versions optimised for certain CPUs (eg, ARM NEON or other SIMD architectures)
