@@ -552,13 +552,7 @@ sub checkblock_mapping {
 
   croak "rng is not an object reference\n" unless ref($rng);
 
-  my $coblocks = $self->get_coblocks;
-  my $P        = $self->{P};
-
-  #  die "Probability distribution has wrong number of terms\n"
-  #    unless scalar(@$P) <= $coblocks;
-
-  my $mblocks = $self->{mblocks}; # quicker than calling is_message
+  my ($mblocks,$coblocks,$P) = @{$self}{"mblocks","coblocks","P"};
   my @coblocks;
 
   # use weighted distribution to find how many blocks to link
@@ -576,7 +570,7 @@ sub checkblock_mapping {
 
   print "CHECKblock mapping: " . (join " ", @coblocks) . "\n" if DEBUG;
 
-  return [@coblocks];
+  return \@coblocks;
 
 }
 
