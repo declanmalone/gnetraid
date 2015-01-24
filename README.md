@@ -14,7 +14,25 @@ There are three main focuses for this project:
 - Using broadcasting (UDP or multicast) to efficiently send files from one machine to many (where they may either be stored as "replicas"&mdash;100% copies of the file&mdash;or "shares", with the receiving machine responsible for generating the share locally)
 - Using event-based/coroutine-based libraries (such as Perl's POE or C's libev/libevent) to implement distributed network-based protocols for managing replica/share storage
  
-The goals for this project can be summed up with a nice acronym coming from an older project called [LOCKSS](http://en.wikipedia.org/wiki/LOCKSS) which stands for "Lots Of Copies Keeps Stuff Safe". This project has nothing to do with the official LOCKSS project (and apparently "LOCKSS" is trademarked by Stanford University), but as a general description I think it is fitting. My project differs significantly from the official LOCKSS project in my focus on using Rabin's IDA as a key part of "keeping stuff safe". The original project seems to only use full file copies (or "replicas", as I call them) to ensure file redundancy, whereas I want to use a combination of "shares" and "replicas".
+The goals for this project can be summed up with a nice acronym coming from an older project called [LOCKSS](http://en.wikipedia.org/wiki/LOCKSS) which stands for "Lots Of Copies Keeps Stuff Safe". This project has nothing to do with the official LOCKSS project (and apparently "LOCKSS" is trademarked by Stanford University), but as a general description I think it is fitting. My project differs significantly from the official LOCKSS project in my focus on using Rabin's IDA as a key part of "keeping stuff safe". The original project seems to only use full file copies (or "replicas", as I call them) to ensure file redundancy, whereas I want to use a combination of "shares" and "replicas". The official LOCKSS project is much more high-level than my project here, which is decidedly focused on the low-level aspects of replication and redundancy.
+
+Besides the three main focuses listed above, I definitely have a focus on using small, low-powered machines (such as the [Raspberry Pi](http://www.raspberrypi.org/) or hardkernel's range of ARM-based [ODROID computers](http://hardkernel.com/)) combined with relatively small external USB disks. I don't exclude using more powerful machines with larger disks (or indeed arbitrary Internet hosts), but I believe that smaller machines can provide much more cost-effective solutions, particularly for archival purposes.
+
+Along with my interest in these areas, I'm also interested in some related ares, some of which might eventually be incorporated into this repository. For example:
+
+* append-only storage structures for building databases on machines with flash storage (in the spirit of [FAWN](http://www.cs.cmu.edu/~fawnproj/))
+* distributed/federated document indexing and searching
+* automatic document clustering based on keywords
+* developing distributed applications in general
+* distributed network-based file systems in particular
+* security/cryptography in a network environment
+* distributed databases as a component in a distributed file system
+* distributed de-duplication and identification of "at risk" files (those with only a single extant replica)
+* [FUSE](http://fuse.sourceforge.net/): Filesystems in User Space
+* GTK, Glade, Perl and POE in general (also C, Perl/XS)
+* distributed transcoding of video files (a potential application for Pi clusters as well as some of the tools here)
+
+That's rather a broad selection, but it can mostly be summed up as finding useful things to do with small, wimpy clusters of machines, whether they're all on a local LAN or dotted around the Internet.
 
 ## Rabin's Information Dispersal Algorithm (IDA)
 
@@ -75,7 +93,56 @@ One other fringe benefit of IDA is that it is easy to add more shares at a later
 
 ### Application Niches
 
+There are basically two jobs that IDA is extremely well suited to:
 
+* as a network-based alternative to RAID for securely storing archival material; and
+* as an alternative or complement to replica-based caching of data for applications requiring fast access (also in a network context)
+ 
+As for the applications, I think that I've given enough information in this document and elsewhere (within my code and man pages) to understand why IDA is good for a redundant *storage* system, along with why it's probably better for archival data rather than "hot" data (lack of mature software stacks and/or hardware-based encoding and decoding being two significant ones) so I'll skip that and move on to briefly explaining about using IDA for an improved caching algorithm.
+
+The competition IDA has in this area will be replica-based caching or data availability systems. I can give two real-world examples to illustrate:
+
+* in a local RAID-1 setup, since the data is replicated across two disks, we can either request data from the least-busy disk or request data from both at once and use the data from whichever completes the request first
+* in a network context, the [Axel program](http://axel.alioth.debian.org/) for Linux systems is a download accelerator that works by looking up a list of mirrors for a given file and downloading a fraction of the file from each of them, thus while receiving the full file will take as long as the longest individual download, each of those downloads is shorter and as they finish more bandwitdh becomes available to complete the slower downloads
+ 
+Using IDA to download a file can take elements from both of these. We can take the "over-requesting" idea from the first example and the idea of multiple network-based "silos" from the second. Some network links will be slower than others so often we may come across a link that is so slow that we would have been better off either abandoning the download, or starting off another download (of the same data) from another mirror. However, that approach will seldom work out well in a replica- (mirror-) based system since we have no way of knowing in advance which downloads will be slow to complete, and neither do we know whether the redundant download will be any quicker overall.
+
+With IDA, however, if we suspect that some download links will be slow, instead of asking for the minimum 'k' downloads required to complete the file, we can instead fire up 'k+1' or even 'k+2' download sessions. The assumption here is that on average the overheads in bandwidth required to transfer these shares is less than the time taken, on average, for the longest download to complete had we only requested the minimum 'k' shares. This assumption isn't a good one for a local network with relatively few subnets and little traffic congestion, but for nodes on the Internet (with multiple different routes, each having a different speed and degree of congestion), it might well be. So this is the first way in which IDA *may* speed up access time: if you ask for more than k shares and immediately cancel any remaining downloads once *any* k of them are received, those k shares will be enough to recover the file. This is in contrast to the Axel program, where each download is not interchangeable with other downloads because it represents a unique section of the file.
+
+We can play with this idea of making the files we need to access available with a high level of redundancy (whether through replicas or shares) by considering two ways to improve their availabilty (primarily determined by how fast we can access them) when we need them. They are simply:
+
+* keeping a redundant copy locally (ie, local caching)
+* having more redundancy *close by* (ie, no more than a few network hops away)
+
+Obviously, the more local cache we have, the fewer network requests will have to be made. With a replica-based system, cache entities will generally correspond to a single file, so the cache will be all-or-nothing for a particular entity: either the file will be in the cache or it won't. By contrast, with an IDA sheme the basic caching unit can be a *share*, so that when space is needed it need not delete complete files, but some fraction thereof (ie, one or more shares) instead. This represents a major improvement on local replica-based caching since if we get a cache miss and need to reconstruct the file, we need only request as many shares as are required to satisfy the threshold (of course, we can also use the trick of over-requesting if we have a good reason to suspect that it will be effective).
+
+The benefit of having more redundancy "close by" is one of load-balancing. By randomly selecting a subset of potential download nodes we will more often hit a node that is not so busy doing other things. Here, IDA also has several advantages over replica-based network caches, including:
+
+* much lower overall storage overheads for the same level of redundancy
+* with lower local storage costs (1/k times file size) more nodes can participate in the network cache
+* better dynamic reponse to increased demand for a file (also with 1/k granularity)
+ 
+Further improvements and advantages may also be considered if a reliable multicast channel is available:
+
+* either full replicas or individual shares can be transmitted at not much more cost than sending to an individual node
+* if using a distributed hash table (DHT) to locate shares then a single transmission sets up both the master and backup nodes where a given share will be saved
+* possibility of dynamically rebalancing distribution of shares based on listening in to broadcast/multicast messages (eg, seamless handover from old DHT to a new one, along with other ["Quorum Sensing"](http://en.wikipedia.org/wiki/Quorum_sensing) behaviour)
+ 
+In summary, IDA could have benefits over replica-based network cache schemes in two important areas:
+
+* reduced memory usage (both overall and per node)
+* smaller granularity, leading to more consistency
+ 
+There are some obvious downsides, too:
+
+* increased complexity (both in design and overheads associated with IDA)
+* need to keep at least one replica if dynamic addition of shares is envisioned
+* lots of applications simply don't need a more granular cache
+* possibility of increased network traffic to account for cache eviction events
+* over-requesting places extra stress on finite network bandwidth
+* best results will come from having a high k value, but that comes with increased decoding cost
+
+While I don't advocate for replacing replica-based network caches in every circumstance, I still believe that it's an intriguing possibility for some applications. It would certainly be interesting to consider it as a storage backend for applications like, eg, memcached, especially if the data being cached have a high read:write ratio.
 
 ### Summary of pros and cons
 
@@ -87,7 +154,7 @@ Plus points:
 * can be set up to be more space-efficient than RAID
 * can be set up to have better redundancy than RAID
 * even importance attached to all shares (no key points of failure)
-* lends itself well to distributed creation of shares (especially if combined with multicast)
+* lends itself well to distributed creation and storage of shares (especially if combined with multicast)
 * very good for archival data
 * easy to analyse space and reliability metrics
 * extra redundancy easy to add later (requires reconstruction step or an existing replica)
@@ -100,13 +167,13 @@ Minus points:
 * software-based implementation (slow)
 * mathematically more complicated than RAID (which often just uses XOR)
 * slight file size increase (if decoding matrix needs to be stored with shares, though it need not be)
-* decoding complexity is O(k) compared to RAID's O(1) (IDA's encoding complexity is O(n))
+* decoding complexity is O(k) compared to RAID's O(1) (IDA's encoding complexity is O(n), but this can be distributed over n machines)
 * also need to invert a k by k matrix before decoding, depending on which shares are selected during reconstruction
 * increasing k at a later time requires rebuilding the entire IDA scheme (analogous to rebuilding a RAID array, but more costly)
 * not a complete security solution (requires external key management protocols, secure transmission channels, protocols to prevent silos presenting damaged or deliberately wrong shares, and also optionally encryption of data before share creation)
 * encoding and decoding costs increase latency
 * very low level (needs software stack or applications to make good use of it)
-* no standard software stacks (and my Perl-based implementation is OK, but quite slow)
+* no standard software stacks (my Perl-based implementation is OK, but quite slow and low level)
 
 Interesting points:
 
