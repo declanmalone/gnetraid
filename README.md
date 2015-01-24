@@ -22,7 +22,7 @@ Along with my interest in these areas, I'm also interested in some related ares,
 
 * append-only storage structures for building databases on machines with flash storage (in the spirit of [FAWN](http://www.cs.cmu.edu/~fawnproj/))
 * distributed/federated document indexing and searching
-* automatic document clustering based on keywords
+* automatic document clustering based on "significant" keywords (basically use frequency distribution with most common words removed)
 * developing distributed applications in general
 * distributed network-based file systems in particular
 * security/cryptography in a network environment
