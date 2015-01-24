@@ -18,7 +18,7 @@ The goals for this project can be summed up with a nice acronym coming from an o
 
 Besides the three main focuses listed above, I definitely have a focus on using small, low-powered machines (such as the [Raspberry Pi](http://www.raspberrypi.org/) or hardkernel's range of ARM-based [ODROID computers](http://hardkernel.com/)) combined with relatively small external USB disks. I don't exclude using more powerful machines with larger disks (or indeed arbitrary Internet hosts), but I believe that smaller machines can provide much more cost-effective solutions, particularly for archival purposes.
 
-Along with my interest in these areas, I'm also interested in some related ares, some of which might eventually be incorporated into this repository. For example:
+Along with my interest in these areas, I'm also interested in some related ares, some of which might eventually result in some code being added to this repository. For example:
 
 * append-only storage structures for building databases on machines with flash storage (in the spirit of [FAWN](http://www.cs.cmu.edu/~fawnproj/))
 * distributed/federated document indexing and searching
