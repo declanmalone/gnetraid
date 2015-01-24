@@ -128,10 +128,11 @@ Further improvements and advantages may also be considered if a reliable multica
 * if using a distributed hash table (DHT) to locate shares then a single transmission sets up both the master and backup nodes where a given share will be saved
 * possibility of dynamically rebalancing distribution of shares based on listening in to broadcast/multicast messages (eg, seamless handover from old DHT to a new one, along with other ["Quorum Sensing"](http://en.wikipedia.org/wiki/Quorum_sensing) behaviour)
  
-In summary, IDA could have benefits over replica-based network cache schemes in two important areas:
+In summary, IDA could have benefits over replica-based network cache schemes in three important areas:
 
 * reduced memory usage (both overall and per node)
 * smaller granularity, leading to more consistency
+* less retransmission overhead in the case of a cache miss (fewer shares need be requested on average and shares are interchangeable)
  
 There are some obvious downsides, too:
 
