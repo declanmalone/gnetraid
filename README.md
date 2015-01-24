@@ -98,7 +98,7 @@ There are basically two jobs that IDA is extremely well suited to:
 * as a network-based alternative to RAID for securely storing archival material; and
 * as an alternative or complement to replica-based caching of data for applications requiring fast access (also in a network context)
  
-As for the applications, I think that I've given enough information in this document and elsewhere (within my code and man pages) to understand why IDA is good for a redundant *storage* system, along with why it's probably better for archival data rather than "hot" data (lack of mature software stacks and/or hardware-based encoding and decoding being two significant ones) so I'll skip that and move on to briefly explaining about using IDA for an improved caching algorithm.
+As for the applications, I think that I've given enough information in this document and elsewhere (within my code and man pages) to understand why IDA is good for a redundant *storage* system, along with why it's probably better for archival data rather than "hot" data (lack of mature software stacks and/or hardware-based encoding and decoding being two significant ones) so I'll pass over that and move on to briefly explaining about using IDA for an improved caching algorithm. This description is quite speculative, so feel free to jump ahead to the next section dealing with the "Pros and Cons" of IDA if you want.
 
 The competition IDA has in this area will be replica-based caching or data availability systems. I can give two real-world examples to illustrate:
 
