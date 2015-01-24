@@ -10,7 +10,7 @@ As it stands, the project is more of a loose collection of elements that can be 
 
 There are three main focuses for this project:
 
-- Achieving RAID-like redundancy by creating "shares" (using Rabin's Information Dispersal Algorithm) which can be stored on different disks 
+- Achieving RAID-like redundancy by creating "shares" (using Rabin's Information Dispersal Algorithm) which can be stored on different disks or network nodes (which I dub "silos")
 - Using broadcasting (UDP or multicast) to efficiently send files from one machine to many (where they may either be stored as "replicas"&mdash;100% copies of the file&mdash;or "shares", with the receiving machine responsible for generating the share locally)
 - Using event-based/coroutine-based libraries (such as Perl's POE or C's libev/libevent) to implement distributed network-based protocols for managing replica/share storage
  
