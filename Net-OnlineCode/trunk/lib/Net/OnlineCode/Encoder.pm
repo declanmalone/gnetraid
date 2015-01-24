@@ -15,7 +15,7 @@ require Exporter;
 @ISA = qw(Net::OnlineCode Exporter);
 @EXPORT_OK = qw();
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 sub new {
 
@@ -207,7 +207,7 @@ Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2013 by Declan Malone
+Copyright (C) 2013-2015 by Declan Malone
 
 This package is free software; you can redistribute it and/or modify
 it under the terms of the "GNU General Public License" ("GPL").

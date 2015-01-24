@@ -60,12 +60,15 @@ if (@ARGV > 0 and $ARGV[0] =~ "USE_CUSTOM_TYPEDEFS") {
 
 my $builder = Module::Build->new(
     module_name         => 'Net::OnlineCode',
-    license             => 'gpl',
+    license             => 'GPL_2',
+    create_license      => 'GPL_2',
     dist_author         => q{Declan Malone <idablack@users.sourceforge.net>},
     dist_version_from   => 'lib/Net/OnlineCode.pm',
     dist_abstract       => 'A rateless forward error correction scheme',
     configure_requires => {
 			   'Module::Build' => 0.40,
+# where do I put this dependency? It's only needed for dist building
+#			   'Software::License'  => '0.103004',
 			  },
     build_requires => {
         'Module::Build'      => '0.40', # XS
@@ -81,6 +84,21 @@ my $builder = Module::Build->new(
     c_source            => "clib/",
     extra_compiler_flags => '-Iclib',
     #extra_linker_flags  => "-lrt", # for benchmark (clock_gettime)
+
+    # apparently the following is needed to get rid of messages like:
+    #
+    # Net::OnlineCode object version 0.02 does not match bootstrap 
+    # parameter 0.03 at /usr/lib/perl/5.14/DynaLoader.pm line 207.
+    #
+    # See http://perldoc.perl.org/ExtUtils/MakeMaker/FAQ.html
+    # It's the first question in the XS section.
+    #
+    # depend => { '$(FIRST_MAKEFILE)' => '$(VERSION_FROM)' },
+    #
+    # actually, doesn't work. I'm using Module::Build, not MakeMaker
+    # and I can't figure out how to have this passed to MakeMaker when
+    # I run 'Build dist'
+
 );
 
 $builder->create_build_script();

@@ -120,11 +120,14 @@ sub bin_number {
 my $rng = Net::OnlineCode::RNG->new_random;
 my @bin_counts = ((0) x $bins);
 
+# routine now takes a packed string rather than an array
+my $string = pack "L*", (1 .. $size);
+
 for (1..$trials) {
 
-  my $array = [ 1 .. $size ];
+  my $array =  [1 .. $size ];
 
-  Net::OnlineCode::fisher_yates_shuffle($rng, $array, $picks);
+  @$array = Net::OnlineCode::fisher_yates_shuffle($rng, $string, $picks);
 
   correctness_check($picks, $array);
 

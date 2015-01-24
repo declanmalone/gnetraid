@@ -23,7 +23,7 @@ our @export_default = qw();
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = ();
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 # Use XS for fast xors (TODO: make this optional)
 require XSLoader;
@@ -65,8 +65,6 @@ use Fcntl;
 # * max degree variable (F)
 # * number of auxiliary blocks (0.55 *qen)
 # * probability distribution p_1, p2, ... , p_F
-#
-# All these are purely deterministic.
 
 sub new {
 
@@ -406,6 +404,8 @@ sub _probability_distribution {
 # approaches the size of the array. That algorithm could make
 # exponentially many calls to rand, whereas this just makes one call
 # per item to be picked.
+#
+# 
 
 sub fisher_yates_shuffle {
 
@@ -623,9 +623,26 @@ Net::OnlineCode - A rateless forward error correction scheme
 
   use strict;
 
-  # Base class only exports routines for doing xor
+  # Base class can export routines for doing xor
   use Net::OnlineCode ':xor';
 
+  # Use the constructor to examine what algorithm parameters
+  # would be generated for a given number of message blocks
+
+  my $o = Net::OnlineCode->new(
+    mblocks => 100_000,  # required parameter
+    e => 0.01, q => 3    # optional/default values
+  );
+
+  my $e  = $o->get_e;    # The 'e' and 'q' values may be
+  my $q  = $o->get_q;    # updated for some values of mblocks
+  my $f  = $o->get_f;    # calculated from 'mblocks', 'e' and 'q'
+
+  # At this point, you would normally destroy this object and
+  # re-create an Encoder and/or Decoder object using the same
+  # parameters as extracted above.
+
+  # some strings to demonstrate use of *_xor_* routines
   my @strings = ("abcde", "     ", "ABCDE", "\0\0\0\0\0");
 
   # xor routines take a reference to a destination string, which is
@@ -640,14 +657,45 @@ Net::OnlineCode - A rateless forward error correction scheme
 
 =head1 DESCRIPTION
 
-This module implements the common functions required for the
-L<Net::OnlineCode::Encoder> and L<Net::OnlineCode::Decoder> modules.
-Apart from the two xor library routines shown above, there are no
-other user-callable methods or functions.
+This section will not make much sense to you unless you know what Online Codes are and how they work. If this is your first time reading this page, I advise you to skip ahead to the next section.
 
-The remainder of this document will give a brief overview of the
-Online Code algorithms. For a programmer's view of how to use this
-collection of modules, refer to the man pages for the
+This module provides a base class for the
+L<Net::OnlineCode::Encoder> and L<Net::OnlineCode::Decoder> modules.
+It can also be used directly in user code:
+
+=over
+
+=item * to find out what parameters are generated for a given number of message blocks
+
+=item * to access the exported XOR routines
+
+=back
+
+The constructor takes a required 'mblocks' parameter and, optionally,
+values for 'e' and 'q' (described below). It then checks whether this
+combination of parameters makes sense. If it doesn't, it will change
+the 'e' or 'q' values to something more appropriate.
+
+There is usually no need to call the constructor directly since it
+will be called during the creation of Net::OnlineCode::Encoder or
+Net::OnlineCode::Decoder objects. However, if you wish to examine what
+changes were made to the supplied parameters, it is more efficient to
+call the base class's constructor directly since it avoids some costly
+initialisation code included in the Encoder/Decoder classes.
+
+The remaining two exported functions can be used to XOR pairs of
+strings. Since the Online Code scheme is based on XORing blocks of
+data, the base class provides two implementations to assist with
+this. One implementation (safe_xor_strings) is a slow, pure Perl sub,
+while the other (fast_xor_strings) uses a call to a faster C
+routine. This module (and the derived Encoder and Decoder module) only
+deal with the details necessary to implement the Online Code
+algorithms, but do not store or XOR blocks automatically: those tasks
+are left for you to implement in whatever way you want.
+
+The remainder of this document will give a brief overview of what
+Online Codes are and how they work. For a programmer's view of how to
+use this collection of modules, refer to the man pages for the
 L<Encoder|Net::OnlineCode::Encoder> and
 L<Decoder|Net::OnlineCode::Decoder> modules.
 
@@ -672,9 +720,10 @@ schemes in two important respects:
 
 When using a traditional error-correction scheme, the sender usually
 has to set up the encoder parameters to take account of the expected
-packet loss rate. In contrast, with Online Codes, the sender
-effectively doesn't care about what the packet loss rate: it just
-keeps sending new check blocks until either the receiver(s)
+packet loss rate, and if the loss rate is greater than this, the file
+generally cannot be recovered at all. In contrast, with Online Codes,
+the sender effectively doesn't care about what the packet loss rate:
+it just keeps sending new check blocks until either the receiver(s)
 acknowledge the message as having been decoded, or until it has a
 reasonable expectation that the message should have been decoded.
 
@@ -725,15 +774,15 @@ composite blocks comprise each check block.
 
 Naturally, for this to work, not only should the sender and receiver
 both be using the same PRNG algorithm, but they also need to be using
-the same PRNG I<seeds>. This is where I<Block IDs> (and also, for the
-auxiliary block mapping, I<File IDs>) come in. For check blocks, the
-sender picks a (truly) random Block ID and uses it to seed the
-PRNG. Then, using the PRNG, it pseudo-randomly selects some number of
-composite blocks. It then sends the Block ID along with the xor of all
-the selected composite blocks. The sender then uses the Block ID to
-seed its own PRNG, so when it pseudo-randomly selects the list of
-composite blocks, it should be the same as that selected by the
-sender.
+the same PRNG I<seeds>. This is where I<Block IDs> (and also, during
+the Encoder/Decoder construction phase , I<File IDs>) come in. For
+check blocks, the sender picks a (truly) random Block ID and uses it
+to seed the PRNG. Then, using the PRNG, it pseudo-randomly selects
+some number of composite blocks. It then sends the Block ID along with
+the xor of all the selected composite blocks. The sender then uses the
+Block ID to seed its own PRNG, so when it pseudo-randomly selects the
+list of composite blocks, it should be the same as that selected by
+the sender.
 
 A similar scheme is used at the start of the transmission to determine
 which message blocks are xored to create the auxiliary blocks.
@@ -754,11 +803,9 @@ variations:
 
 =item * in the case where the epsilon value would produce a max degree (F) value greater than the number of message blocks, it (ie, epsilon) is increased until F <= # of message blocks. The code to do this is based on Python code by Gwylim Ashley.
 
-=item * duplicate check blocks are quashed (since they provide no new information)
+=item * the graph decoding algorithm also includes an "auxiliary rule", which allows decoding (solving) an auxliary block that comprises only solved message blocks
 
-=item * the graph decoding algorithm is replaced with a functionally equivalent one
-
-=item * message blocks need not decoded immediately: rather, the calling application makes the choice about when to do the xors (this I<may> be more time-efficient, particularly if the application is storing check blocks to secondary storage)
+=item * message blocks are decoded immediately: rather, the calling application makes the choice about when to do the xors (this I<may> be more time-efficient, particularly if the application is storing check blocks to secondary storage, but in any event, decoupling the Online Code algorithm from the XOR step allows much more flexibility)
 
 =back
 
@@ -767,25 +814,18 @@ This module implements one using SHA-1, since it is portable across
 platforms and readily available.
 
 
-=head1 IMPORTANT NOTE
+=head1 RELEASE NOTE FOR V0.03
 
-This is the initial software release. It should be free of serious
-bugs, however it has a few shortcomings:
+This version of the code is a major advance from the previous
+version. Most of the algorithms and API are the same, but this version
+is much more optimised, both in terms of speed and memory usage. The
+various changes that have been implemented are documented in the
+RELEASES file at the top level of distribution tarball.
 
-=over
-
-=item * Memory usage is particularly high, especially if the number of check blocks runs into the thousands; and
-
-=item * The Decoder must see more check blocks than the original paper suggests should be the case
-
-=item * Although intended to be used with POE, the Decoder is currently not very suitable for use in a POE callback because it does not yield until it has done as much graph decoding as possible. If POE is being used to handle incoming network packets, the delay can cause it to drop packets. A future version will correct this by reducing the amount of work done per callback (so that control is returned to the POE event loop sooner, with the possibility to queue the remaining outstanding work with more calls to the Decoder object)
-
-=back
-
-As a result, it is likely that any future version that tries to
-address these two points may result in changes to the calling
-interfaces. See the TODO file that came in this distribution for more
-details.
+I consider this version to be stable. While performance has been
+improved considerably, it may still be too slow for some applications.
+As a result, I intend to re-implement critical parts of it in C for
+the next release.
 
 =head1 SEE ALSO
 
@@ -803,10 +843,31 @@ PDF/PostScript links:
 
 L<Github repository for Gwylim Ashley's Online Code implementation|https://github.com/gwylim/online-code> (various parts of my code are based on this)
 
+There are various test/demo programs in the tests directory in this
+distribution that can serve as a reference for how to use these
+modules. In particular, the following can be useful examples to base
+your own code on:
+
+=over
+
+=item * I<mindecoder.pl> is a minimal decoder that doesn't do any XORing of data
+
+=item * I<codec.pl> does both encoding and decoding of a real message string
+
+=item * I<probdist.pl> shows the effects that various message block counts have on the 'e' and 'q' parameters
+
+=back
+
+
 This module is part of the GnetRAID project. For project development
 page, see:
 
   https://sourceforge.net/projects/gnetraid/develop
+
+I am also moving over to using github for all future development:
+
+  https://github.com/declanmalone/gnetraid
+
 
 =head1 AUTHOR
 
@@ -814,7 +875,7 @@ Declan Malone, E<lt>idablack@users.sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2013 by Declan Malone
+Copyright (C) 2013-2015 by Declan Malone
 
 This package is free software; you can redistribute it and/or modify
 it under the terms of the "GNU General Public License" ("GPL").

@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-# Coder/Decoder test. Uses actual data.
+# Coder/Decoder test. Encodes/decodes an actual message.
 
 use lib '../lib';
 use Net::OnlineCode::Encoder;
@@ -121,8 +121,8 @@ until ($done) {
 
   my $enc_xor_list = $enc->create_check_block($erng);
 
-  print "Encoder check block (after expansion): " . (join ", ", @$enc_xor_list) . "\n";
-
+  print "Encoder check block (after expansion): " .
+    (join ", ", @$enc_xor_list) . "\n";
 
   # xor check block (just a list of message blocks thanks to
   # expand_aux flag). Note that after removing the check for empty

@@ -16,7 +16,7 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 @ISA = qw(Net::OnlineCode Exporter);
 @EXPORT_OK = qw();
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 
 use constant DEBUG => 0;

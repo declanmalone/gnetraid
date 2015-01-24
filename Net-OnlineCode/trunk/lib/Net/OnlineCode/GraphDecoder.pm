@@ -7,7 +7,7 @@ use Carp;
 
 use vars qw($VERSION);
 
-$VERSION = '0.02';
+$VERSION = '0.03';
 
 use constant DEBUG => 0;
 use constant TRACE => 0;

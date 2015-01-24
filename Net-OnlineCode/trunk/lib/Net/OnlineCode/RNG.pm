@@ -12,7 +12,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(random_uuid_160);
-$VERSION = '0.01';
+$VERSION = '0.03';
 
 #
 # Random number generator
@@ -122,8 +122,6 @@ sub seed {
 
   $seed = "\0" x 20 unless defined($seed);
   $self->{seed} = $seed;
-  # $self->{current} = sha1($seed);
-  # we can save a call to sha1:
   $self->{current} = $seed;
   return $seed;
 }
@@ -200,12 +198,26 @@ sub as_hex {
 # the RNG, but the returned value can be used to seed it.
 
 sub random_uuid_160 {
-  my $self = shift;		# we don't use this
+  my $self = shift;		# we don't need an object ref.
 
   # sysopen/sysread avoids any potential problem with opening file in
   # non-binary mode
-  sysopen (RAND, "/dev/urandom", O_RDONLY)
-    or die "couldn't open urandom!\n";
+  if(!sysopen (RAND, "/dev/urandom", O_RDONLY)) {
+
+    # This probably isn't a Linux machine, so fall back to using
+    # Perl's internal (non-secure) RNG. This isn't meant to be a
+    # proper solution---it's only so that smoker tests don't die on
+    # Windows platforms or other *nix distros that have a /dev/random
+    # but not a /dev/urandom
+
+    # always warn since this is a potential security problem
+    warn "This machine doesn't have /dev/urandom; using rand() instead\n";
+
+    my $uuid="";
+    for (1..20) { $uuid.= chr rand 256 };
+    return $uuid;
+
+  }
 
   my $bits = '';
   my $chunk = '';
