@@ -42,11 +42,11 @@ In technical terms, this allows you to create a number of "shares" from an origi
 
 The way this works is described in detail in the documentation for the Crypt::IDA perl module which is found in the [Crypt-IDA/trunk/](https://github.com/declanmalone/gnetraid/tree/master/Crypt-IDA/trunk) folder. A simpler explanation can be made by analogy to "secret-sharing schemes", which are mathematically quite similar to IDA.
 
-In [Shamir's secret-sharing scheme](http://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing), we consider a case where a secret is to be shared among some number of people, which we can denote as "n". We want to give eacn of these people a part (or share) of the secret, but want also want to make it so that we require a minimum number of these shares (called the threshold, as above, and denoted as k) to be combined to recover the secret. This description can be seen to be almost identical to the description of Rabin's IDA as described above.
+In [Shamir's secret-sharing scheme](http://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing), we consider a case where a secret is to be shared among some number of people, which we can denote as "n". We want to give each of these people a part (or share) of the secret, but want also want to make it so that we require a minimum number of these shares (called the threshold, as above, and denoted as k) to be combined to recover the secret. This description can be seen to be almost identical to the description of Rabin's IDA as described above.
 
 More concretely, imagine a scenario where we want to split up the secret among any number of people (any n) but we want to require two people (k=2) to combine their shares together. This can be easily done by:
 
-- encoding the secret as a point in the 2-d plane (by, say, breaking it into two parts and treating each point as an X or Y coordinate);
+- encoding the secret as a point in the 2-d plane (by, say, breaking it into two parts and treating each part as an X or Y coordinate);
 - generating a random line through that point for each person who will receive a share;
 - handing out the equation one line per participant.
 
