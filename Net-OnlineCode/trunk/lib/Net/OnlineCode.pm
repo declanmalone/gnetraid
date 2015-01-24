@@ -8,7 +8,8 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
-use constant DEBUG => 0;
+use constant DEBUG  => 0;
+use constant ASSERT => 1;
 
 require Exporter;
 
@@ -540,27 +541,6 @@ sub blklist_to_msglist {
   return keys %blocks;
 }
 
-sub blklist_to_chklist  {
-
-  my $self = shift;
-  croak "This method only makes sense when called on a Decoder object!\n";
-}
-
-
-# non-method sub to toggle a key in a hash
-sub toggle_key {
-  my $href = shift;
-  my $key  = shift;
-
-  if (exists($href->{$key})) {
-    delete $href->{$key};
-  } else {
-    # apparently, using key => undef is more space-efficient than
-    # using key => 1 (similar changes made throughout this file)
-    $href->{$key}=undef;
-  }
-}
-
 # Calculate the composition of a single check block based on the
 # supplied RNG. Returns a reference to a list of composite blocks
 # indices.
@@ -578,103 +558,25 @@ sub checkblock_mapping {
   #  die "Probability distribution has wrong number of terms\n"
   #    unless scalar(@$P) <= $coblocks;
 
-  my $check_mapping;
-
-  # It's possible to generate a check block that is empty. If it only
-  # includes message blocks, then there's no problem. However, if the
-  # expansion of all the auxiliary blocks is equal to the list of
-  # message blocks then two two cancel out. Besides being inefficient
-  # to transmit effectively empty check blocks, it can also cause a
-  # bug in the decoder where it assumes that the expanded list of
-  # blocks is not empty. The solution is the same for both encoder and
-  # decoder (loop until expansion is not empty), so I'm implementing
-  # it here in the base class.
-  #
-  # Note that although this involves expanding auxiliary blocks, for
-  # the moment, I'm ignoring "expand_aux" option and will just return
-  # the unexpanded list. This may change in future once I've had a
-  # chance to look at the problem more closely.
-
   my $mblocks = $self->{mblocks}; # quicker than calling is_message
-  my %expanded=();
-  my @unpacked;
-  my $tries = 0;
-  my $key;			# used for uniqueness-checking
-  until (keys %expanded) {
+  my @coblocks;
 
-    ++$tries;
+  # use weighted distribution to find how many blocks to link
+  my $i = 0;
+  my $r = $rng->rand;
+  ++$i while($r > $P->[$i]);	# terminates since r < P[last]
+  ++$i;
 
-    # use weighted distribution to find how many blocks to link
-    my $i = 0;
-    my $r = $rng->rand;
-    ++$i while($r > $P->[$i]);	# terminates since r < P[last]
-    ++$i;
+  # select i composite blocks uniformly
+  @coblocks = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
 
-    #die "went past end of probability list\n" if $i > @$P;
-
-    #warn "picked $i values for checkblock (from $coblocks)\n";
-
-    # select i composite blocks uniformly
-#    $check_mapping = [ (0 .. $coblocks-1) ];
-#    print "Calling fisher 2\n";
-
-#   profiling indicates creating a new string here is costly (eg, ~34s
-#   on a 1.7GHz ARM v7 machine with 100,000 check blocks), probably
-#   because it can be quite big; hopefully passing as arg will
-#   eliminate this delay.
-#
-#    my $string = $self->{fisher_string};
-    @unpacked = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
-
-    # check block for uniqueness before expansion
-    $key = join " ", sort { $a <=> $b } @unpacked;
-    if (exists $self->{unique}->{$key}) {
-      warn "quashed duplicate check block\n" if DEBUG;
-      #next;
-    }
-
-    # print "check_mapping: raw composite block list: ", 
-    #  (join " ", @$check_mapping), "\n";
-
-    # check expanded list
-    my @xor_list = @unpacked;
-    while (@xor_list) {
-      my $entry = shift @xor_list;
-      if ($entry < $mblocks) { # is it a message block index?
-	# toggle entry
-	toggle_key (\%expanded, $entry);
-      } else {
-
-	# aux block : push all message blocks it's composed of. Since
-	# we're sharing the aux_mapping structure with the decoder, we
-	# have to filter out any entries it's putting in (ie,
-	# composite blocks) or we can get into an infinite loop
-
-	foreach (grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]}) {
-	  toggle_key (\%expanded, $_);
-	}
-
-	#my @expanded = grep { $_ < $mblocks } @{$self->{aux_mapping}->[$entry]};
-	#print "check_mapping: expanding aux block $entry to ", 
-	#  (join " ", @expanded), "\n";
-	#push @xor_list, @expanded;
-      }
-    }
-    last;
+  if (ASSERT) {
+    die "fisher_yates_shuffle: created empty check block\n!" unless @coblocks;
   }
 
-  # prevent generating this block again
-  $self->{unique}->{$key}=undef;
+  print "CHECKblock mapping: " . (join " ", @coblocks) . "\n" if DEBUG;
 
-  #warn "Created unique, non-empty checkblock on try $tries\n" if $tries>1;
-
-  die "fisher_yates_shuffle: created empty check block\n!" unless @unpacked;
-
-#  ++($self->{chblocks});
-
-  print "CHECKblock mapping: " . (join " ", @unpacked) . "\n" if DEBUG;
-
-  return [@unpacked];
+  return [@coblocks];
 
 }
 
