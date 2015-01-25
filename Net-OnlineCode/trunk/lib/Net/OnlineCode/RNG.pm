@@ -210,7 +210,8 @@ sub random_uuid_160 {
     # Windows platforms or other *nix distros that have a /dev/random
     # but not a /dev/urandom
 
-    # always warn since this is a potential security problem
+    # always warn since this is a potential security problem and not
+    # really meant to be used
     warn "This machine doesn't have /dev/urandom; using rand() instead\n";
 
     my $uuid="";
