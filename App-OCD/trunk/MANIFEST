@@ -1,0 +1,6 @@
+Makefile.PL
+README
+t/App-OCD.t
+lib/App/OCD.pm
+MANIFEST
+MANIFEST.skip

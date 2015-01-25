@@ -8,10 +8,9 @@ WriteMakefile(
     LICENSE           => 'GPL-2',
     PREREQ_PM         => { # module dependencies: Module::Name => version
 			 },
-    ABSTRACT          => "Top-level documentation for CPAN packages in the App::OCD name space"
+    ABSTRACT          => "Top-level documentation for CPAN packages in the App::OCD name space",
     ($] >= 5.005 ?     ## Add these new keywords supported since 5.005
       (
-#       ABSTRACT_FROM  => 'lib/App/Diskd.pm', # retrieve abstract from module
        AUTHOR         => 'Declan Malone <idablack@users.sorceforge.net>') : ()
     ),
     EXE_FILES          => [],
