@@ -15,6 +15,8 @@ for $test_eps (0.01, 0.001, 0.1) {
   for $test_q (3, 4, 7) {
     for $blocks (1, 2, 1000) {
 
+      print "Calling constructor with e=$test_eps; q=$test_q; blocks=$blocks\n";
+
       my $online = new
 	Net::OnlineCode(
 			  e => $test_eps,
@@ -28,8 +30,9 @@ for $test_eps (0.01, 0.001, 0.1) {
       my $q = $test_q;
       my $f = $online->get_f;
 
-      print "e = $e; q = $q; blocks = $blocks; F = $f\n";
+      print "Constructor set e=$e; q=$q; blocks=$blocks; F=$f\n";
 
+      # redirect stderr to stdout and capture any output
       my ($P) =
 	eval {
 	  local(*STDERR)=*STDOUT; 
@@ -41,7 +44,8 @@ for $test_eps (0.01, 0.001, 0.1) {
 
       my $n_elements = scalar(@$P);
       $n_elements = 10 if $n_elements > 10;
-      print join "\n", (@$P[0..$n_elements-1]);
+      print join "\n  ", ("Probability Table (first 10 elements):", 
+			  @$P[0..$n_elements-1]);
       print "\n";
 
     }

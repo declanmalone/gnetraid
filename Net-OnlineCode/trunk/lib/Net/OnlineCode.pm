@@ -105,9 +105,6 @@ sub new {
   # does epsilon value need updating?
   my $f = _max_degree($e);
 
-  # try an alternative way of calculating F:
-  #  $f = $mblocks + $ablocks if $f > $mblocks + $ablocks;
-
   if ($f > $mblocks + $ablocks) {
 
     $e_changed = 1;
@@ -162,8 +159,6 @@ sub new {
     }
 
   }
-
-  # how many auxiliary blocks would this scheme need?
 
   # calculate the probability distribution
   print "new: mblocks=$mblocks, ablocks=$ablocks, q=$q\n" if DEBUG;
@@ -248,9 +243,13 @@ sub _count_auxiliary {
   warn "failure probability " . ($delta ** $q) . "\n" if DEBUG;
   #$count = int(ceil($q * $delta * $n));
 
+  # Is it better to change q or the number of aux blocks if q is too
+  # big? It's certainly easier to keep the q value and increase the
+  # number of aux blocks, as I'm doing here, and may even be the right
+  # thing to do rather than ignoring the user's q value.
   if ($count < $q) {
-    #$count = $q;		# ???
-    #warn "updated _count_auxiliary output value to $q\n";
+    $count = $q;
+    warn "updated _count_auxiliary output value to $q\n";
   }
   return $count;
 }
@@ -411,8 +410,10 @@ sub fisher_yates_shuffle {
 
   my ($rng, $array, $picks) = @_;
 
-  die "fisher_yates_shuffle: 1st arg not an RNG object\n"
-    unless ref($rng);
+  if (ASSERT) {
+    die "fisher_yates_shuffle: 1st arg not an RNG object\n"
+      unless ref($rng);
+  }
 
   # length in 32-bit words
   my $len = length($array) >> 2;

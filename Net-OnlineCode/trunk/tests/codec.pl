@@ -22,6 +22,10 @@ my $seed   = shift @ARGV;
 # blocksize is 1 or 41)
 my $test = "The quick brown fox jumps over a lazy dog";
 
+# flags to pass to decoder constructor (for testing; usually no need
+# to set these as the defaults make most sense)
+my $dec_expand_aux = 0;
+my $dec_expand_msg = 1;
 
 # First thing to do is set up RNGs.
 my $erng;
@@ -85,6 +89,7 @@ my $f = $enc->get_f;
 my $ablocks  = $enc->get_ablocks;
 my $coblocks = $enc->get_coblocks;
 
+print "Auxiliary blocks: $ablocks\n";
 print "Encoder parameters:\ne= $e, q = $q, f=$f\n";
 print "Expected number of check blocks: " .
   int (0.5 + ($mblocks * (1 + $e * $q))) .  "\n";
@@ -95,7 +100,8 @@ print "Setting up decoder with e=$e, q=$q, mblocks=$mblocks\n";
 # set up decoder with same parameters
 my $dec = Net::OnlineCode::Decoder
   ->new(mblocks => $mblocks, initial_rng => $drng,
-	e => $e, q=> $q, expand_aux => 1, expand_msg => 1);
+	e => $e, q=> $q, expand_aux => $dec_expand_aux,
+	expand_msg => $dec_expand_msg);
 die "Failed to create decoder. Quitting\n" unless ref($dec);
 
 # Create arrays to store received/decoded message, aux and check blocks
@@ -163,7 +169,6 @@ until ($done) {
 
     foreach my $decoded_block (@decoded) {
 
-      #my @dec_xor_list = $dec->xor_list($decoded_block);
       my @dec_xor_list = $dec->expansion($decoded_block);
 
       print "\nDecoded message block $decoded_block is composed of: ",
@@ -173,16 +178,24 @@ until ($done) {
 
       my $block = "\0" x $blksiz;
 
+      # Code below also tests that the expand_aux and expand_msg
+      # features are working correctly; we wouldn't normally include
+      # these tests.
       foreach my $i (@dec_xor_list) {
 	if ($i < $mblocks) {
-	  print "codec: got message block $i as part of an expansion\n";
-	  xor_strings(\$block, $decoded_mblocks[$i]); # xor it anyway for now
+	  if ($dec_expand_msg) {
+	    die "FATAL: codec: got message block $i with expand_msg set\n";
+	  }
+	  xor_strings(\$block, $decoded_mblocks[$i]);
 
 	} elsif ($i >= $coblocks) { # check block
 	  print "DECODER: XORing block $i (check block) into $decoded_block\n";
 	  print "(check block # " . ($i - $coblocks) . ")\n";
 	  xor_strings(\$block, $check_blocks[$i - $coblocks]);
 	} else {			# auxiliary block
+	  if ($dec_expand_aux) {
+	    die "FATAL: codec: got aux block $i with expand_aux set\n";
+	  }
 	  print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
 	  xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
 	}

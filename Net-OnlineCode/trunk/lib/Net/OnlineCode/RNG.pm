@@ -215,7 +215,7 @@ sub random_uuid_160 {
     warn "This machine doesn't have /dev/urandom; using rand() instead\n";
 
     my $uuid="";
-    for (1..20) { $uuid.= chr rand 256 };
+    for (1..20) { $uuid.= chr CORE::rand 256 };	# rand() is ambiguous
     return $uuid;
 
   }
