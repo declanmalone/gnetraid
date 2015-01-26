@@ -18,7 +18,6 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 $VERSION = '0.03';
 
-
 use constant DEBUG => 0;
 
 sub new {
@@ -44,16 +43,13 @@ sub new {
 
   my $self = $class->SUPER::new(@_);
 
-  # This sub-class needs to use the rng to generate the initial graph
-
-  # print "decoder mblocks: $self->{mblocks}\n";
-
+  # Our subclass includes extra data/options
+  $self->{expand_msg}=$opts{expand_msg};
   my $graph = Net::OnlineCode::GraphDecoder->new
     (
      $self->{mblocks},
      $self->{ablocks},
      $self->auxiliary_mapping($opts{initial_rng}),
-     # $self->{expand_aux},  # expansion only done in this object now
     );
   $self->{graph} = $graph;
 
@@ -130,10 +126,24 @@ sub expansion {
         push @$out, $i;
       }
     }
-    $done = 1 if !$expanded;
+    $done = 1 unless $expanded;
   } continue {
     ($in,$out) = ($out,[]);
     $expanded = 0;
+  }
+
+  # test expansion after stage 1
+  if (0) {
+    for my $i (@$in) {
+      if ($expand_aux) {
+	die "raw expanded list had aux blocks after stage 1\n" 
+	  if $i >= $mblocks and $i < $coblocks;
+      }
+      if ($expand_msg) {
+	die "raw expanded list had msg blocks after stage 1\n" 
+	  if $i < $mblocks;
+      }
+    }
   }
 
   if (DEBUG) {
@@ -160,6 +170,20 @@ sub expansion {
     }
   }
   push @output, $previous if $runlength & 1;
+
+  # test expansion after stage 3
+  if (0) {
+    for my $i (@output) {
+      if ($expand_aux) {
+	die "raw expanded list had aux blocks after stage 3\n" 
+	  if $i >= $mblocks and $i < $coblocks;
+      }
+      if ($expand_msg) {
+	die "raw expanded list had msg blocks after stage 3\n" 
+	  if $i < $mblocks;
+      }
+    }
+  }
 
   # Finish: return list
   return @output;
