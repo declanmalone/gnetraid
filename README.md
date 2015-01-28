@@ -218,6 +218,7 @@ The basic setup/concepts are:
 * originally archive had at least two full copies of each directory spread out over 4 disks
 * arbitrarily designated one copy as the master
 * script aids in transition to having one full master copy and one IDA-based copy
+* share files stored in a directory structure that mirrors the layout of replicas
 
 The file listing (or "scan") feature is designed to handle the existence of replicas and shares, so it does things like:
 
