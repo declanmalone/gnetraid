@@ -183,10 +183,58 @@ Interesting points:
 * implementation using cheap, low-powered commodity hardware (eg, Raspberry Pi with attached USB disks)
 * when used for "cold" storage (ie, archival data), machines and/or disks can be powered down when not needed (or data could be stored on media such as tapes or optical disks)
 * shares need not be stored in silos on a 1:1 basis (particularly useful if n is modified dynamically in response to frequent accesses, so shares can form the basis of a "granular" cache&mdash;using filesize/k as the basic unit/quantum&mdash;providing good balance between availability and required storage space)
-* by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
+* by themselves, shares provide moderate levels of security (privacy), especially if an attacker does not know which shares form a set (see also, eg, [Chaffing and Winnowing](http://en.wikipedia.org/wiki/Chaffing_and_winnowing))
 * possibility of implementation in hardware (eg, Parallella's Epiphany *or* FPGA part, PS3's SPU co-processors) or with specific versions optimised for certain CPUs (eg, ARM NEON or other SIMD architectures)
 * a hybrid share/replica system seems like both parts would complement each other and could be used for a variety of storage scenarios and work flows (dynamic scaling for both hot and cold data)
 * secret-sharing schemes are just way cool, and since there's no "key" as with traditional encryption schemes you can't be forced to divulge them (through legal or other means)
 
+### A file format for encapsulating shares
+
+I've implemneted a simple file format for storing shares. As well as the share data, it also stores various meta-data:
+
+* file size
+* IDA parameters (k and "word size", which relates to the GF(2) field used for calculations)
+* one line of the decoding matrix
+
+I've chosed to implement this as a file rather than writing IDA data directly to disk partitions simply because file are much more convenient and easier to work with than needing to reserve and work with full disk partitions. See the [Crypt::IDA::ShareFile](http://search.cpan.org/~dmalone/Crypt-IDA-0.01/lib/Crypt/IDA/ShareFile.pm) module for details.
+
+Besides the functionality being available as a Perl module, this repo also includes a pair of scripts, *rabin-split.pl* and *rabin-combine.pl* that can be used 
+
 ### A complete application: media-RAID
+
+I've successfully been using my IDA implementation to back up my own archive of media files (ripped CDs and DVDs and such) for a number of years now. As the phrase goes, I'm "eating my own dog food".
+
+While it's possible to use the *rabin-{split,combine}.pl* scripts for this, I wanted a more high-level program to make my life easier. The *media-raid* script is the result (or actually *original-media-raid* as it's called in the repo; the other file is a rewrite that I never got around to finishing).
+
+The design of the script is tailored to suit how the files were originally organised (with separate directory structures for tv programs, films and such), the number of disks I had available to me (four) and how much redundancy I wanted (a k=3, n=4 scheme, tolerating just a single disk failure). As this was meant as a proof of concept, I also kept another full copy of all the originals, just in case.
+
+The basic setup/concepts are:
+
+* share files stored a k=3, n=4 IDA scheme
+* uses portable USB disks to store data
+* disks identified by label and a set of symbolic links to mount points (local or network based) is used to access them
+* archive divided up into distinct, non-overlapping directories (eg, "video/tv", "video/movies")
+* originally archive had at least two full copies of each directory spread out over 4 disks
+* arbitrarily designated one copy as the master
+* script aids in transition to having one full master copy and one IDA-based copy
+
+The file listing (or "scan") feature is designed to handle the existence of replicas and shares, so it does things like:
+
+* counting the number of replicas (these are expected to be found in the same place on each disk)
+* detecting basic mismatches (eg, file size) among replicas
+* determining whether/how many shares exist for a given replica
+* basic checking of the "health" of the share-based storage
+* detecting mismatches between replica and shares (just checks file size)
+ 
+The script also includes other basic functions:
+
+* split a file or directory (create shares from replica(s), making directories where needed)
+* extract a file from share storage (combine)
+* compare data stored in share storage with replica (combine and compare)
+* moving/renaming files and directories
+ 
+As you can see, the script is fairly basic, includes a fair bit of hard-coded information (such as disk names and archive layout) and needs a bit of manual setup depending on whether I mount disks locally or over the network. However, it has served my purposes fairly well so I haven't had the need to update it. I haven't suffered a complete disk failure (yet) but I have managed to get through a couple of "pre-fail" events where the the disk's SMART info or operational problems indicated that it might fail. These were easily handled by copying data off the failing disks and comparing the copies with saved SHA256 sums (which I calculated with a separate program). Had a disk (single) failed without warning I should still have been able to reconstruct everything with the remaining replicas and/or shares.
+
+## Using multicast within an IDA storage system
+
 
