@@ -199,7 +199,7 @@ I've implemneted a simple file format for storing shares. As well as the share d
 
 I've chosed to implement this as a file rather than writing IDA data directly to disk partitions simply because file are much more convenient and easier to work with than needing to reserve and work with full disk partitions. See the [Crypt::IDA::ShareFile](http://search.cpan.org/~dmalone/Crypt-IDA-0.01/lib/Crypt/IDA/ShareFile.pm) module for details.
 
-Besides the functionality being available as a Perl module, this repo also includes a pair of scripts, *rabin-split.pl* and *rabin-combine.pl* that can be used 
+Besides the functionality being available as a Perl module, this repo also includes a pair of scripts, *rabin-split.pl* and *rabin-combine.pl* that can be used from the command line or from within scripts.
 
 ### A complete application: media-RAID
 
