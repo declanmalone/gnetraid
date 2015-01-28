@@ -169,6 +169,7 @@ Minus points:
 * mathematically more complicated than RAID (which often just uses XOR)
 * slight file size increase (if decoding matrix needs to be stored with shares, though it need not be)
 * decoding complexity is O(k) compared to RAID's O(1) (IDA's encoding complexity is O(n), but this can be distributed over n machines)
+* if using "over-requesting", we can't begin decoding until we know which k shares we will use (matrix inverse required, as below)
 * also need to invert a k by k matrix before decoding, depending on which shares are selected during reconstruction
 * increasing k at a later time requires rebuilding the entire IDA scheme (analogous to rebuilding a RAID array, but more costly)
 * not a complete security solution (requires external key management protocols, secure transmission channels, protocols to prevent silos presenting damaged or deliberately wrong shares, and also optionally encryption of data before share creation)
