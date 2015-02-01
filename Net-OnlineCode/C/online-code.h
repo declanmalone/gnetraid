@@ -1,10 +1,12 @@
 // Common definitions for Online Code implementation
 
-#ifndef ONLINE_CODE_H
-#define ONLINE_CODE_H
+#ifndef OC_ONLINE_CODE_H
+#define OC_ONLINE_CODE_H
 
 #include "oc_encoder.h"
 #include "oc_decoder.h"
+
+#include "rng_sha1.h"
 
 #include "tuples.h"
 
@@ -55,7 +57,11 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 
 // allocate and populate probablity table here (returns pointer to new
 // memory or NULL if malloc fails):
-float *oc_codec_probdist(oc_codec *codec);
+float *oc_codec_init_probdist(oc_codec *codec);
+
+// use probability distribution table and rng to find degree of a
+// check block
+int oc_random_degree(oc_codec *codec, rng_sha1 *rng);
 
 // The following routines are used by init to validate and "fix" the
 // parameter list. They can also be called directly.
@@ -65,5 +71,7 @@ int oc_count_aux(int mblocks, int q, float e);
 int oc_check_parameters(int mblocks, int q, float e, int F);
 int oc_find_new_e();
 int oc_eval_f(float t);
+
+
 
 #endif

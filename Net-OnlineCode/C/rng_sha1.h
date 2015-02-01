@@ -1,7 +1,7 @@
 // Random Number generation based on SHA1
 
-#ifndef RNG_SHA1_H
-#define RNG_SHA1_H
+#ifndef OC_RNG_SHA1_H
+#define OC_RNG_SHA1_H
 
 #include <stdint.h>
 #include <openssl/sha.h>
