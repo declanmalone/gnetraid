@@ -142,9 +142,9 @@ int oc_rng_random_uuid(char *dest) {
 
 float oc_rng_rand(oc_rng_sha1 *rng, float max) {
 
-  double  temp;			// double to prevent overflow
+  double  temp;			    // prevent overflow
   uint32_t sha_word;
-  uint32_t max_int = 0xffffffff;	// max 32-bit integer
+  uint32_t max_int = 0xffffffff;    // max 32-bit integer
 
   assert(max > 1);
 
@@ -156,7 +156,7 @@ float oc_rng_rand(oc_rng_sha1 *rng, float max) {
     // Values have to be in the range [0,max) (ie, including 0, but
     // not max)
     if(sha_word < max_int) {
-      temp = max * sha_word;
+      temp = max * (double) sha_word;
       return temp / max_int;
     }
   }
