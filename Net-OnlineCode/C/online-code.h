@@ -3,16 +3,15 @@
 #ifndef OC_ONLINE_CODE_H
 #define OC_ONLINE_CODE_H
 
-#include "oc_encoder.h"
-#include "oc_decoder.h"
+// #include "oc_encoder.h"
+// #include "oc_decoder.h"
 
+#include "structs.h"
 #include "rng_sha1.h"
-
-#include "tuples.h"
 
 // structure holding details common to encoder and decoder
 
-typdef struct {
+typedef struct {
 
   int   q;			// outer block coding factor
   float e;			// epsilon
@@ -25,6 +24,11 @@ typdef struct {
 
   int   flags;			// error flags; see discussion of
 				// oc_codec_init below
+
+  int  *auxiliary;		// 2d array mapping message->auxiliary
+
+  int  *shuffle_source;		// re-usable scratch space for holding
+  int  *shuffle_dest;		// source/dest for Fisher-Yates shuffle
 
 } oc_codec;
 
@@ -59,9 +63,18 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 // memory or NULL if malloc fails):
 float *oc_codec_init_probdist(oc_codec *codec);
 
+// Fisher-Yates shuffle routine
+int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng);
+
+// Create auxiliary map
+int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng);
+
 // use probability distribution table and rng to find degree of a
 // check block
-int oc_random_degree(oc_codec *codec, rng_sha1 *rng);
+int oc_random_degree(oc_codec *codec, oc_rng_sha1 *rng);
+
+// Create a check block map
+int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng);
 
 // The following routines are used by init to validate and "fix" the
 // parameter list. They can also be called directly.
@@ -71,6 +84,7 @@ int oc_count_aux(int mblocks, int q, float e);
 int oc_check_parameters(int mblocks, int q, float e, int F);
 int oc_find_new_e();
 int oc_eval_f(float t);
+
 
 
 
