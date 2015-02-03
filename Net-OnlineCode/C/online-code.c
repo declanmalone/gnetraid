@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 #include "online-code.h"
 
@@ -227,5 +228,113 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
   memcpy(p, q, degree * sizeof(int));
 
   return list;
+
+}
+
+// Initialisation routines
+//
+// The main work done in the initialisation routine is to find a set
+// of e, q and F parameters that work for a given mblocks
+// parameter. The routine tries to honour the q parameter first and
+// foremost, but this may involve changing the e and F parameters to
+// suit. The code is split among several helper functions to aid
+// clarity.
+
+// calculate F from epsilon
+int oc_max_degree(float e) {
+  e /= 2.0;
+  return (int) ceil((2*log(e))/log(1-e));
+}
+
+// count number of auxiliary blocks
+int oc_count_aux(int mblocks, int q, float e) {
+
+  // shouldn't overflow for any practical values of q, mblocks
+  return (int) ceil(0.55 * q * e * mblocks);
+
+}
+
+// Use a binary search to find a new epsilon such that
+// oc_max_degree(epsilon) <= mblocks + ablocks (ie, n')
+float oc_recalculate_e(int mblocks, int q, float e) {
+
+  float l, r, m;		// left, right, middle
+  int   ablocks = oc_count_aux(mblocks, q, e);
+  int   coblocks = mblocks + ablocks;
+
+  // set up left and right of range to search
+  l = -log(1/e - 1);
+  r = l + 1;
+
+  // expand right side of search until we get F <= n'
+  while (oc_eval_f(r) > coblocks) {
+    r += r - l;
+  }
+
+  // binary search between left and right to find a suitable lower
+  // value of epsilon still satisfying F <= n'
+  while (r - l > 0.01) {
+    m = (l + r) / 2;
+    if (oc_eval_f(m) > coblocks) {
+      l = m;
+    } else {
+      r = m;
+    }
+  }
+
+  // return new epsilon value
+  return 1/(1 + exp(-r));
+
+}
+
+int oc_eval_f(float t) {
+  return oc_max_degree(1/(1.0 + exp(-t)));
+}
+
+// An aside on va_args and representation of numbers (0 and 0.0)...
+//
+// C's variadic arguments require the caller to tell us how many args
+// they are actually sending: it can't just figure this out from the
+// stack frame or whatever. As a result, I'll use the convention of
+// terminating the list of args to oc_codec_init below with a null
+// value. This should work fine because none of our var args should be
+// zero. The only fly in the ointment is that on platforms where ints
+// are smaller than floats a terminal zero (integer) may not be read
+// as 0.0 (float). That's the sort of detail that I should probably
+// handle in an autoconf-style script, but as a quick fix, I'll
+// terminate the list with 0ll instead.
+//
+// The other potential problem with using an integer value of zero to
+// represent 0.0 is that 0.0 may not be represented by all bits set to
+// zero on some particular platform. However, this possibility seems
+// extremely unlikely. In fact, C99 mandates the use of IEEE-754
+// floats, so if you have a C99-compliant compiler then +0.0 /is/
+// actually represented as all zero bits and there is no problem.
+
+int oc_codec_init(oc_codec *codec, int mblocks, ...) {
+
+  int    flags = 0;
+  int    q=3,    new_q;
+  float  e=0.01, new_e;
+  int    f=0,    new_f;		// f=0 => not supplied (calculated)
+
+  // extract variadic args
+  va_list ap;
+
+  va_start(ap, mblocks);
+  do {				// preferable to goto?
+    new_q = va_arg(ap, float);
+    if (new_q == 0) break; else q=new_q;
+
+    new_e = va_arg(ap, float);
+    if (new_e == 0) break; else e=new_e;
+
+    new_f = va_arg(ap, int);
+    if (new_f == 0) break; else f=new_f;
+
+  } while(0);
+  va_end(ap);
+
+  
 
 }
