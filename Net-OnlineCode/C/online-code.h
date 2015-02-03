@@ -82,7 +82,7 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng);
 int oc_max_degree(float e);	// calculate F from epsilon
 int oc_count_aux(int mblocks, int q, float e);
 int oc_check_parameters(int mblocks, int q, float e, int F);
-int oc_find_new_e();
+float oc_recalculate_e(int mblocks, int q, float e);
 int oc_eval_f(float t);
 
 
