@@ -46,10 +46,10 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 // a situation and has to change some parameters so that things do
 // make sense, it will set one or more of the flag bits below:
 
-#define OC_Q_CHANGED 1
-#define OC_E_CHANGED 2
-#define OC_F_CHANGED 4
-#define OC_FLAG_ERROR 8  // supplied parameters had unfixable error
+#define OC_E_CHANGED   1
+#define OC_F_CHANGED   2
+#define OC_FATAL_ERROR 3  // Fatal error (parameters/memory allocation)
+//#define OC_Q_CHANGED 4  // q always constant
 
 // (flags are returned, and also stored in the structure)
 
