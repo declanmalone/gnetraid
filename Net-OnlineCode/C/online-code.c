@@ -318,15 +318,17 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   float  e=0.01, new_e;
   int    f=0,    new_f;		// f=0 => not supplied (calculated)
 
+  int    ablocks,coblocks;
+
   // extract variadic args
   va_list ap;
 
   va_start(ap, mblocks);
   do {				// preferable to goto?
-    new_q = va_arg(ap, float);
+    new_q = va_arg(ap, double); // float automatically promoted in ...
     if (new_q == 0) break; else q=new_q;
 
-    new_e = va_arg(ap, float);
+    new_e = va_arg(ap, double); // float automatically promoted in ...
     if (new_e == 0) break; else e=new_e;
 
     new_f = va_arg(ap, int);
@@ -335,6 +337,70 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   } while(0);
   va_end(ap);
 
-  
+  // Sanity checking of parameters
+  assert(codec != NULL);
+  if ((q <= 0) || (e <= 0) || (e >= 1) || (mblocks <= 0)) {
+    flags |= OC_FATAL_ERROR;
+    return codec->flags = flags;
+  }
 
+  // clear structure out and fill in what we can now
+  memset(codec,0,sizeof(oc_codec));
+  codec->mblocks = mblocks;
+  codec->q       = q;
+
+  // how many auxiliary blocks would this scheme need?
+  ablocks =  oc_count_aux(mblocks,q,e);
+  if (ablocks < q)
+    ablocks = q;
+
+  // does epsilon value need updating?
+  new_f = oc_max_degree(e);
+
+  if (new_f > mblocks + ablocks) {
+    flags  |= OC_E_CHANGED;
+    new_e   = oc_recalculate_e(mblocks,q,e);
+    new_f   = oc_max_degree(new_e);
+    ablocks = oc_count_aux(mblocks,q,new_e);
+
+    e = new_e;
+  }
+
+  if (f && (new_f != f))
+    flags |= OC_F_CHANGED;
+  f = new_f;
+
+  // allocate scratch space for shuffles (F elements)
+  if (NULL == (codec->shuffle_source = malloc(f * sizeof(int))))
+    flags |= OC_FATAL_ERROR;
+  if (NULL == (codec->shuffle_source = malloc(f * sizeof(int))))
+    flags |= OC_FATAL_ERROR;
+
+  // Fill in remaining fields
+  codec->ablocks  = ablocks;
+  codec->coblocks = mblocks + ablocks;
+  codec->e        = e;
+  codec->F        = f;
+  codec->flags    = flags;
+  
+  // calculate the probability distribution (uses stashed values)
+  if (NULL == oc_codec_init_probdist(codec))
+    flags |= OC_FATAL_ERROR;
+
+  // Auxiliary map is set up in encoder/decoder sub-class
+
+  return flags;
+
+}
+
+int oc_is_message(oc_codec *codec,int m) {
+  return (m < codec->mblocks);
+}
+
+int oc_is_auxiliary(oc_codec *codec,int m) {
+  return ((m >= codec->mblocks) && (m < codec->coblocks));
+}
+
+int oc_is_check(oc_codec *codec,int m) {
+  return (m >= codec->coblocks);
 }
