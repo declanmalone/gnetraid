@@ -48,8 +48,8 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 
 #define OC_E_CHANGED   1
 #define OC_F_CHANGED   2
-#define OC_FATAL_ERROR 3  // Fatal error (parameters/memory allocation)
-//#define OC_Q_CHANGED 4  // q always constant
+#define OC_FATAL_ERROR 4  // Fatal error (parameters/memory allocation)
+//#define OC_Q_CHANGED 8  // q always constant
 
 // (flags are returned, and also stored in the structure)
 
@@ -85,6 +85,16 @@ int oc_check_parameters(int mblocks, int q, float e, int F);
 float oc_recalculate_e(int mblocks, int q, float e);
 int oc_eval_f(float t);
 
+// Block "expansion": When dealing with lists of blocks, we have the
+// option of expanding message, auxiliary or check blocks. In the
+// encoder it only makes sense to expand auxiliary blocks (into
+// message blocks), while in the decoder we can expand auxiliary or
+// message blocks (into check blocks and/or auxiliary blocks, provided
+// the auxiliary expansion flag isn't set)
+
+#define OC_EXPAND_MSG 1
+#define OC_EXPAND_AUX 2
+#define OC_EXPAND_CHK 4
 
 
 
