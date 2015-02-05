@@ -10,7 +10,7 @@ typedef struct {
   
   oc_rng_sha1 *rng;
 
-} oc_decoder;
+} oc_encoder;
 
 
 
