@@ -1,5 +1,5 @@
 
-all : online-code.o rng_sha1.o
+all : online-code.o rng_sha1.o graph.o
 
 online-code.o : online-code.c
 	${CC} -c $< 
@@ -7,9 +7,11 @@ online-code.o : online-code.c
 rng_sha1.o : rng_sha1.c
 	${CC} -c $< 
 
+graph.o : graph.c
+	${CC} -c $< 
 
 
-
+graph.c : graph.h
 online-code.c : online-code.h
 rng_sha1.c : rng_sha1.h
 
