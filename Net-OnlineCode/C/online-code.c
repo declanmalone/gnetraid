@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#include "structs.h"
 #include "online-code.h"
 
 float *oc_codec_init_probdist(oc_codec *codec) {
