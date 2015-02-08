@@ -51,7 +51,7 @@ typedef struct {
 } oc_graph;
 
 
-// Allocate spaces within structure and initialise them.  
+// Allocate spaces within graph structure and initialise them.  
 //
 // The fudge factor parameter is a multiplier (>1.0) telling how much
 // extra space to allocate beyond the expected number of check blocks. 

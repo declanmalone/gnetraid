@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "online-code.h"
 #include "graph.h"
@@ -133,3 +134,253 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   return 0;
 }
 
+void oc_save_check_block() {
+
+}
+
+
+void oc_aux_rule(oc_graph *g, int node) {
+
+}
+
+
+// Work up from a newly-solved message or auxiliary block
+
+void oc_cascade(oc_graph *g, int node) {
+
+
+}
+
+// Add a new node to the end of the pending list
+oc_block_list *oc_push_pending(oc_ graph *g, int value) {
+
+  oc_block_list *p;
+
+  if (NULL == (p=malloc(sizeof(oc_block_list))))
+    return NULL;
+
+  p->next  = NULL;
+  p->value = value;
+
+  if (g->ptail != NULL)
+    g->ptail->next = p;
+  else
+    g->phead = p;
+  g->ptail = p;
+
+  return p;
+}
+
+// Remove a node from the start of the pending list (returns a pointer
+// to the node so that it can be re-used or freed later)
+oc_block_list *oc_shift_pending(oc_ graph *g) {
+
+  oc_block_list *node;
+
+  assert(g->phead != NULL);
+
+  node = g->phead;
+
+  if (NULL == (g->phead = node->next))
+    g->ptail = NULL;
+
+  return node;
+
+}
+
+// Pushing to solved is similar to pushing to pending, but we don't
+// need to allocate the new node
+void oc_push_solved(oc_block_list *pnode, 
+		    oc_block_list **phead,   // update caller's head
+		    oc_block_list **ptail) { // and tail pointers
+
+  pnode->next  = NULL;
+
+  if (*ptail != NULL)
+    (*ptail)->next = pnode;
+  else
+    *phead = pnode;
+  *ptail = pnode;
+}
+
+
+// helper function to delete an up edge
+void oc_delete_n_edge (oc_graph *g, int upper, int lower) {
+
+  //   pp       is the address of the prior pointer
+  //  *pp       is the value of the pointer itself
+  // **pp       is the thing pointed at (an oc_block_list)
+  // (*pp)->foo is a member of the oc_block_list
+
+  oc_block_list **pp = &((graph->n_edges)[lower]);
+  oc_block_list *p;
+
+  while (NULL != (p = *pp)) {
+    if (p->value == upper) {
+      *pp = p->next;
+      free(p);
+      return;
+    }
+    pp = &(p->next);
+  }
+
+  // we shouldn't get here: up edge lower -> upper must exist
+  assert (0 == 1);
+
+}
+
+// helper function to delete edges from a solved aux or check node
+void oc_decommission_node (oc_graph *g, int node) {
+
+  int *down, upper, lower, i;
+
+  assert(node >= g->coblocks);
+
+  down = g->v_edges[node];
+  for (i = down[0]; i > 0; --i) {
+    oc_delete_n_edge (g, node, down[i]);
+  }
+  free(down);
+  g->v_edges[node] = NULL;	// not strictly necessary
+}
+
+
+
+// Resolve nodes by working down from check or aux blocks
+// 
+// Returns 0 for not done, 1 for done and -1 for error (malloc)
+// If any nodes are solved, they're added to solved_list
+//
+int oc_resolve(oc_graph *graph, oc_block_list **solved_list) {
+
+  int mblocks  = graph->mblocks;
+  int ablocks  = graph->ablocks;
+  int coblocks = graph->coblocks;
+
+  oc_block_list *pnode;		// pending node
+
+  // linked list for storing solved nodes (we return solved_head)
+  oc_block_list *solved_head = NULL;
+  oc_block_list *solved_tail = NULL;
+
+  int from, to, count_unsolved, xor_count, i, *p, *xp, *ep;
+
+  // Check whether our queue is empty. If it is, the caller needs to
+  // add another check block
+  if (NULL == graph->phead) {
+    return graph->done;
+  }
+
+  // mark solved list as empty
+  *solved_list = (oc_block_list *) NULL;
+
+  // exit immediately if all message blocks are already solved
+  if (0 == graph->unsolved_count)
+    return graph->done = 1;
+
+  while (NULL != graph->phead) { // while items in pending queue
+
+    pnode = oc_shift_pending(graph);
+    from  = pnode->value;
+
+    assert(from >= mblocks);
+
+    // my @solved_nodes = ();
+    // my @unsolved_nodes;
+
+    count_unsolved = (graph->edge_count)[from - mblocks];
+
+    if (count_unsolved > 1)
+      goto discard;
+
+    if (count_unsolved == 0) {
+
+      if ((from >= coblocks) || (graph->solved)[from]) {
+
+	// The first test above matches check blocks, while the second
+	// matches a previously-solved auxiliary block (the order of
+	// tests is important to avoid going off the end of the solved
+	// array). In either case, the node has no unsolved edges and
+	// so adds no new information. We can remove it from the
+	// graph.
+
+	oc_decommission_node(graph, from);
+	goto discard;
+      }
+
+      // This is an unsolved aux block. Solve it with aux rule
+      oc_aux_rule(graph,from);
+
+      oc_push_solved(pnode, &solved_head, &solved_tail);
+      oc_cascade(graph,from);
+
+
+    } else if (count_unsolved == 1) {
+
+      // Discard unsolved auxiliary blocks
+      if ((from < coblocks) && !(graph->solved)[from])
+	goto discard;
+
+      // Propagation rule matched (solved aux/check with 1 unsolved)
+
+      // xor_list will be fixed-size array, so we need to count how
+      // many elements will be in it.
+      ep = (graph->v_edges)[from - mblocks];
+      xor_count = *(ep++);	// number of v edges
+
+      if (NULL == (p = malloc((xor_count + 1) * sizeof(int))))
+	return -1;
+
+      // store size and 'from' node in target xor list
+      xp = p;
+      *(xp++) = xor_count;
+      *(xp++) = from;
+
+      // iterate over v edges, adding solved ones to xor_list
+      for (i = 0; i < xor_count; ++i) {
+	if ((graph->solved)[*ep]) 
+	  *(xp++) = *(ep++);
+	else
+	  to = *(ep++);		// note the unsolved one
+      }
+
+      // Set 'to' as solved
+      pnode->value        = to;
+      (graph->solved)[to] = 1;
+      oc_push_solved(pnode, &solved_head, &solved_tail);
+
+      // Save 'to' xor list and decommission 'from' node
+      graph->xor_list[to] = p;
+      oc_decommission_node(graph, from);
+
+      // Update global structure and decide if we're done
+      if (to < mblocks) {
+	if (0 == (--(graph->unsolved_count))) {
+	  graph->done = 1;
+	  oc_flush_pending(graph);
+	  break;		// finish searching
+	}
+      } else {
+	// Solved auxiliary block, so queue it for resolving again
+	oc_push_pending(graph, to);
+      }
+
+      // Cascade to potentially find more solvable blocks
+      oc_cascade(graph, to);
+
+      // If we reach this point, then pnode has been added to the
+      // solved list. We continue to avoid the following free()
+      continue;
+
+  discard:
+      free(pnode);
+
+    }
+
+  }
+
+  *solved_list = solved_head;
+  return graph->done;
+
+
+}
