@@ -9,12 +9,14 @@
 typedef struct {
 
   oc_codec base;
-
+  oc_graph graph;
   oc_rng_sha1 *rng;
 
-  oc_graph graph;
-
+  int flags;
 } oc_decoder;
+
+
+int oc_resolve(oc_decoder *decoder, oc_block_list **solved_list);
 
 
 #endif

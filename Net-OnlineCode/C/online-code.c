@@ -315,9 +315,9 @@ int oc_eval_f(float t) {
 int oc_codec_init(oc_codec *codec, int mblocks, ...) {
 
   int    flags = 0;
-  int    q=3,    new_q;
-  float  e=0.01, new_e;
-  int    f=0,    new_f;		// f=0 => not supplied (calculated)
+  int    q=OC_DEFAULT_Q, new_q;
+  float  e=OC_DEFAULT_E, new_e;
+  int    f=OC_DEFAULT_F, new_f;	// f=0 => not supplied (calculated)
 
   int    ablocks,coblocks;
 

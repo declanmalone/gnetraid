@@ -96,6 +96,12 @@ int oc_eval_f(float t);
 #define OC_EXPAND_AUX 2
 #define OC_EXPAND_CHK 4
 
+// Defaults for q, e, F. Needed to keep consistency among online-code,
+// encoder and decoder va_args handling (code must be duplicated due
+// to shortcoming of C's ... semantics)
 
+#define OC_DEFAULT_Q  3
+#define OC_DEFAULT_E  0.01
+#define OC_DEFAULT_F  0
 
 #endif
