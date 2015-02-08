@@ -70,6 +70,6 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower);
 oc_block_list *oc_push_pending(oc_graph *g, int value);
 
 
-int oc_resolve(oc_graph *graph, oc_block_list **solved_list);
+int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list);
 
 #endif

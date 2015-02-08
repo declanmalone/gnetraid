@@ -371,7 +371,7 @@ void oc_decommission_node (oc_graph *g, int node) {
 // Returns 0 for not done, 1 for done and -1 for error (malloc)
 // If any nodes are solved, they're added to solved_list
 //
-int oc_resolve(oc_graph *graph, oc_block_list **solved_list) {
+int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
   int mblocks  = graph->mblocks;
   int ablocks  = graph->ablocks;
@@ -494,10 +494,10 @@ int oc_resolve(oc_graph *graph, oc_block_list **solved_list) {
       // solved list. We continue to avoid the following free()
       continue;
 
-  discard:
-      free(pnode);
-
     } // end if(count_unsolved is 0 or 1)
+
+  discard:
+    free(pnode);
 
   } // end while(items in pending queue)
 
