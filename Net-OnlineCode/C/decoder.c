@@ -138,6 +138,71 @@ int oc_resolve(oc_decoder *decoder, oc_block_list **solved) {
   return oc_graph_resolve(&(decoder->graph), solved);
 }
 
+// "Lazy" expansion routines
+//
+// The resolver includes block IDs of message and aux blocks rather
+// than expand them into their constituent aux and/or check blocks
+// since this is quicker and saves memory. As a result, if we want to
+// have the xor lists that it returns only in terms of check blocks or
+// check and aux blocks, they have to be expanded afterwards.
+//
+// My Perl implementation makes liberal use of the language's ability
+// to create dynamic lists during the expansion, but this being C it
+// isn't so straightforward.
+//
+// In this port, I'm going to implement the expansion as a set of
+// functions:
+//
+// * a recursive part that iterates over the list and takes a callback
+//   (function pointer) argument
+// * one callback that scans the expansion to find its length
+// * one callback that copies the expanded list
+// * a high-level function that calls the recursive part twice (once
+//   for each callback) to create the expanded array and then does the
+//   sorting/de-duplication stages to create the final array
+// 
+// To cut down on the size of the stack frames I'm going to use a set
+// of decoder-local variables that the callbacks will access (instead
+// of passing state through the stack).
+
+typedef void (*callback_t)(oc_decoder *d, int node);
+
+// callbacks
+static void count(oc_decoder *d, int node) { ++(d->count); };
+static void copy(oc_decoder *d, int node)  { *((d->dest)++) = node; };
+
+// recursive part
+static void expandr(oc_decoder *d, int flags,
+		    int *nodelist) { // [size, elem1, elem2, ... ]
+
+  register int i, node, size;
+  register int mblocks, coblocks;
+
+  mblocks  = d->base.mblocks;
+  coblocks = d->base.coblocks;
+
+  assert(nodelist != NULL);
+  size = *(nodelist++);
+
+  for (i=0; i < size; ++i) {
+
+    node = *(nodelist++);
+    if (
+	((flags & OC_EXPAND_MSG) && (node < mblocks)) ||
+	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node <coblocks)) 
+	) 
+      expandr(d, flags, d->graph.xor_list[node]);
+    else 
+      (*(d->callback))(d, *nodelist);	// call callback on unexpanded block
+  }
+}
+
+int *oc_expansion(oc_decoder *decoder, int node) {
+
+
+
+}
+
 #if 0
 
 # new routine to replace xor_list; does "lazy" expansion of node lists
