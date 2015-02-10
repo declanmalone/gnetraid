@@ -243,15 +243,16 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
 
 // calculate F from epsilon
 int oc_max_degree(float e) {
-  e /= 2.0;
-  return (int) ceil((2*log(e))/log(1-e));
+  e /= 2;
+  return ceil( (2*log(e)) / log(1-e) );
 }
 
 // count number of auxiliary blocks
 int oc_count_aux(int mblocks, int q, float e) {
 
   // shouldn't overflow for any practical values of q, mblocks
-  return (int) ceil(0.55 * q * e * mblocks);
+  int aux_blocks = ceil(0.55 * q * e * mblocks);
+  return (aux_blocks < q) ? q : aux_blocks;
 
 }
 
@@ -260,7 +261,7 @@ int oc_count_aux(int mblocks, int q, float e) {
 float oc_recalculate_e(int mblocks, int q, float e) {
 
   float l, r, m;		// left, right, middle
-  int   ablocks = oc_count_aux(mblocks, q, e);
+  int   ablocks  = oc_count_aux(mblocks, q, e);
   int   coblocks = mblocks + ablocks;
 
   // set up left and right of range to search
@@ -289,7 +290,7 @@ float oc_recalculate_e(int mblocks, int q, float e) {
 }
 
 int oc_eval_f(float t) {
-  return oc_max_degree(1/(1.0 + exp(-t)));
+  return oc_max_degree(1/(1 + exp(-t)));
 }
 
 // An aside on va_args and representation of numbers (0 and 0.0)...
@@ -314,20 +315,21 @@ int oc_eval_f(float t) {
 
 int oc_codec_init(oc_codec *codec, int mblocks, ...) {
 
-  int    flags = 0;
-  int    q=OC_DEFAULT_Q, new_q;
-  float  e=OC_DEFAULT_E, new_e;
-  int    f=OC_DEFAULT_F, new_f;	// f=0 => not supplied (calculated)
+  va_list ap;
+  int     flags = 0;
+  int     q=OC_DEFAULT_Q, new_q;
+  float   e=OC_DEFAULT_E, new_e;
+  int     f=OC_DEFAULT_F, new_f; // f=0 => not supplied (calculated)
 
-  int    ablocks,coblocks;
+  int     ablocks,coblocks;
 
   // extract variadic args
-  va_list ap;
-
   va_start(ap, mblocks);
   do {				// preferable to goto?
-    new_q = va_arg(ap, double); // float automatically promoted in ...
+    new_q = va_arg(ap, int);
     if (new_q == 0) break; else q=new_q;
+
+    // not getting here for some reason...
 
     new_e = va_arg(ap, double); // float automatically promoted in ...
     if (new_e == 0) break; else e=new_e;
@@ -352,8 +354,6 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
 
   // how many auxiliary blocks would this scheme need?
   ablocks =  oc_count_aux(mblocks,q,e);
-  if (ablocks < q)
-    ablocks = q;
 
   // does epsilon value need updating?
   new_f = oc_max_degree(e);

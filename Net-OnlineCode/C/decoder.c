@@ -44,7 +44,7 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
     new_fudge = va_arg(ap, double);
     if (new_fudge == 0.0) break; else fudge = new_fudge;
 
-    new_q = va_arg(ap, double); // float automatically promoted in ...
+    new_q = va_arg(ap, int);
     if (new_q == 0) break; else q=new_q;
 
     new_e = va_arg(ap, double); // float automatically promoted in ...

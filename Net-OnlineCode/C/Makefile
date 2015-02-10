@@ -1,5 +1,11 @@
 
-all : online-code.o rng_sha1.o graph.o decoder.o
+OBJECTS = online-code.o rng_sha1.o graph.o decoder.o
+
+libs : libonline-code.a
+
+libonline-code.a : $(OBJECTS)
+	$(AR) cr $@ $(OBJECTS)
+	ranlib $@
 
 online-code.o : online-code.c
 	${CC} -c $< 
