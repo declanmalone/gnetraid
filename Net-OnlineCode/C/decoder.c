@@ -164,6 +164,7 @@ int oc_resolve(oc_decoder *decoder, oc_block_list **solved) {
 // To cut down on the size of the stack frames I'm going to use a set
 // of decoder-local variables that the callbacks will access (instead
 // of passing state through the stack).
+//
 
 typedef void (*callback_t)(oc_decoder *d, int node);
 
@@ -187,6 +188,7 @@ static void expandr(oc_decoder *d, int flags,
   for (i=0; i < size; ++i) {
 
     node = *(nodelist++);
+    // TODO: implement cache-related stuff
     if (
 	((flags & OC_EXPAND_MSG) && (node < mblocks)) ||
 	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node <coblocks)) 
@@ -197,112 +199,78 @@ static void expandr(oc_decoder *d, int flags,
   }
 }
 
+// callback for qsort
+static int compare_ascending(const void *a, const void *b) {
+  if      ( *((int *)a) == *((int *)b))
+    return 0;
+  else if ( *((int *)a)  > *((int *)b))
+    return -1;
+  else
+    return +1;
+}
+
 int *oc_expansion(oc_decoder *decoder, int node) {
 
+  int ic, *p, oc, *op, pass, i, previous, runlength;
 
+  // 1st Stage: expand into a list with duplicates
+  decoder->callback = &count;
+  decoder->count    = 0;
+  expandr(decoder, decoder->flags, decoder->graph.xor_list[node]);
 
-}
+  // Allocate memory, including space for a sentinel at the end.
+  if (NULL == (p = calloc(decoder->count + 2, sizeof(int))))
+    return NULL;
+  *p = ic = decoder->count + 1;
+  p[ic] = -1;			// sentinel is not valid block number
 
-#if 0
+  decoder->callback = &copy;
+  decoder->dest     = p + 1;
+  expandr(decoder, decoder->flags, decoder->graph.xor_list[node]);
 
-# new routine to replace xor_list; does "lazy" expansion of node lists
-# from graph object, honouring the expand_aux and (new) expand_msg
-# flags.
-sub expansion {
+  decoder->dest     = p;	// stash p for later reuse/free
 
-  my ($self, $node) = @_;
+  // 2nd Stage: sort the list. I will probably use heap sort later,
+  // but I can use glibc's qsort for now (don't sort sentinel value)
+  qsort(++p, ic - 1, sizeof(int), compare_ascending);
 
-  # pull out frequently-used variables (using hash slice)
-  my ($expand_aux,$expand_msg) = @{$self}{"expand_aux","expand_msg"};
-  my ($mblocks,$coblocks)      = @{$self}{"mblocks","coblocks"};
+  // 3rd Stage: remove elements that appear an even number of times
 
-  # Stage 1: collect list of nodes in the expansion, honouring flags
-  my ($in,$out,$expanded,$done) =
-    ($self->{graph}->{xor_list}->[$node],[],0,0);
+  // I'll do this in two passes so that we can return a fixed-size
+  // array to the caller. Using a sentinel at the end of the list
+  // avoids duplicating a bunch of code outside the loop to deal with
+  // the last run in the input.
 
-  if (DEBUG) {
-    print "Expansion: node ${node}'s input list is " . (join " ", @$in) . "\n";
-  }
+  for (pass = oc = 0; pass < 2; ++pass ) {
 
-  until ($done) {
-    # we may need several loops to expand everything since aux blocks
-    # may appear in the expansion of message blocks and vice-versa.
-    # It's possible to do the expansion with just one loop, but the
-    # code is more messy/complicated.
-
-    for my $i (@$in) {
-      if ($expand_msg and $i < $mblocks) {
-        ++$expanded;
-        push @$out, @{$self->{graph}->{xor_list}->[$i]};
-      } elsif ($expand_aux and $i >= $mblocks and $i < $coblocks) {
-        ++$expanded;
-        push @$out, @{$self->{graph}->{xor_list}->[$i]};
+    p = decoder->dest;		// restore stashed input pointer
+    previous  = *(++p);		// start from p[1] (skip p[0] = length)
+    runlength = 0;		// even run lengths cancel each other out
+    for (i = 0; i < ic; ++i, ++p) { // scan up to and including sentinel
+      if (*p == previous) {
+	++runlength;
       } else {
-        push @$out, $i;
+	if (runlength &1)
+	  // TODO: implement cache-related stuff
+	  if (pass == 0)	// count up non-cancelling blocks first 
+	    ++oc;
+	  else			// copy block ID or XOR from cache later
+	    *(++op) = previous;
+	previous  = *p;
+	runlength = 1;
       }
     }
-    $done = 1 unless $expanded;
-  } continue {
-    ($in,$out) = ($out,[]);
-    $expanded = 0;
-  }
 
-  # test expansion after stage 1
-  if (0) {
-    for my $i (@$in) {
-      if ($expand_aux) {
-	die "raw expanded list had aux blocks after stage 1\n" 
-	  if $i >= $mblocks and $i < $coblocks;
-      }
-      if ($expand_msg) {
-	die "raw expanded list had msg blocks after stage 1\n" 
-	  if $i < $mblocks;
-      }
+    // create output array at end of first pass
+    if (pass == 0) {
+      if (NULL == (op = calloc(oc + 1, sizeof(int))))
+	return NULL;
+      *op = oc;
     }
   }
 
-  if (DEBUG) {
-    print "Expansion: list after expand_* is " . (join " ", @$in) . "\n";
-  }
-
-  # Stage 2: sort the list
-  my @sorted = sort { $a <=> $b } @$in;
-
-  # Stage 3: create output list containing only nodes that appear an
-  # odd number of times
-  die "expanded list was empty\n" unless @sorted;
-
-  my ($previous, $runlength) = ($sorted[0], 0);
-  my @output = ();
-
-  foreach my $i (@sorted) {
-    if ($i == $previous) {
-      ++$runlength;
-    } else {
-      push @output, $previous if $runlength & 1;
-      $previous = $i;
-      $runlength = 1;
-    }
-  }
-  push @output, $previous if $runlength & 1;
-
-  # test expansion after stage 3
-  if (0) {
-    for my $i (@output) {
-      if ($expand_aux) {
-	die "raw expanded list had aux blocks after stage 3\n" 
-	  if $i >= $mblocks and $i < $coblocks;
-      }
-      if ($expand_msg) {
-	die "raw expanded list had msg blocks after stage 3\n" 
-	  if $i < $mblocks;
-      }
-    }
-  }
-
-  # Finish: return list
-  return @output;
+  free(p);
+  return op;
 
 }
 
-#endif

@@ -89,12 +89,29 @@ int oc_eval_f(float t);
 // option of expanding message, auxiliary or check blocks. In the
 // encoder it only makes sense to expand auxiliary blocks (into
 // message blocks), while in the decoder we can expand auxiliary or
-// message blocks (into check blocks and/or auxiliary blocks, provided
-// the auxiliary expansion flag isn't set)
+// message blocks (into check blocks and possibly auxiliary blocks,
+// provided the auxiliary expansion flag isn't set).
+//
+// The option to expand auxiliary blocks probably isn't that useful
+// (except maybe for debugging) so it might go away at some point. It
+// might still be useful on machines with very little memory and very
+// large block sizes, though.
 
 #define OC_EXPAND_MSG 1
 #define OC_EXPAND_AUX 2
 #define OC_EXPAND_CHK 4
+
+// The decoder's expansion routine also takes a flag to decide whether
+// or not to XOR in solved message/auxiliary blocks during expansion
+// (provided they're actually cached).
+#define OC_XOR_CACHED_MSG 8
+
+// The OC_XOR_CACHED_AUX option is for expanding cached aux blocks.
+// This pair of options will usually be set but can be turned off if
+// the caller wants to know exactly which blocks are included in an
+// expansion.
+#define OC_XOR_CACHED_AUX 16
+
 
 // Defaults for q, e, F. Needed to keep consistency among online-code,
 // encoder and decoder va_args handling (code must be duplicated due
