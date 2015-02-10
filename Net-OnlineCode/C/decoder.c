@@ -201,12 +201,9 @@ static void expandr(oc_decoder *d, int flags,
 
 // callback for qsort
 static int compare_ascending(const void *a, const void *b) {
-  if      ( *((int *)a) == *((int *)b))
-    return 0;
-  else if ( *((int *)a)  > *((int *)b))
-    return -1;
-  else
-    return +1;
+       if ( *((int *)a) == *((int *)b))    return 0;
+  else if ( *((int *)a)  > *((int *)b))    return -1;
+                       else                return +1;
 }
 
 int *oc_expansion(oc_decoder *decoder, int node) {
@@ -222,7 +219,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
   if (NULL == (p = calloc(decoder->count + 2, sizeof(int))))
     return NULL;
   *p = ic = decoder->count + 1;
-  p[ic] = -1;			// sentinel is not valid block number
+  p[ic] = -1;			// sentinel (not a valid block number)
 
   decoder->callback = &copy;
   decoder->dest     = p + 1;
@@ -269,7 +266,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
     }
   }
 
-  free(p);
+  free(decoder->dest);
   return op;
 
 }
