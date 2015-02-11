@@ -249,7 +249,7 @@ sub _count_auxiliary {
   # thing to do rather than ignoring the user's q value.
   if ($count < $q) {
     $count = $q;
-    warn "updated _count_auxiliary output value to $q\n";
+    # warn "updated _count_auxiliary output value to $q\n";
   }
   return $count;
 }

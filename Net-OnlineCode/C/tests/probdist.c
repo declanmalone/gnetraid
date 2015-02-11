@@ -5,7 +5,7 @@
 #include "online-code.h"
 
 // null-terminated lists of test values
-double e_values[] = { 0.01, 0.001, 0.1, 0 };
+double e_values[] = { 0.01l, 0.001l, 0.1l, 0 };
 int    q_values[] = { 3, 4, 7, 0 };
 int    n_values[] = { 1, 2, 1000, 0 }; // number of blocks
 
@@ -23,6 +23,8 @@ void codec_info(int flags) {
 
   if (flags & OC_FATAL_ERROR) return;
 
+  // print e to 15 significant digits to provide output that's
+  // comparable to probdist.pl
   printf("Codec returned:\n  mblocks=%d, q=%d, e=%1.15g F=%d\n",
 	 codec.mblocks, codec.q, codec.e, codec.F);
   printf("  ablocks=%d, coblocks=%d\n\n", codec.ablocks, codec.coblocks);
