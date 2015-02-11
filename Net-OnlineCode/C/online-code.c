@@ -9,11 +9,11 @@
 #include "structs.h"
 #include "online-code.h"
 
-float *oc_codec_init_probdist(oc_codec *codec) {
+double *oc_codec_init_probdist(oc_codec *codec) {
 
-  int   coblocks = codec->coblocks;
-  float epsilon  = codec->e;
-  float f        = codec->F;	// save doing cast later
+  int    coblocks = codec->coblocks;
+  double epsilon  = codec->e;
+  double f        = codec->F;	// save doing cast later
 
   // Calculate the sum of the sequence:
   //
@@ -31,10 +31,10 @@ float *oc_codec_init_probdist(oc_codec *codec) {
   // and f with a variable one involving i, then dividing as
   // appropriate.
 
-  float p1     = 1 - (1 + 1/f) / (1 + epsilon);
-  float pfterm;			// calculate later to avoid potential
+  double p1     = 1 - (1 + 1/f) / (1 + epsilon);
+  double pfterm;		// calculate later to avoid potential
 				// division by zero if f == 1
-  float *p, p_i, sum;
+  double *p, p_i, sum;
   double i, iterm;
 
   // basic sanity checking
@@ -42,7 +42,7 @@ float *oc_codec_init_probdist(oc_codec *codec) {
   assert(p1 > 0);
 
   // allocate array
-  p = calloc(f, sizeof(float));
+  p = calloc(f, sizeof(double));
 
   if (p == NULL) {
     return NULL;
@@ -180,9 +180,9 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 // check block (a value between 1 and F)
 int oc_random_degree(oc_codec *codec, oc_rng_sha1 *rng) {
 
-  int    i = 0;
-  float  r = oc_rng_rand(rng, 1.0);
-  float *p = codec->p;
+  int     i = 0;
+  double  r = oc_rng_rand(rng, 1.0);
+  double *p = codec->p;
   // A linear scan is likely to be quick for most values of r.  Extra
   // speedup might be achieved by partitioning and using binary search
   // on the "flatter" part of the array but this is easier.
@@ -242,13 +242,13 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
 // clarity.
 
 // calculate F from epsilon
-int oc_max_degree(float e) {
+int oc_max_degree(double e) {
   e /= 2;
   return ceil( (2*log(e)) / log(1-e) );
 }
 
 // count number of auxiliary blocks
-int oc_count_aux(int mblocks, int q, float e) {
+int oc_count_aux(int mblocks, int q, double e) {
 
   // shouldn't overflow for any practical values of q, mblocks
   int aux_blocks = ceil(0.55 * q * e * mblocks);
@@ -258,11 +258,11 @@ int oc_count_aux(int mblocks, int q, float e) {
 
 // Use a binary search to find a new epsilon such that
 // oc_max_degree(epsilon) <= mblocks + ablocks (ie, n')
-float oc_recalculate_e(int mblocks, int q, float e) {
+double oc_recalculate_e(int mblocks, int q, double e) {
 
-  float l, r, m;		// left, right, middle
-  int   ablocks  = oc_count_aux(mblocks, q, e);
-  int   coblocks = mblocks + ablocks;
+  double l, r, m;		// left, right, middle
+  int    ablocks  = oc_count_aux(mblocks, q, e);
+  int    coblocks = mblocks + ablocks;
 
   // set up left and right of range to search
   l = -log(1/e - 1);
@@ -289,7 +289,7 @@ float oc_recalculate_e(int mblocks, int q, float e) {
 
 }
 
-int oc_eval_f(float t) {
+int oc_eval_f(double t) {
   return oc_max_degree(1/(1 + exp(-t)));
 }
 
@@ -301,8 +301,8 @@ int oc_eval_f(float t) {
 // terminating the list of args to oc_codec_init below with a null
 // value. This should work fine because none of our var args should be
 // zero. The only fly in the ointment is that on platforms where ints
-// are smaller than floats a terminal zero (integer) may not be read
-// as 0.0 (float). That's the sort of detail that I should probably
+// are smaller than doubles a terminal zero (integer) may not be read
+// as 0.0 (double). That's the sort of detail that I should probably
 // handle in an autoconf-style script, but as a quick fix, I'll
 // terminate the list with 0ll instead.
 //
@@ -318,7 +318,7 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   va_list ap;
   int     flags = 0;
   int     q=OC_DEFAULT_Q, new_q;
-  float   e=OC_DEFAULT_E, new_e;
+  double  e=OC_DEFAULT_E, new_e;
   int     f=OC_DEFAULT_F, new_f; // f=0 => not supplied (calculated)
 
   int     ablocks,coblocks;
@@ -329,9 +329,7 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
     new_q = va_arg(ap, int);
     if (new_q == 0) break; else q=new_q;
 
-    // not getting here for some reason...
-
-    new_e = va_arg(ap, double); // float automatically promoted in ...
+    new_e = va_arg(ap, double);
     if (new_e == 0) break; else e=new_e;
 
     new_f = va_arg(ap, int);

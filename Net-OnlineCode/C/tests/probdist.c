@@ -5,9 +5,9 @@
 #include "online-code.h"
 
 // null-terminated lists of test values
-float e_values[] = { 0.01, 0.001, 0.1, 0 };
-int   q_values[] = { 3, 4, 7, 0 };
-int   n_values[] = { 1, 2, 1000, 0 }; // number of blocks
+double e_values[] = { 0.01, 0.001, 0.1, 0 };
+int    q_values[] = { 3, 4, 7, 0 };
+int    n_values[] = { 1, 2, 1000, 0 }; // number of blocks
 
 // global codec structure
 oc_codec codec;
@@ -23,7 +23,7 @@ void codec_info(int flags) {
 
   if (flags & OC_FATAL_ERROR) return;
 
-  printf("Codec returned:\n  mblocks=%d, q=%d, e=%1.12f, F=%d\n",
+  printf("Codec returned:\n  mblocks=%d, q=%d, e=%1.15g F=%d\n",
 	 codec.mblocks, codec.q, codec.e, codec.F);
   printf("  ablocks=%d, coblocks=%d\n\n", codec.ablocks, codec.coblocks);
 
@@ -31,10 +31,10 @@ void codec_info(int flags) {
 
 main() {
 
-  float  e, *ep;
-  int   *qp, *np;
-  int    q, n, f;
-  int    flags;
+  double  e, *ep;
+  int    *qp, *np;
+  int     q, n, f;
+  int     flags;
 
   // test initialisation without optional args
   n = 1000;
