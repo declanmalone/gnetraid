@@ -6,9 +6,28 @@ use lib '../lib';
 use Net::OnlineCode::Decoder;
 use Net::OnlineCode::RNG;
 
-my $mblocks = shift @ARGV || 1;
+# Default/command-line arguments
+my ($mblocks, $seed, $rng) = ();
+while (@ARGV) {
+  if ($ARGV[0] eq "-d") {
+    shift @ARGV;
+    $seed = " " x20;
+  } elsif ($ARGV[0] eq "-s") {
+    shift @ARGV;
+    $seed = shift @ARGV;
+  } elsif ($ARGV[0] =~ /^\d+/) {
+    $mblocks = shift @ARGV;
+    last;
+  } else {
+    die "mindecoder.pl [-d]|[-s seed] [mblocks]\n";
+  }
+}
 
-my $rng=Net::OnlineCode::RNG->new_random;
+$mblocks = $mblocks || 1;
+$rng = defined($seed) ?
+  Net::OnlineCode::RNG->new($seed) :
+  Net::OnlineCode::RNG->new_random;
+
 print "RNG seed: ". $rng->as_hex() . "\n";
 
 my $o=Net::OnlineCode::Decoder->new(mblocks=>$mblocks,initial_rng=>$rng);
