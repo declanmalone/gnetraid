@@ -13,22 +13,22 @@
 
 typedef struct {
 
-  int   q;			// outer block coding factor
-  float e;			// epsilon
-  int   F;			// max degree
+  int    q;			// outer block coding factor
+  double e;			// epsilon
+  int    F;			// max degree
 
-  int   mblocks, ablocks;	// counts of message, auxiliary blocks
-  int   coblocks;		// message blocks + auxiliary blocks
+  int    mblocks, ablocks;	// counts of message, auxiliary blocks
+  int    coblocks;		// message blocks + auxiliary blocks
 
-  float *p;			// probablity distribution table
+  double *p;			// probablity distribution table
 
-  int   flags;			// error flags; see discussion of
+  int    flags;			// error flags; see discussion of
 				// oc_codec_init below
 
-  int  *auxiliary;		// 2d array mapping message->auxiliary
+  int   *auxiliary;		// 2d array mapping message->auxiliary
 
-  int  *shuffle_source;		// re-usable scratch space for holding
-  int  *shuffle_dest;		// source/dest for Fisher-Yates shuffle
+  int   *shuffle_source;	// re-usable scratch space for holding
+  int   *shuffle_dest;		// source/dest for Fisher-Yates shuffle
 
 } oc_codec;
 
@@ -61,7 +61,7 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 
 // allocate and populate probablity table here (returns pointer to new
 // memory or NULL if malloc fails):
-float *oc_codec_init_probdist(oc_codec *codec);
+double *oc_codec_init_probdist(oc_codec *codec);
 
 // Fisher-Yates shuffle routine
 int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng);
@@ -79,11 +79,11 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng);
 // The following routines are used by init to validate and "fix" the
 // parameter list. They can also be called directly.
 
-int oc_max_degree(float e);	// calculate F from epsilon
-int oc_count_aux(int mblocks, int q, float e);
-int oc_check_parameters(int mblocks, int q, float e, int F);
-float oc_recalculate_e(int mblocks, int q, float e);
-int oc_eval_f(float t);
+int oc_max_degree(double e);	// calculate F from epsilon
+int oc_count_aux(int mblocks, int q, double e);
+int oc_check_parameters(int mblocks, int q, double e, int F);
+double oc_recalculate_e(int mblocks, int q, double e);
+int oc_eval_f(double t);
 
 // Block "expansion": When dealing with lists of blocks, we have the
 // option of expanding message, auxiliary or check blocks. In the

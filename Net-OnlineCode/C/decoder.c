@@ -30,7 +30,7 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
 
   float  fudge=1.2, new_fudge;	// !!new optional parameter!!
   int    q=OC_DEFAULT_Q, new_q;
-  double e=OC_DEFAULT_E, new_e; // demoted back to float in parent
+  double e=OC_DEFAULT_E, new_e;
   int    f=OC_DEFAULT_F, new_f;	// f=0 => not supplied (calculated)
 
   int    super_flag;

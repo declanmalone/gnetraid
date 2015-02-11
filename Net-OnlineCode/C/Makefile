@@ -20,8 +20,8 @@ decoder.o : decoder.c
 	${CC} -c $< 
 
 
-decoder.c : decoder.h online-code.h graph.h
-graph.c : graph.h
-online-code.c : online-code.h
-rng_sha1.c : rng_sha1.h
+decoder.o : decoder.h online-code.h graph.h
+graph.o : graph.h online-code.h
+online-code.o : online-code.h
+rng_sha1.o : rng_sha1.h
 
