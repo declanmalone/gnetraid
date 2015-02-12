@@ -50,16 +50,16 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // Check parameters and return non-zero value on failures
   if (mblocks < 1)
-    return OC_DEBUG && fprintf(stderr, "graph init: mblocks (%d) invalid\n", mblocks);
+    return fprintf(stderr, "graph init: mblocks (%d) invalid\n", mblocks);
 
   if (ablocks < 1)
-    return OC_DEBUG && fprintf(stderr, "graph init: ablocks (%d) invalid\n", ablocks);
+    return fprintf(stderr, "graph init: ablocks (%d) invalid\n", ablocks);
 
   if (NULL == aux_map)
-    return OC_DEBUG && fprintf(stderr, "graph init: codec has null auxiliary map\n");
+    return fprintf(stderr, "graph init: codec has null auxiliary map\n");
 
   if (fudge <= 1.0)
-    return OC_DEBUG && fprintf(stderr, "graph init: Fudge factor (%f) <= 1.0\n", fudge);
+    return fprintf(stderr, "graph init: Fudge factor (%f) <= 1.0\n", fudge);
 
   // calculate space to allocate for check blocks (only)
   expected = (1 + q * e) * mblocks;
@@ -80,27 +80,27 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // Allocate "v" edges (omit message blocks)
   if (NULL == (graph->v_edges = calloc(ablocks + check_space, sizeof(int *))))
-    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'v' edges\n");
+    return fprintf(stderr, "graph init: Failed to allocate 'v' edges\n");
   memset(graph->v_edges, 0, (ablocks + check_space) * sizeof(int *));
 
   // Allocate "n" edges (omit check blocks)
   if (NULL == (graph->n_edges = calloc(coblocks, sizeof(oc_block_list *))))
-    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'n' edges\n");
+    return fprintf(stderr, "graph init: Failed to allocate 'n' edges\n");
   memset(graph->n_edges, 0, coblocks * sizeof(oc_block_list *));
 
   // allocate unsolved (downward) edge counts (omit message blocks)
   if (NULL == (graph->edge_count = calloc(ablocks + check_space, sizeof(int))))
-    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate edge counts\n");
+    return fprintf(stderr, "graph init: Failed to allocate edge counts\n");
   memset(graph->edge_count, 0, (ablocks + check_space) * sizeof(int));
 
   // allocate solved array (omit check blocks; assumed to be solved)
   if (NULL == (graph->solved = calloc(coblocks, sizeof(char))))
-    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'solved' array\n");
+    return fprintf(stderr, "graph init: Failed to allocate 'solved' array\n");
   memset(graph->solved, 0, coblocks * sizeof(char));
 
   // Allocate xor lists (omit check blocks; they are their own expansion)
   if (NULL == (graph->xor_list = calloc(coblocks, sizeof(int *))))
-    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate xor lists\n");
+    return fprintf(stderr, "graph init: Failed to allocate xor lists\n");
   memset(graph->xor_list, 0, coblocks * sizeof(int *));
 
   // Register the auxiliary mapping
@@ -114,7 +114,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
       if (NULL == oc_create_n_edge(graph, aux_temp, msg))
-	return OC_DEBUG && fprintf(stderr, "graph init: failed to malloc aux up edge\n");
+	return fprintf(stderr, "graph init: failed to malloc aux up edge\n");
       aux_temp   -= mblocks;	// relative to start of edge_count[]
       assert (aux_temp >= 0);
       assert (aux_temp < ablocks);
@@ -128,7 +128,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     aux_temp = graph->edge_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
     if (NULL == (p = calloc(1 + aux_temp, sizeof(int))))
-      return OC_DEBUG && fprintf(stderr, "graph init: failed to malloc aux down edges\n");
+      return fprintf(stderr, "graph init: failed to malloc aux down edges\n");
 
     graph->v_edges[aux] = p;
     p[0] = aux_temp;		// array size; edges stored in next pass
@@ -172,7 +172,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
   // have we run out of space for new nodes?
   if (node >= g->node_space)
-    return OC_DEBUG && fprintf(stderr, "oc_graph_check_block: node >= node_space\n"), -1;
+    return fprintf(stderr, "oc_graph_check_block: node >= node_space\n"), -1;
 
 #if OC_USE_CHECK_XOR_LIST
 
@@ -235,7 +235,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
   // mark node as pending resolution
   if (NULL == oc_push_pending(g, node))
-    return OC_DEBUG && fprintf(stderr, "oc_graph_check_block: failed to push pending\n"), -1;
+    return fprintf(stderr, "oc_graph_check_block: failed to push pending\n"), -1;
 
   // success: return index of newly created node
   return node;
