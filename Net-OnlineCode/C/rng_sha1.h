@@ -28,7 +28,7 @@ void oc_rng_init_random(oc_rng_sha1 *rng);
 
 int oc_rng_random_uuid(char *dest);
 
-float oc_rng_rand(oc_rng_sha1 *rng, float max);
+double oc_rng_rand(oc_rng_sha1 *rng, double max);
 
 void oc_rng_advance(oc_rng_sha1 *rng);
 
