@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
-use constant DEBUG  => 1;
+use constant DEBUG  => 0;
 use constant ASSERT => 1;
 
 require Exporter;

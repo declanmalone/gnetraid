@@ -201,6 +201,8 @@ void oc_init_cblock_shuffle_source(oc_codec *codec) {
   int i, *p = codec->shuffle_source;
   int coblocks = codec->mblocks + codec->ablocks;
 
+  assert(p != NULL);
+
   for (i=0; i < coblocks; ++i)
     *(p++) = i;
 
@@ -370,10 +372,10 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
     flags |= OC_F_CHANGED;
   f = new_f;
 
-  // allocate scratch space for shuffles (F elements)
-  if (NULL == (codec->shuffle_source = malloc((f +1) * sizeof(int))))
+  // allocate scratch space for shuffles
+  if (NULL == (codec->shuffle_source = calloc(mblocks + ablocks, sizeof(int))))
     flags |= OC_FATAL_ERROR;
-  if (NULL == (codec->shuffle_dest   = malloc((f +1) * sizeof(int))))
+  if (NULL == (codec->shuffle_dest   = calloc(mblocks + ablocks, sizeof(int))))
     flags |= OC_FATAL_ERROR;
 
   // Fill in remaining fields
