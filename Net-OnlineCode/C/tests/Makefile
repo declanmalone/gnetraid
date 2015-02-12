@@ -3,7 +3,7 @@
 CLIBS = -L..
 CINCS = -I..
 
-OTHERLIBS = -lm -lssl
+OTHERLIBS = -lm -lssl -lcrypto
 
 all: probdist mindecoder compat
 
