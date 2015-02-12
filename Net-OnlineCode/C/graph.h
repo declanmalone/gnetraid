@@ -45,7 +45,7 @@ typedef struct {
 
   oc_block_list *phead, *ptail;	// queue of pending nodes
 
-  unsigned char unsolved_count;	// count unsolved message blocks
+  unsigned int  unsolved_count;	// count unsolved message blocks
   unsigned char done;		// are all message nodes decoded?
 
 } oc_graph;

@@ -82,7 +82,7 @@ int main(int argc, char * const argv[]) {
   printf ("1-epsilon/2 times composite = %g\n",
 	  (coblocks * (1-e/2)));
   printf ("\n");
-
+  
 
   // main loop
   i = done = 0;
@@ -95,7 +95,8 @@ int main(int argc, char * const argv[]) {
       if (-1 == (done = oc_resolve(&d, &solved)))
 	return fprintf(stderr, "mindecoder: fatal error in oc_resolve\n");
 
-      if (NULL == solved) break;
+      if (NULL == solved)
+	break;
 
       // print out list of blocks that this check block solves
       printf ("%d (%d): solves ", i, done);
@@ -106,7 +107,8 @@ int main(int argc, char * const argv[]) {
 	free(sp);
       }
 
-      if (done) break;
+      if (done)
+	break;
     }
   }
 }
