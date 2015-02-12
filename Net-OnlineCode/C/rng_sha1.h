@@ -32,6 +32,6 @@ float oc_rng_rand(oc_rng_sha1 *rng, float max);
 
 void oc_rng_advance(oc_rng_sha1 *rng);
 
-
+const char *oc_rng_as_hex(oc_rng_sha1 *rng);
 
 #endif

@@ -32,6 +32,7 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
   int    q=OC_DEFAULT_Q, new_q;
   double e=OC_DEFAULT_E, new_e;
   int    f=OC_DEFAULT_F, new_f;	// f=0 => not supplied (calculated)
+  int    i, *p, coblocks;
 
   int    super_flag;
 
@@ -57,12 +58,12 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
   va_end(ap);
 
   if (NULL == dec) {
-    fprint(stderr, "oc_decoder_init: passed NULL decoder pointer\n");
+    fprintf(stderr, "oc_decoder_init: passed NULL decoder pointer\n");
     return OC_FATAL_ERROR;
   }
 
   if (NULL == rng) {
-    fprint(stderr, "oc_decoder_init: passed NULL rng pointer\n");
+    fprintf(stderr, "oc_decoder_init: passed NULL rng pointer\n");
     return OC_FATAL_ERROR;
   }
   dec->rng = rng;
@@ -71,20 +72,27 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
   super_flag = oc_codec_init(&(dec->base), mblocks, q, e, f, 0ll);
 
   if (super_flag & OC_FATAL_ERROR) {
-    fprint(stderr, "oc_decoder_init: parent class returned fatal error\n");
+    fprintf(stderr, "oc_decoder_init: parent class returned fatal error\n");
     return super_flag;
   }
 
   if (flags & OC_EXPAND_CHK) {
-    fprint(stderr, "oc_decoder_init: OC_EXPAND_CHK not valid here\n");
+    fprintf(stderr, "oc_decoder_init: OC_EXPAND_CHK not valid here\n");
     return super_flag & OC_FATAL_ERROR;
   }
   dec->flags = flags;		// our flags; parent's is just for errors
 
   // parent doesn't create auxiliary mapping so we do it
   if (NULL == oc_auxiliary_map(&(dec->base), rng)) { // stashed for us
-    fprint(stderr, "oc_decoder_init: failed to make auxiliary mapping\n");
+    fprintf(stderr, "oc_decoder_init: failed to make auxiliary mapping\n");
     return super_flag & OC_FATAL_ERROR;
+  }
+
+  // set up Fisher-Yates source array for check block selection
+  p = dec->base.shuffle_source;
+  coblocks = dec->base.coblocks;
+  for (i=0; i < coblocks; ++i) {
+    *(p++) = i;
   }
 
   // Create graph decoder

@@ -8,6 +8,27 @@
 #include "online-code.h"
 #include "graph.h"
 
+#define OC_DEBUG 1
+
+// Create an up edge
+oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
+
+  oc_block_list *p;
+
+  assert(upper > lower);
+
+  if (NULL == (p = malloc(sizeof(oc_block_list))))
+    return NULL;
+
+  OC_DEBUG && fprintf(stderr, "Adding n edge %d -> %d\n", lower, upper);
+
+  p->value = upper;
+  p->next  = g->n_edges[lower];
+
+  return g->n_edges[lower] = p;
+
+}
+
 int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // Various parameters snarfed from codec. Some are copied locally.
@@ -16,8 +37,8 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   int coblocks = codec->coblocks;
 
   // we need e and q to calculate the expected number of check blocks
-  float e = codec->e;
-  int   q = codec->q;		// also needed to iterate over aux mapping
+  double e = codec->e;
+  int    q = codec->q;		// also needed to iterate over aux mapping
 
   float expected;		// expected number of check blocks
   int   check_space;		// actual space for check blocks (fudged)
@@ -29,16 +50,16 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // Check parameters and return non-zero value on failures
   if (mblocks < 1)
-    return fprintf(stderr, "graph init: mblocks (%d) invalid\n", mblocks);
+    return OC_DEBUG && fprintf(stderr, "graph init: mblocks (%d) invalid\n", mblocks);
 
   if (ablocks < 1)
-    return fprintf(stderr, "graph init: ablocks (%d) invalid\n", ablocks);
+    return OC_DEBUG && fprintf(stderr, "graph init: ablocks (%d) invalid\n", ablocks);
 
   if (NULL == aux_map)
-    return fprintf(stderr, "graph init: codec has null auxiliary map\n");
+    return OC_DEBUG && fprintf(stderr, "graph init: codec has null auxiliary map\n");
 
   if (fudge <= 1.0)
-    return fprintf(stderr, "graph init: Fudge factor (%f) <= 1.0\n", fudge);
+    return OC_DEBUG && fprintf(stderr, "graph init: Fudge factor (%f) <= 1.0\n", fudge);
 
   // calculate space to allocate for check blocks (only)
   expected = (1 + q * e) * mblocks;
@@ -55,30 +76,32 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   graph->node_space = coblocks + check_space;
   graph->unsolved_count = mblocks;
 
+  OC_DEBUG && fprintf(stderr, "check space is %d\n", check_space);
+
   // Allocate "v" edges (omit message blocks)
   if (NULL == (graph->v_edges = calloc(ablocks + check_space, sizeof(int *))))
-    return fprintf(stderr, "graph init: Failed to allocate 'v' edges\n");
-  memset(graph->v_edges,0,(ablocks + check_space) * sizeof(int *));
+    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'v' edges\n");
+  memset(graph->v_edges, 0, (ablocks + check_space) * sizeof(int *));
 
   // Allocate "n" edges (omit check blocks)
   if (NULL == (graph->n_edges = calloc(coblocks, sizeof(oc_block_list *))))
-    return fprintf(stderr, "graph init: Failed to allocate 'n' edges\n");
-  memset(graph->n_edges,0,coblocks * sizeof(oc_block_list *));
+    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'n' edges\n");
+  memset(graph->n_edges, 0, coblocks * sizeof(oc_block_list *));
 
   // allocate unsolved (downward) edge counts (omit message blocks)
   if (NULL == (graph->edge_count = calloc(ablocks + check_space, sizeof(int))))
-    return fprintf(stderr, "graph init: Failed to allocate edge counts\n");
-  memset(graph->v_edges,0,(ablocks + check_space) * sizeof(int));
+    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate edge counts\n");
+  memset(graph->edge_count, 0, (ablocks + check_space) * sizeof(int));
 
   // allocate solved array (omit check blocks; assumed to be solved)
   if (NULL == (graph->solved = calloc(coblocks, sizeof(char))))
-    return fprintf(stderr, "graph init: Failed to allocate 'solved' array\n");
-  memset(graph->solved,0,coblocks * sizeof(char));
+    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate 'solved' array\n");
+  memset(graph->solved, 0, coblocks * sizeof(char));
 
   // Allocate xor lists (omit check blocks; they are their own expansion)
   if (NULL == (graph->xor_list = calloc(coblocks, sizeof(int *))))
-    return fprintf(stderr, "graph init: Failed to allocate xor lists\n");
-  memset(graph->xor_list,0,coblocks * sizeof(int *));
+    return OC_DEBUG && fprintf(stderr, "graph init: Failed to allocate xor lists\n");
+  memset(graph->xor_list, 0, coblocks * sizeof(int *));
 
   // Register the auxiliary mapping
 
@@ -88,15 +111,13 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   mp = codec->auxiliary;	// start of 2d message -> aux* map
   for (msg = 0; msg < mblocks; ++msg) {
 
-    if (NULL == (p = calloc(q + 1, sizeof(int))))
-      return fprintf(stderr, "graph init: failed to malloc aux up edges\n");
-
-    graph->n_edges[msg] = (oc_block_list *) p;
-    p[0] = q;
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
-      p[aux + 1]  = aux_temp;
+      if (NULL == oc_create_n_edge(graph, aux_temp, msg))
+	return OC_DEBUG && fprintf(stderr, "graph init: failed to malloc aux up edge\n");
       aux_temp   -= mblocks;	// relative to start of edge_count[]
+      assert (aux_temp >= 0);
+      assert (aux_temp < ablocks);
       graph->edge_count[aux_temp] += 2; // +2 trick explained below
     }
   }
@@ -107,7 +128,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     aux_temp = graph->edge_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
     if (NULL == (p = calloc(1 + aux_temp, sizeof(int))))
-      return fprintf(stderr, "graph init: failed to malloc aux down edges\n");
+      return OC_DEBUG && fprintf(stderr, "graph init: failed to malloc aux down edges\n");
 
     graph->v_edges[aux] = p;
     p[0] = aux_temp;		// array size; edges stored in next pass
@@ -134,34 +155,24 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   return 0;
 }
 
-oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
-
-  oc_block_list *p;
-
-  assert(upper > lower);
-
-  if (NULL == (p = malloc(sizeof(oc_block_list))))
-    return NULL;
-
-  p->value = upper;
-  p->next  = g->n_edges[lower];
-
-  return g->n_edges[lower] = p;
-
-}
-
 // Install a new check block into the graph. Called from decoder.
 // Returns node number on success, -1 otherwise
 int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
   int node = (g->nodes)++;
   int count, unsolved_count, i, tmp;
+  int mblocks;
 
+  assert(g != NULL);
   assert(v_edges != NULL);
+
+  mblocks = g->mblocks;
+
+  OC_DEBUG && fprintf(stderr, "Graphing check node %d/%d:\n", node, g->node_space);
 
   // have we run out of space for new nodes?
   if (node >= g->node_space)
-    return -1;
+    return OC_DEBUG && fprintf(stderr, "oc_graph_check_block: node >= node_space\n"), -1;
 
 #if OC_USE_CHECK_XOR_LIST
 
@@ -187,6 +198,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   unsolved_count = v_edges[0];
   tmp = v_edges[i = 1];
   while (unsolved_count && (i <= unsolved_count)) {
+    // OC_DEBUG && fprintf(stderr, "Considering edge from %d to %d\n", node, tmp);
     if (g->solved[tmp]) {
 
       // swap this element with last one and shrink list by 1
@@ -205,25 +217,25 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
   // Edge creation (no pruning/xor_list)
 
-  count          = v_edges[0];
-  unsolved_count = 0;
+  unsolved_count = count = v_edges[0];
   for (i=1; i <=count; ++i) {
     tmp = v_edges[i];
+    OC_DEBUG && fprintf(stderr, "  %d -> %d\n", node, tmp);
     if (g->solved[tmp])
-      ++unsolved_count;
-
+      --unsolved_count;
     if (NULL == oc_create_n_edge(g, node, tmp))
       return -1;
   }
+  OC_DEBUG && fprintf(stderr, "\n");
 
 #endif
 
-  g->edge_count[node] = unsolved_count;
-  g->v_edges[node]    = v_edges;
+  g->v_edges[node - mblocks]    = v_edges;
+  g->edge_count[node - mblocks] = unsolved_count;
 
   // mark node as pending resolution
   if (NULL == oc_push_pending(g, node))
-    return -1;
+    return OC_DEBUG && fprintf(stderr, "oc_graph_check_block: failed to push pending\n"), -1;
 
   // success: return index of newly created node
   return node;
@@ -234,6 +246,8 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
 
   int mblocks = g->mblocks;
   int *p, i, count;
+
+  assert(aux_node >= mblocks);
 
   g->solved[aux_node] = 1;
 
@@ -260,11 +274,14 @@ int oc_cascade(oc_graph *g, int node) {
 
   assert(node < coblocks);
 
+  OC_DEBUG && fprintf(stderr, "Cascading from node %d:\n", node);
+
   p = g->n_edges[node];
 
   // update unsolved edge count and push target to pending
   while (p != NULL) {
     to = p->value;
+    OC_DEBUG && fprintf(stderr, "  pending link %d\n", to);
     --(g->edge_count[to - mblocks]);
     if (NULL == oc_push_pending(g, to))
       return -1;
@@ -306,6 +323,20 @@ oc_block_list *oc_shift_pending(oc_graph *g) {
     g->ptail = NULL;
 
   return node;
+
+}
+
+void oc_flush_pending(oc_graph *graph) {
+
+  oc_block_list *tmp;
+
+  assert(graph != NULL);
+
+  while ((tmp = graph->phead) != NULL) {
+    graph->phead = tmp->next;
+    free(tmp);
+  }
+  graph->ptail = NULL;
 
 }
 
@@ -355,15 +386,16 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower) {
 void oc_decommission_node (oc_graph *g, int node) {
 
   int *down, upper, lower, i;
+  int mblocks = g->mblocks;
 
-  assert(node >= g->coblocks);
+  assert(node >= mblocks);
 
-  down = g->v_edges[node];
+  down = g->v_edges[node - mblocks];
   for (i = down[0]; i > 0; --i) {
     oc_delete_n_edge (g, node, down[i]);
   }
   free(down);
-  g->v_edges[node] = NULL;	// not strictly necessary
+  g->v_edges[node - mblocks] = NULL;	// not strictly necessary
 }
 
 // Resolve nodes by working down from check or aux blocks
@@ -405,7 +437,11 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
     assert(from >= mblocks);
 
-    count_unsolved = (graph->edge_count)[from - mblocks];
+    OC_DEBUG && fprintf(stderr, "Resolving block %d with ", from);
+
+    count_unsolved = graph->edge_count[from - mblocks];
+
+    OC_DEBUG && fprintf(stderr, "%d unsolved edges\n", count_unsolved);
 
     if (count_unsolved > 1)
       goto discard;
@@ -443,7 +479,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
       // xor_list will be fixed-size array, so we need to count how
       // many elements will be in it.
-      ep = (graph->v_edges)[from - mblocks];
+      ep = graph->v_edges[from - mblocks]; assert (ep != NULL);
       xor_count = *(ep++);	// number of v edges
 
       if (NULL == (p = malloc((xor_count + 1) * sizeof(int))))
@@ -465,7 +501,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
       // Set 'to' as solved
       pnode->value        = to;	// update value (was 'from')
-      (graph->solved)[to] = 1;
+      graph->solved[to] = 1;
       oc_push_solved(pnode, &solved_head, &solved_tail);
 
       // Save 'to' xor list and decommission 'from' node
@@ -497,6 +533,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
     } // end if(count_unsolved is 0 or 1)
 
   discard:
+    OC_DEBUG && fprintf(stderr, "Skipping node %d\n\n", from);
     free(pnode);
 
   } // end while(items in pending queue)

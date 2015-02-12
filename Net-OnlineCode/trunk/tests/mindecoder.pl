@@ -11,7 +11,7 @@ my ($mblocks, $seed, $rng) = ();
 while (@ARGV) {
   if ($ARGV[0] eq "-d") {
     shift @ARGV;
-    $seed = " " x20;
+    $seed = "\0" x20;
   } elsif ($ARGV[0] eq "-s") {
     shift @ARGV;
     $seed = shift @ARGV;
@@ -59,7 +59,7 @@ until ($done) {
     ($done,@A) =$o->resolve;
     last unless @A;
 
-    print $i . " ($done): $node solves " . (join (", ", @A)).  "\n";
+    print $i . " ($done): solves " . (join (", ", @A)).  "\n";
 
     last if $done;
   }
