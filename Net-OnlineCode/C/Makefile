@@ -1,6 +1,10 @@
 
 OBJECTS = online-code.o rng_sha1.o graph.o decoder.o
 
+# Uncomment to enable line-by-line (gcov) and gprof profiling
+#PROF = -fprofile-arcs -ftest-coverage -pg
+PROF = 
+
 libs : libonline-code.a
 
 clean :
@@ -11,7 +15,7 @@ libonline-code.a : $(OBJECTS)
 	ranlib $@
 
 .c.o:
-	${CC} -c -pg $< 
+	${CC} -c -g $(PROF) $< 
 
 online-code.o : online-code.c
 rng_sha1.o : rng_sha1.c

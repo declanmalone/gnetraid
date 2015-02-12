@@ -421,14 +421,14 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
   int from, to, count_unsolved, xor_count, i, *p, *xp, *ep;
 
+  // mark solved list (passed by reference) as empty
+  *solved_list = (oc_block_list *) NULL;
+
   // Check whether our queue is empty. If it is, the caller needs to
   // add another check block
   if (NULL == graph->phead) {
     return graph->done;
   }
-
-  // mark solved list (passed by reference) as empty
-  *solved_list = (oc_block_list *) NULL;
 
   // exit immediately if all message blocks are already solved
   if (0 == graph->unsolved_count)
@@ -452,7 +452,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
     if (count_unsolved == 0) {
 
-      if ((from >= coblocks) || (graph->solved)[from]) {
+      if ((from >= coblocks) || graph->solved[from]) {
 
 	// The first test above matches check blocks, while the second
 	// matches a previously-solved auxiliary block (the order of
@@ -504,7 +504,8 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
       assert(to != -1);
 
       // Set 'to' as solved
-      pnode->value        = to;	// update value (was 'from')
+      assert (!graph->solved[to]);
+      pnode->value      = to;	// update value (was 'from')
       graph->solved[to] = 1;
       oc_push_solved(pnode, &solved_head, &solved_tail);
 
