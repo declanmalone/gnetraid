@@ -11,7 +11,7 @@ libonline-code.a : $(OBJECTS)
 	ranlib $@
 
 .c.o:
-	${CC} -c -g $< 
+	${CC} -c -pg $< 
 
 online-code.o : online-code.c
 rng_sha1.o : rng_sha1.c

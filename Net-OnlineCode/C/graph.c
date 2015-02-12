@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 1
+#define OC_DEBUG 0
 
 // Create an up edge
 oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
@@ -78,34 +78,31 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   OC_DEBUG && fprintf(stderr, "check space is %d\n", check_space);
 
-  // Allocate "v" edges (omit message blocks)
-  if (NULL == (graph->v_edges = calloc(ablocks + check_space, sizeof(int *))))
-    return fprintf(stderr, "graph init: Failed to allocate 'v' edges\n");
-  memset(graph->v_edges, 0, (ablocks + check_space) * sizeof(int *));
+  // use a macro to make the following code clearer/less error-prone
+#define OC_ALLOC(MEMBER, SPACE, TYPE, MESSAGE) \
+  if (NULL == (graph->MEMBER = calloc(SPACE, sizeof(TYPE)))) \
+    return fprintf(stderr, "graph init: Failed to allocate " \
+		   MESSAGE "\n"); \
+  memset(graph->MEMBER, 0, (SPACE) * sizeof(TYPE));
 
-  // Allocate "n" edges (omit check blocks)
-  if (NULL == (graph->n_edges = calloc(coblocks, sizeof(oc_block_list *))))
-    return fprintf(stderr, "graph init: Failed to allocate 'n' edges\n");
-  memset(graph->n_edges, 0, coblocks * sizeof(oc_block_list *));
+  // "v" edges: omit message blocks
+  OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
 
-  // allocate unsolved (downward) edge counts (omit message blocks)
-  if (NULL == (graph->edge_count = calloc(ablocks + check_space, sizeof(int))))
-    return fprintf(stderr, "graph init: Failed to allocate edge counts\n");
-  memset(graph->edge_count, 0, (ablocks + check_space) * sizeof(int));
+  // "n" edges: omit check blocks
+  OC_ALLOC(n_edges, coblocks, oc_block_list *,            "n edges");
 
-  // allocate solved array (omit check blocks; assumed to be solved)
-  if (NULL == (graph->solved = calloc(coblocks, sizeof(char))))
-    return fprintf(stderr, "graph init: Failed to allocate 'solved' array\n");
-  memset(graph->solved, 0, coblocks * sizeof(char));
+  // unsolved (downward) edge counts: omit message blocks
+  OC_ALLOC(edge_count, ablocks + check_space, int,        "unsolved v_edge counts");
 
-  // Allocate xor lists (omit check blocks; they are their own expansion)
-  if (NULL == (graph->xor_list = calloc(coblocks, sizeof(int *))))
-    return fprintf(stderr, "graph init: Failed to allocate xor lists\n");
-  memset(graph->xor_list, 0, coblocks * sizeof(int *));
+  // solved array: omit check blocks; assumed to be solved
+  OC_ALLOC(solved, coblocks, char,                        "solved array");
+
+  // xor lists: omit check blocks; they are their own expansion
+  OC_ALLOC(xor_list, coblocks, int *,                     "xor lists");
+
+
 
   // Register the auxiliary mapping
-
-
   // 1st stage: allocate/store message up edges, count aux down edges
 
   mp = codec->auxiliary;	// start of 2d message -> aux* map
