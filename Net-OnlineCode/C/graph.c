@@ -391,10 +391,14 @@ void oc_decommission_node (oc_graph *g, int node) {
   assert(node >= mblocks);
 
   down = g->v_edges[node - mblocks];
+
+  if (NULL == down) return;	// nodes may be decommissioned twice
+
   for (i = down[0]; i > 0; --i) {
     oc_delete_n_edge (g, node, down[i]);
   }
   free(down);
+  g->edge_count[node - mblocks] = 0;
   g->v_edges[node - mblocks] = NULL;	// not strictly necessary
 }
 
