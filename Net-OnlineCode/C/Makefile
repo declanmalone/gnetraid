@@ -3,6 +3,9 @@ OBJECTS = online-code.o rng_sha1.o graph.o decoder.o
 
 libs : libonline-code.a
 
+clean :
+	-rm *.o *.a 2>/dev/null
+
 libonline-code.a : $(OBJECTS)
 	$(AR) cr $@ $(OBJECTS)
 	ranlib $@
@@ -18,6 +21,6 @@ decoder.o : decoder.c
 # Rebuild if included header files change
 decoder.o : decoder.h online-code.h graph.h
 graph.o : graph.h online-code.h
-online-code.o : online-code.h
+online-code.o : online-code.h rng_sha1.h
 rng_sha1.o : rng_sha1.h
 

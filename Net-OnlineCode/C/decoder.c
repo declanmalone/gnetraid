@@ -89,11 +89,7 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
   }
 
   // set up Fisher-Yates source array for check block selection
-  p = dec->base.shuffle_source;
-  coblocks = dec->base.coblocks;
-  for (i=0; i < coblocks; ++i) {
-    *(p++) = i;
-  }
+  oc_init_cblock_shuffle_source(&(dec->base));
 
   // Create graph decoder
   if (oc_graph_init(&(dec->graph), &(dec->base), fudge)) {

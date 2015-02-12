@@ -140,8 +140,8 @@ sub get_seed {
 # As per Perl's rand, return a float value, 0 <= value < x
 sub rand {
   my ($self,$max) = @_;
-  $max = $max || 1;
-  $max = abs($max);		# don't allow negative values
+  $max = $max || 1.0;
+  #$max = abs($max);		# don't allow negative values
 
   $max += 0.0;			# ensure max is a float
 
@@ -160,9 +160,17 @@ sub rand {
       #      $r ^= shift @uints;
       #      $r ^= shift @uints;
       #      $r ^= shift @uints;
-      my $maxint = 2**32 - 1;
-      my $ratio  = $r / $maxint;
-      return ($max * $ratio) if ($r < $maxint);
+      my $maxint = 0xffffffff;
+      # Divide first
+      if ($r < $maxint) {
+	my $ratio  = $r / $maxint;
+	return ($max * $ratio);
+      }
+
+      if ($r < $maxint) {
+	my $product = $r * $max;
+	return $product / $maxint;
+      }
     }
   }
 }

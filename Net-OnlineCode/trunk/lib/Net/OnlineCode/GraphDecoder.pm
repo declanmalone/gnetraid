@@ -401,7 +401,7 @@ sub resolve {
     my @unsolved_nodes;
     my $count_unsolved = $self->{edge_count}->[$from - $mblocks];
 
-    if (DEBUG) {
+    if (DEBUG and $self->{xor_list}->[$from]) {
       print "\nStarting resolve at $from; XOR list is " . 
 	(join ", ", @{$self->{xor_list}->[$from]}) . "\n";
     }
