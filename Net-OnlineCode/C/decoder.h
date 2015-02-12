@@ -25,6 +25,9 @@ typedef struct oc_decoder_struct {
 } oc_decoder;
 
 
+int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
+		    int flags, ...); // ... fudge, q, e, f
+
 int oc_resolve(oc_decoder *decoder, oc_block_list **solved_list);
 
 

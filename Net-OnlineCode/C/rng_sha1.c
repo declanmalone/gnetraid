@@ -146,7 +146,7 @@ float oc_rng_rand(oc_rng_sha1 *rng, float max) {
   uint32_t sha_word;
   uint32_t max_int = 0xffffffff;    // max 32-bit integer
 
-  assert(max > 1);
+  assert(max > 0);
 
   while(1) {
     oc_rng_advance(rng);
@@ -162,3 +162,27 @@ float oc_rng_rand(oc_rng_sha1 *rng, float max) {
   }
 }
 
+
+// allocate a static buffer for converting rng to hex string
+static char hex_print_buffer[OC_RNG_BYTES << 1 + 1];
+
+const char *oc_rng_as_hex(oc_rng_sha1 *rng) {
+
+  char *in, *out = hex_print_buffer;
+  unsigned char byte, high, low;
+  int i;
+
+  assert(rng != NULL);
+
+  in=rng->current;
+  for (i = 0; i < OC_RNG_BYTES; ++i, ++in) {
+    byte = *in;
+    high = byte >> 4;
+    low  = byte & 15;
+
+    *(out++) = high + ((high < 10) ? '0' : ('a' - 10));
+    *(out++) = low  + ((low  < 10) ? '0' : ('a' - 10));
+  }
+  *out = '\0';
+  return hex_print_buffer;
+}

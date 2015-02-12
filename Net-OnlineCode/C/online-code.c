@@ -372,7 +372,7 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   // allocate scratch space for shuffles (F elements)
   if (NULL == (codec->shuffle_source = malloc(f * sizeof(int))))
     flags |= OC_FATAL_ERROR;
-  if (NULL == (codec->shuffle_source = malloc(f * sizeof(int))))
+  if (NULL == (codec->shuffle_dest   = malloc(f * sizeof(int))))
     flags |= OC_FATAL_ERROR;
 
   // Fill in remaining fields
