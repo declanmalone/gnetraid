@@ -56,7 +56,7 @@ int main(int argc, char * const argv[]) {
 
   printf ("RNG seed: %s\n", oc_rng_as_hex(&rng));
 
-  flags = oc_decoder_init(&d, mblocks, &rng, OC_EXPAND_MSG, 3.0, 0ll);
+  flags = oc_decoder_init(&d, mblocks, &rng, OC_EXPAND_MSG, 2.0, 0ll);
 
   if (flags & OC_FATAL_ERROR)
     return fprintf(stderr, "OC decoder init returned fatal error\n");

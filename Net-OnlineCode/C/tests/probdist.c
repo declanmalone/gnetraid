@@ -14,6 +14,8 @@ oc_codec codec;
 
 void codec_info(int flags) {
 
+  int i, f, max;
+
   printf("\nflags\tE_CHANGED\tF_CHANGED\tFATAL_ERROR\n");
   printf("   %02x\t%d\t\t%d\t\t%d\n", flags, 
 	 flags & OC_E_CHANGED, flags & OC_F_CHANGED, flags & OC_FATAL_ERROR);
@@ -29,6 +31,14 @@ void codec_info(int flags) {
 	 codec.mblocks, codec.q, codec.e, codec.F);
   printf("  ablocks=%d, coblocks=%d\n\n", codec.ablocks, codec.coblocks);
 
+  printf("Probability Table (first 10 elements):\n");
+
+  f = codec.F;
+  max = (f > 10) ? 10 : f;
+  for (i = 0; i < max; ++i) {
+    printf("   %1.15g\n", codec.p[i]);
+  }
+  printf("\n");
 }
 
 main() {

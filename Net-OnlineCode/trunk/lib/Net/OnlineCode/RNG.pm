@@ -148,8 +148,10 @@ sub rand {
   while(1) {
     $self->{current} = sha1($self->{current}); # advance to next rand
 
-    # unpack 5 32-bit words from the 160-bit SHA sum
-    my @uints = unpack "N5", $self->{current};
+    # unpack 5 32-bit words from the 160-bit SHA sum. Changed to
+    # unpack using little-endian as this is more common (x86/arm
+    # anyway)
+    my @uints = unpack "V5", $self->{current};
 
     # We calculate the rand by max * uint/(max 32-bit int).
     while (@uints>=1) {
@@ -178,14 +180,14 @@ sub as_string {			# alias for "current" method
   return shift->{current};
 }
 
-# Unpacking as bytes or 32-bit unsigned ints. Use "network" order
-# for portability.
+# Unpacking as bytes or 32-bit unsigned ints. Using little-endian
+# since it's more common
 sub as_byte_array {
   return unpack "C20", shift->{current};
 }
 
 sub as_uint32_array {
-  return unpack "N5", shift->{current};
+  return unpack "V5", shift->{current};
 }
 
 

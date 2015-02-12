@@ -248,6 +248,8 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
   int *p, i, count;
 
   assert(aux_node >= mblocks);
+  assert(aux_node < g->coblocks);
+  OC_DEBUG && fprintf(stderr, "Aux rule triggered on node %d\n", aux_node);
 
   g->solved[aux_node] = 1;
 
@@ -530,11 +532,11 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
       if (-1 == oc_cascade(graph, to))
 	return -1;
 
-      // If we reach this point, then pnode has been added to the
-      // solved list. We continue to avoid the following free()
-      continue;
-
     } // end if(count_unsolved is 0 or 1)
+
+    // If we reach this point, then pnode has been added to the
+    // solved list. We continue to avoid the following free()
+    continue;
 
   discard:
     OC_DEBUG && fprintf(stderr, "Skipping node %d\n\n", from);

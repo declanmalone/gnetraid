@@ -140,7 +140,7 @@ int oc_rng_random_uuid(char *dest) {
 
 }
 
-float oc_rng_rand(oc_rng_sha1 *rng, float max) {
+double oc_rng_rand(oc_rng_sha1 *rng, double max) {
 
   double  temp;			    // prevent overflow
   uint32_t sha_word;
