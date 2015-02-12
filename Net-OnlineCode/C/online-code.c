@@ -96,7 +96,8 @@ double *oc_codec_init_probdist(oc_codec *codec) {
 
 int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng) {
 
-  int i,j,tmp;
+  int i,tmp;
+  unsigned j;
 
   // catch various calling errors (turn off by #defining NDEBUG)
   assert(src != NULL);
@@ -370,9 +371,9 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   f = new_f;
 
   // allocate scratch space for shuffles (F elements)
-  if (NULL == (codec->shuffle_source = malloc(f * sizeof(int))))
+  if (NULL == (codec->shuffle_source = malloc((f +1) * sizeof(int))))
     flags |= OC_FATAL_ERROR;
-  if (NULL == (codec->shuffle_dest   = malloc(f * sizeof(int))))
+  if (NULL == (codec->shuffle_dest   = malloc((f +1) * sizeof(int))))
     flags |= OC_FATAL_ERROR;
 
   // Fill in remaining fields

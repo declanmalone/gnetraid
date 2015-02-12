@@ -142,22 +142,25 @@ int oc_rng_random_uuid(char *dest) {
 
 double oc_rng_rand(oc_rng_sha1 *rng, double max) {
 
-  double  temp;			    // prevent overflow
+  long double  temp;			    // prevent overflow
   uint32_t sha_word;
-  uint32_t max_int = 0xffffffff;    // max 32-bit integer
+  uint32_t max_int = 0xfffffffful;    // max 32-bit integer
 
   assert(max > 0);
+  assert(max_int == 0xfffffffful);
 
   while(1) {
     oc_rng_advance(rng);
 
     EXTRACT_NATIVE_U32(sha_word, rng->current);
 
+    assert(sha_word <= 0xffffffffl);
+
     // Values have to be in the range [0,max) (ie, including 0, but
     // not max)
     if(sha_word < max_int) {
-      temp = max * (double) sha_word;
-      return temp / max_int;
+      temp = (double) sha_word / (double) max_int;
+      return max * temp;
     }
   }
 }

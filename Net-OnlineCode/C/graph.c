@@ -159,13 +159,14 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 // Returns node number on success, -1 otherwise
 int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
-  int node = (g->nodes)++;
+  int node;
   int count, unsolved_count, i, tmp;
   int mblocks;
 
   assert(g != NULL);
   assert(v_edges != NULL);
 
+  node    = (g->nodes)++;
   mblocks = g->mblocks;
 
   OC_DEBUG && fprintf(stderr, "Graphing check node %d/%d:\n", node, g->node_space);

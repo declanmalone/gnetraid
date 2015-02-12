@@ -8,7 +8,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
-use constant DEBUG  => 0;
+use constant DEBUG  => 1;
 use constant ASSERT => 1;
 
 require Exporter;
@@ -425,7 +425,7 @@ sub fisher_yates_shuffle {
   # algorithm fills picks into the end of the array
   my $i=$len;
   while (--$i >= $len - $picks) {
-    my $j=int($rng->rand($i + 1)); # range [0,$i]
+    my $j=floor($rng->rand($i + 1)); # range [0,$i]
     #next if $i==$j;	           # not worth checking, probably
     #    @$array[$i,$j]=@$array[$j,$i]
     my $tmp1 = substr $array, $i << 2, 4;
