@@ -40,7 +40,7 @@ char chk_cache[CHK_CACHE_BYTES];
 
 // encoder/decoder flags
 int eargs = 0;
-int dargs = OC_EXPAND_MSG;
+int dargs = 0; //OC_EXPAND_MSG;
 
 
 // simple XOR routine (for now)
@@ -270,13 +270,74 @@ int main(int argc, char * const argv[]) {
       if (done)
 	printf("This solves the entire message\n");
 
+      // Iterate over solved nodes
+      while (solved != NULL) {
+	sp = solved;
+	i  = solved->value;
+
+	if (NULL == (dxor_list = oc_expansion(&dec, i)))
+	  return fprintf(stderr, "oc_expansion error on node %d\n", i);
+
+	printf("\nDecoded block %d is composed of: ", i);
+	print_xor_list(dxor_list);
+	printf("\n");
+
+	if (0 == *dxor_list)
+	  return fprintf(stderr,"Decoded message_block had empty XOR list\n");
+
+	// re-use xmit buffer and mp to XOR all the blocks
+	memset(xmit, 0, block_size);
+	mp = dxor_list;
+	count = *(mp++);
+	while (count--) {
+	  j = *(mp++);
+	  if (j < mblocks) {
+	    if (dargs & OC_EXPAND_MSG)
+	      return fprintf(stderr,
+                "got msg block %d with OC_EXPAND_MSG set\n", j);
+
+	    xor(xmit, ostring + (j * block_size), block_size);
+	  } else if (j >= coblocks) {
+	    printf("DECODER: XORing block %d (check block) into %d\n",
+		   j, i);
+	    j -= coblocks;
+	    xor(xmit, chk_cache + j * block_size, block_size);
+	  } else {
+	    if (dargs & OC_EXPAND_AUX)
+	      return fprintf(stderr,
+                "got aux block %d with OC_EXPAND_AUX set\n", j);
+	    printf("DECODER: XORing block %d (auxiliary block) into %d\n",
+		   j, i);
+	    j -= mblocks;
+	    xor(xmit, aux_solved + j * block_size, block_size);
+	  }
+	}
+
+	// save newly-decoded message/aux block
+	if (i < mblocks) {
+	  printf("Decoded message block %d: '%.*s'\n",
+		 i, block_size, ostring + i * block_size);
+	  memcpy(ostring + i * block_size, xmit, block_size);
+	} else {
+	  printf("Decoded auxiliary block %d.\n", i);
+	  i =- mblocks;
+	  memcpy(aux_solved + i * block_size, xmit, block_size);
+	}
+
+	free(dxor_list);
+
+	solved = solved->next;
+	free(sp);
+      }
+
 
       if (done)
 	break;			// escape inner loop
 
     }
 
-
   }
+
+  printf("Decoded text: '%*.s'\n", LENGTH, ostring);
 
 }
