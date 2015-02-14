@@ -49,6 +49,13 @@ void xor(char *dst, char *src, int count) {
     *(dst++) ^= *(src++);
 }
 
+void test_xor(void) {
+  // basic test; should print cAMELcASE
+  memcpy(xmit, "CamelCase", 9);
+  xor (xmit, "         ", 9);
+  printf("%.9s\n", xmit);
+}
+
 // print an xor list
 void print_xor_list(int *xp) {
   int count = *(xp++);
@@ -180,7 +187,6 @@ int main(int argc, char * const argv[]) {
   assert(e        == dec.base.e);
   assert(f        == dec.base.F);
 
-
   // The Perl version uses OC_EXPAND_AUX to avoid creating an aux
   // cache. I'm not implementing that functionality yet so I have to
   // calculate the aux block contents here.
@@ -232,10 +238,16 @@ int main(int argc, char * const argv[]) {
     while (count--) {
       i = *(mp++);
       if (i < mblocks)
-       	xor(xmit, i * block_size + message, block_size);
+       	xor(xmit, message   + i             * block_size, block_size);
       else
-	xor(xmit, i * block_size + aux_cache, block_size);
+	xor(xmit, aux_cache + (i - mblocks) * block_size, block_size);
     }
+
+    // Check that xmit buffer is right
+    if (1 == exor_list[0])
+      printf("SOLITARY ENCODED: %.*s\n", block_size, xmit);
+
+    free(exor_list);
 
     // At this point the encoder would send the saved seed plus the
     // contents of the xmit buffer
@@ -248,7 +260,8 @@ int main(int argc, char * const argv[]) {
     printf("\nDECODE Block #%d %s\n", check_count + 1, oc_rng_as_hex(&drng));
 
     // Save contents of checkblock and add it to the graph
-    memcpy(chk_cache + block_size * check_count, xmit, block_size);
+    memcpy(chk_cache + check_count * block_size,
+	   xmit, block_size);
     if (-1 == oc_accept_check_block(&dec, &drng))
       return fprintf(stderr, "Failed to accept check block\n");
 
@@ -283,12 +296,21 @@ int main(int argc, char * const argv[]) {
 	printf("\n");
 
 	if (0 == *dxor_list)
-	  return fprintf(stderr,"Decoded message_block had empty XOR list\n");
+	  return fprintf(stderr,"Decoded block had empty XOR list\n");
+
+	// Check that cache contents are right
+	if (1 == dxor_list[0]) {
+	  j = dxor_list[1];
+	  printf("SOLITARY DECODED: '%.*s' (check #%d)\n", block_size, 
+		 chk_cache + (j - coblocks) * block_size,
+		 (j - coblocks + 1));
+	}
 
 	// re-use xmit buffer and mp to XOR all the blocks
 	memset(xmit, 0, block_size);
-	mp = dxor_list;
+	mp    = dxor_list;
 	count = *(mp++);
+
 	while (count--) {
 	  j = *(mp++);
 	  if (j < mblocks) {
@@ -298,8 +320,8 @@ int main(int argc, char * const argv[]) {
 
 	    xor(xmit, ostring + (j * block_size), block_size);
 	  } else if (j >= coblocks) {
-	    printf("DECODER: XORing block %d (check block) into %d\n",
-		   j, i);
+	    printf("DECODER: XORing check block #%d into %d\n",
+		   j - coblocks + 1, i);
 	    j -= coblocks;
 	    xor(xmit, chk_cache + j * block_size, block_size);
 	  } else {
@@ -315,9 +337,9 @@ int main(int argc, char * const argv[]) {
 
 	// save newly-decoded message/aux block
 	if (i < mblocks) {
+	  memcpy(ostring + i * block_size, xmit, block_size);
 	  printf("Decoded message block %d: '%.*s'\n",
 		 i, block_size, ostring + i * block_size);
-	  memcpy(ostring + i * block_size, xmit, block_size);
 	} else {
 	  printf("Decoded auxiliary block %d.\n", i);
 	  i =- mblocks;
@@ -338,6 +360,6 @@ int main(int argc, char * const argv[]) {
 
   }
 
-  printf("Decoded text: '%*.s'\n", LENGTH, ostring);
+  printf("Decoded text: '%.*s'\n", LENGTH, ostring);
 
 }
