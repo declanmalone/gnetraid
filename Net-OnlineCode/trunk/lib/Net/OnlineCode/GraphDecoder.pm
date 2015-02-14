@@ -9,9 +9,10 @@ use vars qw($VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 use constant TRACE => 0;
 use constant ASSERT => 1;
+use constant STEPPING => 1;
 
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
@@ -490,6 +491,8 @@ sub resolve {
 
     }
 
+    return ($self->{done}, @newly_solved)
+      if (@newly_solved and STEPPING)
   }
 
   return ($self->{done}, @newly_solved);
