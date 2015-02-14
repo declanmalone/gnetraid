@@ -121,4 +121,10 @@ int oc_eval_f(double t);
 #define OC_DEFAULT_E  0.01
 #define OC_DEFAULT_F  0
 
+// XOR/linked list utilities
+void oc_print_xor_list(int *xp, char *terminal);
+int  oc_len_linked_list  (oc_block_list *list);
+void oc_print_linked_list(oc_block_list *list, char *terminal);
+
+
 #endif

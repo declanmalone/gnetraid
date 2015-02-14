@@ -193,8 +193,8 @@ static void expandr(oc_decoder *d, int flags,
     node = *nodelist;
     // TODO: implement cache-related stuff
     if (
-	((flags & OC_EXPAND_MSG) && (node < mblocks)) ||
-	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node <coblocks))
+	((flags & OC_EXPAND_MSG) && (node <  mblocks)) ||
+	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node < coblocks))
        )
       expandr(d, flags, d->graph.xor_list[node]);
     else 
@@ -235,7 +235,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
 
   // 2nd Stage: sort the list. I will probably use heap sort later,
   // but I can use glibc's qsort for now (don't sort sentinel value)
-  qsort(++p, ic, sizeof(int), compare_ascending);
+  qsort(++p, ic, sizeof(int), &compare_ascending);
 
   // 3rd Stage: remove elements that appear an even number of times
 
@@ -253,12 +253,13 @@ int *oc_expansion(oc_decoder *decoder, int node) {
       if (*p == previous) {
 	++runlength;
       } else {
-	if (runlength &1)
+	if (runlength &1) {
 	  // TODO: implement cache-related stuff
 	  if (pass == 0)	// count up non-cancelling blocks first 
 	    ++oc;
 	  else			// copy block ID or XOR from cache later
 	    *(++op) = previous;
+	}
 	previous  = *p;
 	runlength = 1;
       }

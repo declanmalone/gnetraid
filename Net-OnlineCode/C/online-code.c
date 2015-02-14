@@ -3,6 +3,7 @@
 #include <math.h>
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 
@@ -405,4 +406,36 @@ int oc_is_auxiliary(oc_codec *codec,int m) {
 
 int oc_is_check(oc_codec *codec,int m) {
   return (m >= codec->coblocks);
+}
+
+// More utility routines for dealing with "XOR list" (arrays where
+// p[0] == number of elements in rest of array) and linked lists (of
+// type oc_block_list)
+
+// print an xor list
+void oc_print_xor_list(int *xp, char *terminal) {
+  int count = *(xp++);
+  while (count--) {
+    printf("%d%s", *(xp++), (count == 0) ? "" : ", ");
+  }
+  printf("%s", terminal);
+}
+
+// calculate the length of a linked list
+int oc_len_linked_list (oc_block_list *list) {
+  int len = 0;
+  while (NULL != list) {
+    ++len;
+    list = list->next;
+  }
+  return len;
+}
+
+// print contents of linked list
+void oc_print_linked_list(oc_block_list *list, char *terminal) {
+  while (NULL != list) {
+    printf("%d%s", list->value, (NULL == list->next) ? "" : ", ");
+    list = list->next;
+  }
+  printf("%s", terminal);
 }

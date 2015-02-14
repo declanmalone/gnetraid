@@ -56,32 +56,6 @@ void test_xor(void) {
   printf("%.9s\n", xmit);
 }
 
-// print an xor list
-void print_xor_list(int *xp) {
-  int count = *(xp++);
-  while (count--) {
-    printf("%d%s", *(xp++), (count == 0) ? "\n" : ", ");
-  }
-}
-
-// calculate the length of a linked list
-int linked_len (oc_block_list *list) {
-  int len = 0;
-  while (NULL != list) {
-    ++len;
-    list = list->next;
-  }
-  return len;
-}
-
-// print contents of linked list
-void print_linked_list(oc_block_list *list) {
-  while (NULL != list) {
-    printf("%d%s", list->value, (NULL == list->next) ? "" : ", ");
-    list = list->next;
-  }
-}
-
 int main(int argc, char * const argv[]) {
 
   int    opt, random_seed = 1, mblocks, flags;
@@ -229,7 +203,7 @@ int main(int argc, char * const argv[]) {
 
     //    printf("Encoder check block (degree %d): ",exor_list[0]);
     printf("Encoder check block: ");
-    print_xor_list(exor_list);
+    oc_print_xor_list(exor_list, "\n");
 
     // XOR the contained message/auxiliary blocks
     memset(xmit, 0, block_size);
@@ -243,8 +217,8 @@ int main(int argc, char * const argv[]) {
 	xor(xmit, aux_cache + (i - mblocks) * block_size, block_size);
     }
 
-    // Check that xmit buffer is right
-    if (1 == exor_list[0])
+    // Check that xmit buffer is right (only prints plain text)
+    if ((1 == exor_list[0]) && (i <= mblocks))
       printf("SOLITARY ENCODED: %.*s\n", block_size, xmit);
 
     free(exor_list);
@@ -276,9 +250,8 @@ int main(int argc, char * const argv[]) {
 	break;			// we need a new check block
 
       printf("This checkblock solved %d composite block(s) (",
-	     linked_len(solved));
-      print_linked_list(solved);
-      printf(")\n");
+	     oc_len_linked_list(solved));
+      oc_print_linked_list(solved,")\n");
       
       if (done)
 	printf("This solves the entire message\n");
@@ -292,14 +265,13 @@ int main(int argc, char * const argv[]) {
 	  return fprintf(stderr, "oc_expansion error on node %d\n", i);
 
 	printf("\nDecoded block %d is composed of: ", i);
-	print_xor_list(dxor_list);
-	printf("\n");
+	oc_print_xor_list(dxor_list,"\n");
 
 	if (0 == *dxor_list)
 	  return fprintf(stderr,"Decoded block had empty XOR list\n");
 
-	// Check that cache contents are right
-	if (1 == dxor_list[0]) {
+	// Check that cache contents are right  (only prints plain text)
+	if ((1 == dxor_list[0]) && (i <= mblocks)) {
 	  j = dxor_list[1];
 	  printf("SOLITARY DECODED: '%.*s' (check #%d)\n", block_size, 
 		 chk_cache + (j - coblocks) * block_size,
@@ -319,11 +291,13 @@ int main(int argc, char * const argv[]) {
                 "got msg block %d with OC_EXPAND_MSG set\n", j);
 
 	    xor(xmit, ostring + (j * block_size), block_size);
+
 	  } else if (j >= coblocks) {
 	    printf("DECODER: XORing check block #%d into %d\n",
 		   j - coblocks + 1, i);
 	    j -= coblocks;
 	    xor(xmit, chk_cache + j * block_size, block_size);
+
 	  } else {
 	    if (dargs & OC_EXPAND_AUX)
 	      return fprintf(stderr,
@@ -341,6 +315,7 @@ int main(int argc, char * const argv[]) {
 	  printf("Decoded message block %d: '%.*s'\n",
 		 i, block_size, ostring + i * block_size);
 	} else {
+
 	  printf("Decoded auxiliary block %d.\n", i);
 	  i =- mblocks;
 	  memcpy(aux_solved + i * block_size, xmit, block_size);
@@ -360,6 +335,6 @@ int main(int argc, char * const argv[]) {
 
   }
 
-  printf("Decoded text: '%.*s'\n", LENGTH, ostring);
+  printf("Decoded text: '%.*s'\n", LENGTH + padding, ostring);
 
 }
