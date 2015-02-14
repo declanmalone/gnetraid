@@ -9,6 +9,7 @@
 #include "graph.h"
 
 #define OC_DEBUG 1
+#define STEPPING 1
 
 // I'm moving back to the Perl way of doing things and storing an XOR
 // list for each node (not just msg/aux)
@@ -435,7 +436,7 @@ void oc_decommission_node (oc_graph *g, int node) {
 }
 
 // merge an xor list and a list of v edges into a new xor list
-static int *oc_propagate_xor(int *xors, int *edges, int skip_edge) {
+static int *oc_propagate_xor(int *xors, int *edges) {
 
   int *xp, *p;
   int tmp, count, found = 0;
@@ -443,31 +444,27 @@ static int *oc_propagate_xor(int *xors, int *edges, int skip_edge) {
   assert(NULL != xors);
   assert(NULL != edges);
 
-  tmp = xors[0] + edges[0] - 1;
+  tmp = xors[0] + edges[0];
   if (NULL == (p = xp = calloc(tmp + 1, sizeof(int))))
     return NULL;
 
   // Write size and all elements of xor array
   *(xp++) = tmp;
   count = *(xors++);
-  while (count--)
-    printf("Propagating XOR list element %d\n",
-    *(xp++) = *(xors++)
-	   )
-      ;
+  while (count--) {
+    tmp = *(xors++);
+    printf("Propagating XOR list element %d\n", tmp);
+    *(xp++) = tmp;
+  }
 
-  // Write all edges except skip_edge
+  // Write all down edges (caller already removed solved one)
   count = *(edges++);
   while (count--) {
     tmp = *(edges++);
-    printf("Is node %d == skip node (%d)?\n", tmp, skip_edge);
-    if (tmp == skip_edge)
-      ++found;
-    else
-      *(xp++) = tmp;
+    printf("Propagating solved down edge %d\n", tmp);
+    *(xp++) = tmp;
   }
 
-  assert (1 == found);
   return p;
 }
 
@@ -565,11 +562,16 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 	}
       assert(to != -1);
 
+
+      // remove to from the list of down edges here to simplify xor
+      // propagation below
+      *ep = graph->v_edges[from - mblocks][xor_count];
+            graph->v_edges[from - mblocks][0]        = xor_count - 1;
+
       oc_delete_n_edge(graph, from, to);
       if (NULL ==
 	  (p = oc_propagate_xor(graph->xor_list[from],
-				graph->v_edges[from - mblocks],
-				to)))
+				graph->v_edges[from - mblocks])))
 	return -1;
 
       if (OC_DEBUG || 1) {
@@ -619,6 +621,11 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
     // If we reach this point, then pnode has been added to the
     // solved list. We continue to avoid the following free()
+    if (STEPPING) {
+      *solved_list = solved_head;
+      return graph->done;
+    }
+
     continue;
 
   discard:
