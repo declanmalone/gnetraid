@@ -414,32 +414,22 @@ sub resolve {
 
     if ($count_unsolved == 0) {
 
-      if ($self->is_check($from)) {
+      if ($self->is_check($from) or $self->{solved}->[$from]) {
 
-	# This check block can't provide any more useful information,
-	# so delete any remaining edges and free xor space
+	# This node can't solve anything else: decommission it
 
 	$self->decommission_node($from, \@lower_nodes);
 	next;
 
-      } else {
-
-	if ($self->{solved}->[$from]) {
-	  # Was previously solved by propagation resolve, so we don't
-	  # solve again. Delete the graph edges since they're all
-	  # solved too.
-	  $self->decommission_node($from, \@lower_nodes);
-
-	} else {
-	  # Otherwise solve it with aux rule
-	  $self->aux_rule($from, \@lower_nodes);
-
-	  print "Aux rule solved auxiliary block $from completely\n" if DEBUG;
-
-	  push @newly_solved, $from;
-	  $self->cascade($from);
-	}
       }
+
+      # Otherwise it's an unsolved aux node: solve it with aux rule
+      $self->aux_rule($from, \@lower_nodes);
+
+      print "Aux rule solved auxiliary block $from completely\n" if DEBUG;
+
+      push @newly_solved, $from;
+      $self->cascade($from);
 
     } elsif ($count_unsolved == 1) {
 
@@ -457,7 +447,7 @@ sub resolve {
 	}
       }
 
-      print "Node $from solves node $to\n" if DEBUG;
+      print "Node $from solves node $to\n" if DEBUG or 1;
 
       $self->mark_as_solved($to);
       push @newly_solved, $to;
@@ -465,14 +455,18 @@ sub resolve {
       # create XOR list for the newly-solved node, comprising this
       # node's XOR list plus all nodes in the @solved array
 
-      if (DEBUG) {
-	print "Node $from has XOR list: " . 
-	  (join ", ", @{$self->{xor_list}->[$from]}) . "\n";
-      }
-						   
+
       $self->delete_up_edge($from,$to);
       push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
       push @{$self->{xor_list}->[$to]}, @solved_nodes;
+
+      if (DEBUG or 1) {
+	print "Node $from (from) has XOR list: " . 
+	  (join ", ", @{$self->{xor_list}->[$from]}) . "\n";
+	print "Node $to (to) has XOR list: " .
+	  (join ", ", @{$self->{xor_list}->[$to]}) . "\n";
+      }
+
 
       $self->decommission_node($from, \@solved_nodes);
 
