@@ -189,17 +189,16 @@ static void expandr(oc_decoder *d, int flags,
   assert(nodelist != NULL);
   size = *(nodelist++);
 
-  for (i=0; i < size; ++i) {
-
-    node = *(nodelist++);
+  for (i=0; i < size; ++i, ++nodelist) {
+    node = *nodelist;
     // TODO: implement cache-related stuff
     if (
 	((flags & OC_EXPAND_MSG) && (node < mblocks)) ||
-	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node <coblocks)) 
-	) 
+	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node <coblocks))
+       )
       expandr(d, flags, d->graph.xor_list[node]);
     else 
-      (*(d->callback))(d, *nodelist);	// call callback on unexpanded block
+      (*(d->callback))(d, node);	// call callback on unexpanded block
   }
 }
 
@@ -222,18 +221,21 @@ int *oc_expansion(oc_decoder *decoder, int node) {
   // Allocate memory, including space for a sentinel at the end.
   if (NULL == (p = calloc(decoder->count + 2, sizeof(int))))
     return NULL;
-  *p = ic = decoder->count + 1;
-  p[ic] = -1;			// sentinel (not a valid block number)
+
+  p[0]      = ic = decoder->count;
+  p[ic + 1] = -1;		// sentinel (not a valid block number)
 
   decoder->callback = &copy;
   decoder->dest     = p + 1;
   expandr(decoder, decoder->flags, decoder->graph.xor_list[node]);
 
+  assert(-1 == p[ic + 1]);	// make sure sentinel wasn't clobbered
+
   decoder->dest     = p;	// stash p for later reuse/free
 
   // 2nd Stage: sort the list. I will probably use heap sort later,
   // but I can use glibc's qsort for now (don't sort sentinel value)
-  qsort(++p, ic - 1, sizeof(int), compare_ascending);
+  qsort(++p, ic, sizeof(int), compare_ascending);
 
   // 3rd Stage: remove elements that appear an even number of times
 
@@ -247,7 +249,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
     p = decoder->dest;		// restore stashed input pointer
     previous  = *(++p);		// start from p[1] (skip p[0] = length)
     runlength = 0;		// even run lengths cancel each other out
-    for (i = 0; i < ic; ++i, ++p) { // scan up to and including sentinel
+    for (i = 0; i <= ic; ++i, ++p) { // scan up to and including sentinel
       if (*p == previous) {
 	++runlength;
       } else {
@@ -271,7 +273,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
   }
 
   free(decoder->dest);
-  return op;
+  return op - oc;
 
 }
 

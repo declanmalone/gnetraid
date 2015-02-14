@@ -497,7 +497,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
       // iterate over v edges, adding solved ones to xor_list
       assert(to =  -1);
       for (i = 0; i < xor_count; ++i)
-	if ((graph->solved)[*ep]) 
+	if (graph->solved[*ep])
 	  *(xp++) = *(ep++);
 	else
 	  to      = *(ep++);	// note the unsolved one

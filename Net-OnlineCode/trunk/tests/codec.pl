@@ -15,8 +15,19 @@ use Net::OnlineCode ':xor';
 
 print "Testing: ENCODER AND DECODER\n";
 
+my ($opt, $blksize, $seed);
+while ($ARGV[0] =~ /^-/) {
+  $opt = shift @ARGV;
+  if ($opt eq "-d") {
+    $seed = "00" x 20;
+  } elsif ($opt eq "-s") {
+    $seed = shift @ARGV
+  } else {
+    die "codec.pl [-d][-s seed] [block_size]\n";
+  }
+}
+
 my $blksiz = shift @ARGV || 4;
-my $seed   = shift @ARGV;
 
 # test string is 41 characters (a prime, so it needs padding unless
 # blocksize is 1 or 41)
@@ -25,9 +36,8 @@ my $test = "The quick brown fox jumps over a lazy dog";
 # flags to pass to decoder constructor (for testing; usually no need
 # to set these as the defaults make most sense)
 my $dec_expand_aux = 0;
-my $dec_expand_msg = 1;
+my $dec_expand_msg = 0;
 
-# First thing to do is set up RNGs.
 my $erng;
 if (defined($seed)) {
   die "supplied seed must be a hex number (40 characters for SHA1 RNG\n"

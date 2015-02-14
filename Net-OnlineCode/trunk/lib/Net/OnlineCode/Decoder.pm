@@ -65,7 +65,8 @@ sub accept_check_block {
   # print "Decoder: calling checkblock_mapping\n";
   my $composite_blocks = $self->checkblock_mapping($rng);
 
-  print "Decoder check block: " . (join " ", @$composite_blocks) . "\n" if DEBUG;
+  print "Decoder check block: " . (join " ", @$composite_blocks)
+    . "\n" if DEBUG;
 
   # print "Decoder: Adding check block to graph\n";
   my $check_node = $self->{graph}->add_check_block($composite_blocks);
@@ -160,7 +161,7 @@ sub expansion {
   my ($previous, $runlength) = ($sorted[0], 0);
   my @output = ();
 
-  foreach my $i (@sorted) {
+  foreach my $i (@sorted, -1) {	# -1 is a sentinel
     if ($i == $previous) {
       ++$runlength;
     } else {
@@ -169,7 +170,6 @@ sub expansion {
       $runlength = 1;
     }
   }
-  push @output, $previous if $runlength & 1;
 
   # test expansion after stage 3
   if (0) {
