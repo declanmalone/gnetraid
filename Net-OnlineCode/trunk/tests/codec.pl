@@ -93,7 +93,7 @@ print "Message blocks: $mblocks\n";
 # Set up encoder, decoder
 
 my $enc = Net::OnlineCode::Encoder
-  ->new(mblocks => $mblocks, initial_rng => $erng, expand_aux => 1);
+  ->new(mblocks => $mblocks, initial_rng => $erng, expand_aux => 0);
 
 die "Failed to create encoder. Quitting\n" unless ref($enc);
 
@@ -174,8 +174,20 @@ until ($done) {
   # my $contents = substr($istring, $blksiz * shift @$enc_xor_list, $blksiz);
   my $contents = "\0" x $blksiz;
   foreach (@$enc_xor_list) {
-    xor_strings(\$contents,
-		substr($istring,  $blksiz * $_, $blksiz));
+    print "Encoder XORing block $_ into check block $check_count\n";
+    if ($_ < $mblocks) {
+      xor_strings(\$contents,
+		  substr($istring,  $blksiz * $_, $blksiz));
+    } else {
+      xor_strings(\$contents,
+		  $encoder_aux_cache[$_ - $mblocks]);
+    }
+  }
+
+  if (1 == @$enc_xor_list and $enc_xor_list->[0] < $mblocks) {
+    print "SOLITARY ENCODED: $contents\n";
+  } else {
+    print_sum($contents, $blksiz, "Encoder check block signature: ", "\n");
   }
 
   # synchronise decoder rng with same seed as encoder
@@ -207,7 +219,7 @@ until ($done) {
 
       my @dec_xor_list = $dec->expansion($decoded_block);
 
-      print "\nDecoded message block $decoded_block is composed of: ",
+      print "\nDecoded block $decoded_block is composed of: ",
 	(join ", ", @dec_xor_list) . "\n";
       die "Decoded message block $decoded_block had empty XOR list\n"
 	unless @dec_xor_list;
@@ -227,8 +239,9 @@ until ($done) {
 
 	} elsif ($i >= $coblocks) { # check block
 
-	  print "DECODER: XORing block $i (check) into $decoded_block\n";
-	  print "(check block # " . ($i - $coblocks) . ")\n";
+	  print "DECODER: XORing block $i (check #" .
+	    ($i - $coblocks) .
+	      ") into $decoded_block\n";
 	  xor_strings(\$block, $check_blocks[$i - $coblocks]);
 
 	} else {			# auxiliary block

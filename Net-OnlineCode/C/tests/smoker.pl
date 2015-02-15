@@ -1,0 +1,1 @@
+../../trunk/tests/smoker.pl

@@ -2,10 +2,10 @@
 OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o
 
 # Uncomment for gconv (line-by-line) profiling
-# PROF = -fprofile-arcs -ftest-coverage
+PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
-PROF =
+# PROF =
 
 libs : libonline-code.a
 

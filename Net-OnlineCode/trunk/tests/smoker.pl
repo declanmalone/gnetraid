@@ -10,6 +10,9 @@
 my $blocksize=20;		# default block size argument
 $blocksize = shift if @ARGV;	# or allow override
 
+my $prog = './codec.pl';
+$prog   = './codec' if -x './codec';
+
 # Use the same message string and padding algorithm from codec.pl to
 # figure out the expected output.
 
@@ -23,7 +26,7 @@ my $fails = 0;
 my $trials = 1000;
 for (1..$trials) {
 
-  $op = `./codec.pl $blocksize 2>/dev/null | perl -nle 'print if eof or /SEED/'`;
+  $op = `$prog $blocksize 2>/dev/null | perl -nle 'print if eof or /SEED/'`;
 
   my @lines = split "\n", $op;
 
