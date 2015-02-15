@@ -9,6 +9,7 @@ use lib '../lib';
 use Net::OnlineCode::Encoder;
 use Net::OnlineCode::Decoder;
 use Net::OnlineCode::RNG;
+use Digest::SHA qw(sha1);
 
 # export xor helper function names into our namespace
 use Net::OnlineCode ':xor';
@@ -26,6 +27,15 @@ while ($ARGV[0] =~ /^-/) {
     die "codec.pl [-d][-s seed] [block_size]\n";
   }
 }
+
+# print aux/check blocks as a hex hash value (debugging only)
+sub print_sum {
+  my ($data, $size, $before, $after) = @_;
+  my $chomped = substr $data, 0, $size;
+  my $sum = sha1($chomped);
+  print "$before" . unpack("H8", $sum) . "$after";
+}
+
 
 my $blksiz = shift @ARGV || 4;
 
@@ -119,7 +129,23 @@ my @decoded_mblocks = (("\0" x $blksiz) x $mblocks);
 my @decoded_ablocks = (("\0" x $blksiz) x $ablocks);
 my @check_blocks = ();
 
-print "Entering main loop\n";
+# Calculate aux blocks and print their "signatures" (8 bytes of sha1)
+print "ENCODER: Auxiliary block signatures:\n";
+my @encoder_aux_cache = (("\0" x $blksiz) x $ablocks);
+my $aux_mapping_arry = $enc->{aux_mapping};
+for my $aux_block ($mblocks .. $coblocks - 1) {
+  for my $msg (@{$aux_mapping_arry->[$aux_block]}) {
+    # print "$aux_block contains $msg\n";
+    xor_strings(\($encoder_aux_cache[$aux_block - $mblocks]),
+		substr($istring, $blksiz * $msg, $blksiz));
+  }
+  print_sum($encoder_aux_cache[$aux_block-$mblocks], $blksiz,
+	    "  signature $aux_block : ", "\n");
+}
+
+
+
+print "\nEntering main loop\n";
 
 # main loop
 my $check_count = 0;
@@ -132,7 +158,6 @@ until ($done) {
 
   die "encoder random seed != block_id\n" unless $block_id eq $erng->get_seed;
 
-  ++$check_count;
   print "\nENCODE Block #$check_count " . $erng->as_hex . "\n";
 
   my $enc_xor_list = $enc->create_check_block($erng);
@@ -163,6 +188,7 @@ until ($done) {
   $dec->accept_check_block($drng);
 
   my @decoded;
+  ++$check_count;
 
   # XOR as many blocks as resolve gives us
   while (1) {
@@ -196,27 +222,31 @@ until ($done) {
 	  if ($dec_expand_msg) {
 	    die "FATAL: codec: got message block $i with expand_msg set\n";
 	  }
+	  print "DECODER: XORing block $i (message) into $decoded_block\n";
 	  xor_strings(\$block, $decoded_mblocks[$i]);
 
 	} elsif ($i >= $coblocks) { # check block
-	  print "DECODER: XORing block $i (check block) into $decoded_block\n";
+
+	  print "DECODER: XORing block $i (check) into $decoded_block\n";
 	  print "(check block # " . ($i - $coblocks) . ")\n";
 	  xor_strings(\$block, $check_blocks[$i - $coblocks]);
+
 	} else {			# auxiliary block
 	  if ($dec_expand_aux) {
 	    die "FATAL: codec: got aux block $i with expand_aux set\n";
 	  }
-	  print "DECODER: XORing block $i (auxiliary block) into $decoded_block\n";
+	  print "DECODER: XORing block $i (auxiliary) into $decoded_block\n";
 	  xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
 	}
       }
 
       # save newly-decoded message/aux block
       if ($decoded_block < $mblocks) {
-	print "Decoded message block $decoded_block: '$block'\n";
+	print "Decoded block $decoded_block (message): '$block'\n";
 	$decoded_mblocks[$decoded_block] = $block;
       } else {
-	print "Decoded auxiliary block $decoded_block\n";
+	print "Decoded block $decoded_block (auxiliary): ";
+	print_sum($block, $blksiz, "(signature ", ")\n");
 	$decoded_ablocks[$decoded_block - $mblocks] = $block;
       }
     }

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <assert.h>
+#include <openssl/sha.h>
 
 #include "online-code.h"
 #include "encoder.h"
@@ -54,6 +55,27 @@ void test_xor(void) {
   memcpy(xmit, "CamelCase", 9);
   xor (xmit, "         ", 9);
   printf("%.9s\n", xmit);
+}
+
+// Print a checksum for a check/aux block. Not part of the algorithm,
+// but useful for comparing the values between encoder/decoder since
+// those blocks have non-printable chars.
+
+void print_sum(char *data, int size, char *before, char *after) {
+
+  static char    sha_buf[21];
+  int            count = 4;	// No. of hex bytes to print
+  unsigned char *cp = sha_buf;
+         
+  SHA1(data, size, sha_buf);
+
+  printf("%s", before);
+
+  // Hex conversion (we don't need to print full SHA1 sum)
+  while (count--)
+    printf ("%02x", (unsigned int) *(cp++));
+
+  printf("%s", after);
 }
 
 int main(int argc, char * const argv[]) {
@@ -173,22 +195,33 @@ int main(int argc, char * const argv[]) {
   for (msg = 0; msg < mblocks; ++msg) {
     for (aux = 0; aux < q; ++aux) {
       aux_block = *(mp++) - mblocks;
+      assert(aux_block >= 0);
+      assert(aux_block < ablocks);
       xor(aux_cache + block_size * aux_block,
       	  message   + block_size * msg,
       	  block_size);
     }
   }
 
+  // print out encoder's aux cache
+  printf ("ENCODER: Auxiliary block signatures:\n");
+  for (aux = 0; aux < ablocks; ++aux) {
+    printf("  signature %d :", aux + mblocks);
+    print_sum(aux_cache + block_size * aux, block_size," ", "\n");
+  }
+
   // Set up decoder arrays (received check and solved msg/aux blocks)
   aux_solved = malloc(ablocks * block_size);
   if (NULL == aux_solved)
     return fprintf(stderr, "Failed to allocate decoder auxiliary cache\n");
-  memset(ostring, 0, LENGTH + padding + 1); // statically allocated
+  memset(ostring, 0, LENGTH + padding + 1);
   memset(chk_cache, 0, CHK_CACHE_BYTES);
+  memset(aux_solved, 0, ablocks * block_size);
 
   // main loop
   done = check_count = 0;
   while (!done) {
+
 
     // Encoder side: create a check block. The erng's current value is
     // taken to be the "uuid/seed" for this checkblock. In practice,
@@ -196,7 +229,7 @@ int main(int argc, char * const argv[]) {
     // and save it for sending to the decoder along with the xored
     // contents of the check block.
 
-    printf("\nENCODE Block #%d %s\n", check_count + 1, oc_rng_as_hex(&erng));
+    printf("\nENCODE Block #%d %s\n", check_count, oc_rng_as_hex(&erng));
 
     if (NULL == (exor_list = oc_encoder_check_block(&enc)))
       return fprintf(stderr, "codec failed to create encoder check block\n");
@@ -231,7 +264,7 @@ int main(int argc, char * const argv[]) {
     // to do that here because both rngs are synchronised right from
     // the start.
 
-    printf("\nDECODE Block #%d %s\n", check_count + 1, oc_rng_as_hex(&drng));
+    printf("\nDECODE Block #%d %s\n", check_count, oc_rng_as_hex(&drng));
 
     // Save contents of checkblock and add it to the graph
     memcpy(chk_cache + check_count * block_size,
@@ -272,10 +305,9 @@ int main(int argc, char * const argv[]) {
 
 	// Check that cache contents are right  (only prints plain text)
 	if ((1 == dxor_list[0]) && (i <= mblocks)) {
-	  j = dxor_list[1];
+	  j = dxor_list[1] - coblocks;
 	  printf("SOLITARY DECODED: '%.*s' (check #%d)\n", block_size, 
-		 chk_cache + (j - coblocks) * block_size,
-		 (j - coblocks + 1));
+		 chk_cache + j * block_size, j);
 	}
 
 	// re-use xmit buffer and mp to XOR all the blocks
@@ -285,16 +317,20 @@ int main(int argc, char * const argv[]) {
 
 	while (count--) {
 	  j = *(mp++);
+	  assert(i!=j);
 	  if (j < mblocks) {
 	    if (dargs & OC_EXPAND_MSG)
 	      return fprintf(stderr,
                 "got msg block %d with OC_EXPAND_MSG set\n", j);
 
-	    xor(xmit, ostring + (j * block_size), block_size);
+	    printf("DECODER: XORing block %d (message) into %d\n",
+		   j, i);
+
+	    xor(xmit, ostring + j * block_size, block_size);
 
 	  } else if (j >= coblocks) {
-	    printf("DECODER: XORing check block #%d into %d\n",
-		   j - coblocks + 1, i);
+	    printf("DECODER: XORing block %d (check #%d) into %d\n",
+		   j, j - coblocks, i);
 	    j -= coblocks;
 	    xor(xmit, chk_cache + j * block_size, block_size);
 
@@ -302,38 +338,42 @@ int main(int argc, char * const argv[]) {
 	    if (dargs & OC_EXPAND_AUX)
 	      return fprintf(stderr,
                 "got aux block %d with OC_EXPAND_AUX set\n", j);
-	    printf("DECODER: XORing block %d (auxiliary block) into %d\n",
+	    printf("DECODER: XORing block %d (auxiliary) into %d\n",
 		   j, i);
 	    j -= mblocks;
 	    xor(xmit, aux_solved + j * block_size, block_size);
 	  }
 	}
 
+	assert (i < coblocks);
+
 	// save newly-decoded message/aux block
 	if (i < mblocks) {
+
 	  memcpy(ostring + i * block_size, xmit, block_size);
 	  printf("Decoded message block %d: '%.*s'\n",
 		 i, block_size, ostring + i * block_size);
+
 	} else {
 
-	  printf("Decoded auxiliary block %d.\n", i);
+	  printf("Decoded auxiliary block %d ", i);
+	  print_sum(xmit, block_size, "(signature ", ")\n");
 	  i =- mblocks;
 	  memcpy(aux_solved + i * block_size, xmit, block_size);
 	}
 
-	free(dxor_list);
+	if (i >= coblocks)
+	  free(dxor_list);
 
 	solved = solved->next;
 	free(sp);
       }
 
-
       if (done)
 	break;			// escape inner loop
+    } // end while(1)
 
-    }
-
-  }
+  } // end while(!done)
 
   printf("Decoded text: '%.*s'\n", LENGTH + padding, ostring);
 
