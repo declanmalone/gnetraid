@@ -62,11 +62,10 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge);
 
 
 void oc_decommission_node (oc_graph *g, int node);
-void oc_delete_n_edge (oc_graph *g, int upper, int lower);
 void oc_push_solved (oc_block_list *pnode, 
 		     oc_block_list **phead,  // update caller's head
 		     oc_block_list **ptail); // and tail pointers
-void oc_delete_n_edge (oc_graph *g, int upper, int lower);
+void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement);
 oc_block_list *oc_push_pending(oc_graph *g, int value);
 
 

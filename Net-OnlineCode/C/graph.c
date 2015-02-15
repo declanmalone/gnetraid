@@ -111,7 +111,6 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   mp = codec->auxiliary;	// start of 2d message -> aux* map
   for (msg = 0; msg < mblocks; ++msg) {
-
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
       if (NULL == oc_create_n_edge(graph, aux_temp, msg))
@@ -139,7 +138,6 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   mp = codec->auxiliary;	// start of 2d message -> aux* map
   for (msg = 0; msg < mblocks; ++msg) {
-
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++) - mblocks;
       p = graph->v_edges[aux_temp];
@@ -152,6 +150,11 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
       p[temp - p[0]] = msg;
     }
   }
+
+  // Print edge count information
+  for (aux = 0; aux < ablocks; ++aux)
+    printf("Set edge_count for aux block %d to %d\n", aux, 
+	   (graph->edge_count[aux]));
 
   return 0;
 }
@@ -192,6 +195,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   count = *(ep++);
   while (count--) {
     tmp = *(ep++);
+    assert(tmp < g->coblocks);
     if (g->solved[tmp])
       ++solved_count;
   }
@@ -243,6 +247,8 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   g->v_edges   [node - mblocks] = v_edges;
   g->edge_count[node - mblocks] = v_edges[0];
 
+  printf("Set edge_count for check block %d to %d\n", node, v_edges[0]);
+
   printf("Check block mapping after removing solved: ");
   oc_print_xor_list(v_edges,"\n");
 
@@ -279,7 +285,7 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
   // delete reciprocal up edges
   count = *(p++);
   while (count--) 
-    oc_delete_n_edge(g, aux_node, *(p++));
+    oc_delete_n_edge(g, aux_node, *(p++), 0);
 }
 
 
@@ -303,6 +309,8 @@ int oc_cascade(oc_graph *g, int node) {
     assert(to != node);
 
     OC_DEBUG && fprintf(stdout, "  pending link %d\n", to);
+
+    printf("Decrementing edge_count for block %d\n", to);
 
     assert(g->edge_count[to - mblocks]);
     --(g->edge_count[to - mblocks]);
@@ -382,7 +390,7 @@ void oc_push_solved(oc_block_list *pnode,
 
 
 // helper function to delete an up edge
-void oc_delete_n_edge (oc_graph *g, int upper, int lower) {
+void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
 
   oc_block_list **pp, *p;
   //   pp       is the address of the prior pointer
@@ -390,11 +398,22 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower) {
   // **pp       is the thing pointed at (an oc_block_list)
   // (*pp)->foo is a member of the oc_block_list
 
+  int mblocks = g->mblocks;
+
   assert(upper > lower);
-  pp = g->n_edges + lower;
+  assert(upper >= mblocks);
 
   printf("Deleting n edge from %d up to %d\n", lower, upper);
 
+  // Update the unsolved count first
+  if (decrement) {
+    printf("Decrementing edge_count for block %d\n", upper);
+    assert(g->edge_count[upper - g->mblocks]);
+    --(g->edge_count[upper - g->mblocks]);
+  }
+
+  // Find and remove upper from n_edges linked list
+  pp = g->n_edges + lower;
   while (NULL != (p = *pp)) {
     if (p->value == upper) {
       *pp = p->next;
@@ -405,9 +424,9 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower) {
   }
 
   // we shouldn't get here
-  //  assert (0 == "up edge didn't exist");
+  assert (0 == "up edge didn't exist");
 
-  // just turn the above into a warning for now
+  // Alternatively, turn the above into a warning
   fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
 	  lower, upper);
 
@@ -421,9 +440,10 @@ void oc_decommission_node (oc_graph *g, int node) {
 
   assert(node >= mblocks);
 
-  g->edge_count[node - mblocks] = 0;
-  down = g->v_edges[node - mblocks];
+  //  printf("Clearing edge_count for node %d\n", node);
+  //  g->edge_count[node - mblocks] = 0;
 
+  down = g->v_edges[node - mblocks];
   g->v_edges   [node - mblocks] = NULL;
 
 
@@ -433,7 +453,7 @@ void oc_decommission_node (oc_graph *g, int node) {
   oc_print_xor_list(down, "\n");
 
   for (i = down[0]; i > 0; --i) {
-    oc_delete_n_edge (g, node, down[i]);
+    oc_delete_n_edge (g, node, down[i], 0);
   }
   free(down);
 }
@@ -571,7 +591,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
       *ep = graph->v_edges[from - mblocks][xor_count];
             graph->v_edges[from - mblocks][0]        = xor_count - 1;
 
-      oc_delete_n_edge(graph, from, to);
+      oc_delete_n_edge(graph, from, to, 1);
       if (NULL ==
 	  (p = oc_propagate_xor(graph->xor_list[from],
 				graph->v_edges[from - mblocks])))

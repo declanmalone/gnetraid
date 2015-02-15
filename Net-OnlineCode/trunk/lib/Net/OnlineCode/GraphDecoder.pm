@@ -60,24 +60,23 @@ sub add_edge {
 sub delete_up_edge {
 
   my ($self,$high,$low) = @_;
+  my $mblocks = $self->{mblocks};
 
-  print "Deleting edge $high, $low\n" if DEBUG;
+  print "Deleting n edge from $low up to $high\n" if DEBUG;
 
   # I also want to incorporate updates to the count of unsolved edges
   # here, and that would require that $high is greater than $low:
   if (ASSERT and $low >= $high) {
     die "delete_edge: 1st arg $high not greater than 2nd arg $low\n";
   }
+  die "Can't cascade from a message block\n" if ASSERT and $high < $mblocks;
 
   delete $self->{n_edges}->[$low]->{$high};
 
-  # my counting arrays don't include entries for message blocks
-  my $mblocks = $self->{mblocks};
-  if ($high >= $mblocks) {
-    die "Count for node $high went negative\n" unless
+  # update unsolved edge counts (upper must be ablock or cblock)
+  print "Decrementing edge_count for block $high\n";
+  die "Count for node $high went negative\n" unless
       ($self->{edge_count}->[$high - $mblocks])--;
-  }
-
 }
 
 
@@ -178,7 +177,9 @@ sub new {
 
   # set up edge counts for aux blocks
   for my $i (0 .. $ablocks - 1) {
-    push @{$self->{edge_count}}, scalar(@{$auxlist->[$mblocks + $i]});
+    my $count = scalar(@{$auxlist->[$mblocks + $i]});
+    push @{$self->{edge_count}}, $count;
+    print "Set edge_count for aux block $i to $count\n";
   }
 
   $self;
@@ -263,6 +264,8 @@ sub add_check_block {
       ++$unsolved_count;
     }
   }
+  
+  print "Set edge_count for check block $node to $unsolved_count\n";
   push @{$self->{edge_count}}, $unsolved_count;
 
   # TODO: also expand any aux blocks and create separate edges
@@ -331,6 +334,7 @@ sub cascade {
 
   # update the count of unsolved edges.
   for my $to (@higher_nodes) {
+    print "Decrementing edge_count for block $to\n";
     ($self->{edge_count}->[$to - $mblocks])--;
   }
   push @$pending, @higher_nodes;
@@ -344,6 +348,7 @@ sub decommission_node {
   my ($self, $node, $solved_list) = @_;
 
   foreach (@$solved_list) { 
+    print "Deleting n edge from $_ up to $node\n" if DEBUG;
     delete $self->{n_edges}->[$_]->{$node};
   }
   $self->{v_edges}->[$node - $self->{mblocks}] = [];
