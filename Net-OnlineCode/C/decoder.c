@@ -205,7 +205,7 @@ static void expandr(oc_decoder *d, int flags,
 // callback for qsort
 static int compare_ascending(const void *a, const void *b) {
        if ( *((int *)a) == *((int *)b))    return 0;
-  else if ( *((int *)a)  > *((int *)b))    return -1;
+  else if ( *((int *)a)  < *((int *)b))    return -1;
                        else                return +1;
 }
 

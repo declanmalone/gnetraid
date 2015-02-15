@@ -274,11 +274,11 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
   g->xor_list[aux_node] = p = g->v_edges[aux_node - mblocks];
 
   // mark aux node as having no down edges
-  g->v_edges[aux_node - mblocks] = (int *) NULL;
+  g->v_edges[aux_node - mblocks] = NULL;
 
   // delete reciprocal up edges
   count = *(p++);
-  for (i = 0; i < count; ++i) 
+  while (count--) 
     oc_delete_n_edge(g, aux_node, *(p++));
 }
 
@@ -300,15 +300,15 @@ int oc_cascade(oc_graph *g, int node) {
   // update unsolved edge count and push target to pending
   while (p != NULL) {
     to = p->value;
-    if (node != to) {		// don't cascade back to where we came from
-      OC_DEBUG && fprintf(stdout, "  pending link %d\n", to);
-      if ((g->edge_count[to - mblocks]))
-	--(g->edge_count[to - mblocks]);
-      else 
-	fprintf(stdout, "Unsolved edge count for %d was already zero\n", to);
-      if (NULL == oc_push_pending(g, to))
-	return -1;
-    }
+    assert(to != node);
+
+    OC_DEBUG && fprintf(stdout, "  pending link %d\n", to);
+
+    assert(g->edge_count[to - mblocks]);
+    --(g->edge_count[to - mblocks]);
+
+    if (NULL == oc_push_pending(g, to))
+      return -1;
     p = p->next;
   }
   return 0;
@@ -357,6 +357,7 @@ void oc_flush_pending(oc_graph *graph) {
   assert(graph != NULL);
 
   while ((tmp = graph->phead) != NULL) {
+    OC_DEBUG && fprintf(stdout, "Flushing pending node %d\n", tmp->value);
     graph->phead = tmp->next;
     free(tmp);
   }
@@ -420,7 +421,11 @@ void oc_decommission_node (oc_graph *g, int node) {
 
   assert(node >= mblocks);
 
+  g->edge_count[node - mblocks] = 0;
   down = g->v_edges[node - mblocks];
+
+  g->v_edges   [node - mblocks] = NULL;
+
 
   if (NULL == down) return;	// nodes may be decommissioned twice
 
@@ -431,8 +436,6 @@ void oc_decommission_node (oc_graph *g, int node) {
     oc_delete_n_edge (g, node, down[i]);
   }
   free(down);
-  g->edge_count[node - mblocks] = 0;
-  g->v_edges   [node - mblocks] = NULL;
 }
 
 // merge an xor list and a list of v edges into a new xor list
@@ -507,7 +510,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
     assert(from >= mblocks);
 
-    OC_DEBUG && fprintf(stdout, "Resolving block %d with ", from);
+    OC_DEBUG && fprintf(stdout, "\nStarting resolve at %d with ", from);
 
     count_unsolved = graph->edge_count[from - mblocks];
 
@@ -542,7 +545,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
     } else if (count_unsolved == 1) {
 
       // Discard unsolved auxiliary blocks
-      if ((from < coblocks) && !(graph->solved)[from])
+      if ((from < coblocks) && !graph->solved[from])
 	goto discard;
 
       // Propagation rule matched (solved aux/check with 1 unsolved)
@@ -561,7 +564,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 	  break;
 	}
       assert(to != -1);
-
+      assert(i < xor_count);
 
       // remove to from the list of down edges here to simplify xor
       // propagation below
@@ -605,11 +608,11 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 	if (0 == (--(graph->unsolved_count))) {
 	  graph->done = 1;
 	  oc_flush_pending(graph);
-	  break;		// finish searching
+	  goto finish;
 	}
       } else {
 	// Solved auxiliary block, so queue it for resolving again
-	if (NULL ==oc_push_pending(graph, to))
+	if (NULL == oc_push_pending(graph, to))
 	  return -1;
       }
 
@@ -621,11 +624,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
     // If we reach this point, then pnode has been added to the
     // solved list. We continue to avoid the following free()
-    if (STEPPING) {
-      *solved_list = solved_head;
-      return graph->done;
-    }
-
+    if (STEPPING) goto finish;
     continue;
 
   discard:
@@ -633,6 +632,8 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
     free(pnode);
 
   } // end while(items in pending queue)
+
+ finish:
 
   // Return done status and solved list (passed by reference)
   *solved_list = solved_head;
