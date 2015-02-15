@@ -13,6 +13,8 @@ $blocksize = shift if @ARGV;	# or allow override
 my $prog = './codec.pl';
 $prog   = './codec' if -x './codec';
 
+die "No codec.pl or codec in this directory!\n" unless -x $prog;
+
 # Use the same message string and padding algorithm from codec.pl to
 # figure out the expected output.
 
