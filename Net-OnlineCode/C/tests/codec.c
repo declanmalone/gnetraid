@@ -172,7 +172,7 @@ int main(int argc, char * const argv[]) {
   // Set up Decoder, also with default args (except fudge, which is
   // specific to the decoder and must be relatively large for small
   // values of mblocks)
-  flags = oc_decoder_init(&dec, mblocks, &drng, dargs, 2.0, 0);
+  flags = oc_decoder_init(&dec, mblocks, &drng, dargs, 3.0, 0);
   if (flags & OC_FATAL_ERROR)
     return fprintf(stderr, "Fatal error setting up decoder\n");
 

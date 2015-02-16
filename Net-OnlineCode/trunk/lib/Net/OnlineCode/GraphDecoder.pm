@@ -463,8 +463,8 @@ sub resolve {
 
 
       $self->delete_up_edge($from,$to);
-      push @{$self->{xor_list}->[$to]}, @{$self->{xor_list}->[$from]};
-      push @{$self->{xor_list}->[$to]}, @solved_nodes;
+      $self->{xor_list}->[$to] = [ @{$self->{xor_list}->[$from]},
+				   @solved_nodes ];
 
       if (DEBUG or 1) {
 	print "Node $from (from) has XOR list: " . 

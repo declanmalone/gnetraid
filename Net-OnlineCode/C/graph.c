@@ -473,10 +473,11 @@ static int *oc_propagate_xor(int *xors, int *edges) {
 
   // Write size and all elements of xor array
   *(xp++) = tmp;
+
   count = *(xors++);
   while (count--) {
     tmp = *(xors++);
-    printf("Propagating XOR list element %d\n", tmp);
+    printf("Propagating new XOR list element %d\n", tmp);
     *(xp++) = tmp;
   }
 
@@ -570,7 +571,6 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
       // Propagation rule matched (solved aux/check with 1 unsolved)
 
-
       // xor_list will be fixed-size array, so we need to count how
       // many elements will be in it.
       ep = graph->v_edges[from - mblocks]; assert (ep != NULL);
@@ -592,6 +592,8 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
             graph->v_edges[from - mblocks][0]        = xor_count - 1;
 
       oc_delete_n_edge(graph, from, to, 1);
+      if (to < mblocks)
+	assert(graph->xor_list[to] == NULL);
       if (NULL ==
 	  (p = oc_propagate_xor(graph->xor_list[from],
 				graph->v_edges[from - mblocks])))
