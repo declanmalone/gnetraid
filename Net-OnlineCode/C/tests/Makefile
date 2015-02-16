@@ -2,8 +2,9 @@
 
 CLIBS = -L..
 CINCS = -I..
+CARGS = -O2
 
-# Uncomment for gconv (line-by-line) profiling
+# Uncomment for gcov (line-by-line) profiling
 # PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
@@ -28,7 +29,7 @@ PARENT_DEPENDS =  ../decoder.h ../encoder.h ../heap.h ../rng_sha1.h \
 	cd .. && make libs && cd -
 
 .c.o:
-	$(CC) $(CINCS) -c -g  $(PROF) $<
+	$(CC) $(CARGS) $(CINCS) -c -g  $(PROF) $<
 
 codec: codec.o ../libonline-code.a
 	$(CC) -o codec $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)

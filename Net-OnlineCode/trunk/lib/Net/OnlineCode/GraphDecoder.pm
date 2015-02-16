@@ -9,7 +9,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 use constant TRACE => 0;
 use constant ASSERT => 1;
 use constant STEPPING => 1;
@@ -74,7 +74,7 @@ sub delete_up_edge {
   delete $self->{n_edges}->[$low]->{$high};
 
   # update unsolved edge counts (upper must be ablock or cblock)
-  print "Decrementing edge_count for block $high\n";
+  print "Decrementing edge_count for block $high\n" if DEBUG;
   die "Count for node $high went negative\n" unless
       ($self->{edge_count}->[$high - $mblocks])--;
 }
@@ -179,7 +179,7 @@ sub new {
   for my $i (0 .. $ablocks - 1) {
     my $count = scalar(@{$auxlist->[$mblocks + $i]});
     push @{$self->{edge_count}}, $count;
-    print "Set edge_count for aux block $i to $count\n";
+    print "Set edge_count for aux block $i to $count\n" if DEBUG;
   }
 
   $self;
@@ -265,7 +265,8 @@ sub add_check_block {
     }
   }
   
-  print "Set edge_count for check block $node to $unsolved_count\n";
+  print "Set edge_count for check block $node to $unsolved_count\n" 
+    if DEBUG;
   push @{$self->{edge_count}}, $unsolved_count;
 
   # TODO: also expand any aux blocks and create separate edges
@@ -334,7 +335,7 @@ sub cascade {
 
   # update the count of unsolved edges.
   for my $to (@higher_nodes) {
-    print "Decrementing edge_count for block $to\n";
+    print "Decrementing edge_count for block $to\n" if DEBUG;
     ($self->{edge_count}->[$to - $mblocks])--;
   }
   push @$pending, @higher_nodes;
@@ -453,7 +454,7 @@ sub resolve {
 	}
       }
 
-      print "Node $from solves node $to\n" if DEBUG or 1;
+      print "Node $from solves node $to\n" if DEBUG;
 
       $self->mark_as_solved($to);
       push @newly_solved, $to;
@@ -466,7 +467,7 @@ sub resolve {
       $self->{xor_list}->[$to] = [ @{$self->{xor_list}->[$from]},
 				   @solved_nodes ];
 
-      if (DEBUG or 1) {
+      if (DEBUG) {
 	print "Node $from (from) has XOR list: " . 
 	  (join ", ", @{$self->{xor_list}->[$from]}) . "\n";
 	print "Node $to (to) has XOR list: " .
