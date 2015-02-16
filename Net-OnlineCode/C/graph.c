@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 1
+#define OC_DEBUG 0
 #define STEPPING 1
 
 // I'm moving back to the Perl way of doing things and storing an XOR
@@ -152,9 +152,11 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   }
 
   // Print edge count information
-  for (aux = 0; aux < ablocks; ++aux)
-    printf("Set edge_count for aux block %d to %d\n", aux, 
-	   (graph->edge_count[aux]));
+  if (OC_DEBUG) {
+    for (aux = 0; aux < ablocks; ++aux)
+      printf("Set edge_count for aux block %d to %d\n", aux, 
+	     (graph->edge_count[aux]));
+  }
 
   return 0;
 }
@@ -247,13 +249,16 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   g->v_edges   [node - mblocks] = v_edges;
   g->edge_count[node - mblocks] = v_edges[0];
 
-  printf("Set edge_count for check block %d to %d\n", node, v_edges[0]);
+  if (OC_DEBUG) {
+    printf("Set edge_count for check block %d to %d\n", 
+	   node, v_edges[0]);
 
-  printf("Check block mapping after removing solved: ");
-  oc_print_xor_list(v_edges,"\n");
+    printf("Check block mapping after removing solved: ");
+    oc_print_xor_list(v_edges,"\n");
 
-  printf("XOR list after adding solved: ");
-  oc_print_xor_list(g->xor_list[node],"\n");
+    printf("XOR list after adding solved: ");
+    oc_print_xor_list(g->xor_list[node],"\n");
+  }
 
   // mark node as pending resolution
   if (NULL == oc_push_pending(g, node))
@@ -308,9 +313,10 @@ int oc_cascade(oc_graph *g, int node) {
     to = p->value;
     assert(to != node);
 
-    OC_DEBUG && fprintf(stdout, "  pending link %d\n", to);
-
-    printf("Decrementing edge_count for block %d\n", to);
+    if (OC_DEBUG) {
+      fprintf(stdout, "  pending link %d\n", to);
+      printf("Decrementing edge_count for block %d\n", to);
+    }
 
     assert(g->edge_count[to - mblocks]);
     --(g->edge_count[to - mblocks]);
@@ -403,11 +409,11 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   assert(upper > lower);
   assert(upper >= mblocks);
 
-  printf("Deleting n edge from %d up to %d\n", lower, upper);
+  OC_DEBUG && printf("Deleting n edge from %d up to %d\n", lower, upper);
 
   // Update the unsolved count first
   if (decrement) {
-    printf("Decrementing edge_count for block %d\n", upper);
+    OC_DEBUG && printf("Decrementing edge_count for block %d\n", upper);
     assert(g->edge_count[upper - g->mblocks]);
     --(g->edge_count[upper - g->mblocks]);
   }
@@ -427,8 +433,8 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   assert (0 == "up edge didn't exist");
 
   // Alternatively, turn the above into a warning
-  fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
-	  lower, upper);
+  //  fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
+  //  lower, upper);
 
 }
 
@@ -449,8 +455,10 @@ void oc_decommission_node (oc_graph *g, int node) {
 
   if (NULL == down) return;	// nodes may be decommissioned twice
 
-  printf("Decommissioning node %d's v edges: ", node);
-  oc_print_xor_list(down, "\n");
+  if (OC_DEBUG) {
+    printf("Decommissioning node %d's v edges: ", node);
+    oc_print_xor_list(down, "\n");
+  }
 
   for (i = down[0]; i > 0; --i) {
     oc_delete_n_edge (g, node, down[i], 0);
@@ -477,7 +485,7 @@ static int *oc_propagate_xor(int *xors, int *edges) {
   count = *(xors++);
   while (count--) {
     tmp = *(xors++);
-    printf("Propagating new XOR list element %d\n", tmp);
+    OC_DEBUG && printf("Propagating new XOR list element %d\n", tmp);
     *(xp++) = tmp;
   }
 
@@ -485,7 +493,7 @@ static int *oc_propagate_xor(int *xors, int *edges) {
   count = *(edges++);
   while (count--) {
     tmp = *(edges++);
-    printf("Propagating solved down edge %d\n", tmp);
+    OC_DEBUG && printf("Propagating solved down edge %d\n", tmp);
     *(xp++) = tmp;
   }
 
@@ -599,7 +607,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 				graph->v_edges[from - mblocks])))
 	return -1;
 
-      if (OC_DEBUG || 1) {
+      if (OC_DEBUG) {
 	fprintf(stdout, "Node %d solves node %d\n", from, to);
       }
 
@@ -614,7 +622,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
       graph->xor_list[to] = p;
       oc_decommission_node(graph, from);
 
-      if (OC_DEBUG || 1) {
+      if (OC_DEBUG) {
 	fprintf(stdout, "Node %d (from) has xor list: ", from);
 	if (from > coblocks)
 	  fprintf(stdout, "%d\n", from);

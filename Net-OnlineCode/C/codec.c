@@ -13,6 +13,8 @@
 #include "decoder.h"
 // #include "xor.h"
 
+#define OC_DEBUG 0
+
 extern char *optarg;		// getopt-related
 extern int   optind;
 
@@ -172,7 +174,7 @@ int main(int argc, char * const argv[]) {
   // Set up Decoder, also with default args (except fudge, which is
   // specific to the decoder and must be relatively large for small
   // values of mblocks)
-  flags = oc_decoder_init(&dec, mblocks, &drng, dargs, 3.0, 0);
+  flags = oc_decoder_init(&dec, mblocks, &drng, dargs, 4.0, 0);
   if (flags & OC_FATAL_ERROR)
     return fprintf(stderr, "Fatal error setting up decoder\n");
 
