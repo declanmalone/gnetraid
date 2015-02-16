@@ -27,10 +27,55 @@ static struct {
   int delete_n_seek_length;
   int delete_n_max_seek;
 
+  int push_pending_calls;
+  int pending_fill_level;
+  int pending_max_full;
+
 } m;
 
-
 #endif
+
+// Static structure to hold and return a list of freed oc_block_list
+// nodes (actually a circular list since it avoids some comparisons)
+static oc_block_list *free_head = NULL;
+static oc_block_list *free_tail = NULL;
+static oc_block_list *null_ring = NULL;
+
+static int ouser = 0;		// share among all graph instances
+
+static oc_block_list *hold_blocks(void) {
+  if (NULL == (free_tail = malloc(sizeof(oc_block_list))))
+    return NULL;
+  return free_head = null_ring = free_tail->next = free_tail;
+}
+
+static oc_block_list *alloc_block(void) {
+  oc_block_list *p;
+  if (free_head == free_tail)
+    return malloc(sizeof(oc_block_list));
+  
+  // shift (read) head element
+  p = free_head;
+  free_tail->next = free_head = free_head->next;
+  return p;
+}
+
+static void free_block(oc_block_list *p) {
+  // push (write) after tail
+  p->next = free_head;
+  free_tail = free_tail->next = p;
+}
+
+// clean up circular list completely
+static void release_blocks(void) {
+  oc_block_list *p;
+  free_tail->next = NULL;
+  do {
+    free_head = (p=free_head)->next;
+    free(p);
+  } while (free_head != NULL);
+  free_tail = null_ring = free_head;
+}
 
 // Create an up edge
 oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
@@ -39,7 +84,7 @@ oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   assert(upper > lower);
 
-  if (NULL == (p = malloc(sizeof(oc_block_list))))
+  if (NULL == (p = alloc_block()))
     return NULL;
 
   OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
@@ -122,6 +167,11 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // xor lists: omit nothing
   OC_ALLOC(xor_list, coblocks + check_space, int *,       "xor lists");
 
+  // Cheshire Cat
+  if ( (NULL == null_ring) && (NULL == hold_blocks()) )
+    return fprintf(stderr, "Curiouser and curiouser!\n");
+  else
+    ++ouser;
 
   // Register the auxiliary mapping
   // 1st stage: allocate/store message up edges, count aux down edges
@@ -353,7 +403,15 @@ oc_block_list *oc_push_pending(oc_graph *g, int value) {
 
   oc_block_list *p;
 
-  if (NULL == (p=malloc(sizeof(oc_block_list))))
+#ifdef INSTRUMENT
+
+  m.push_pending_calls++;
+  if (++m.pending_fill_level > m.pending_max_full)
+    ++m.pending_max_full;
+
+#endif
+
+  if (NULL == (p = alloc_block()))
     return NULL;
 
   p->next  = NULL;
@@ -373,6 +431,12 @@ oc_block_list *oc_push_pending(oc_graph *g, int value) {
 oc_block_list *oc_shift_pending(oc_graph *g) {
 
   oc_block_list *node;
+
+#ifdef INSTRUMENT
+
+  --m.pending_fill_level;
+
+#endif
 
   node = g->phead;
   assert(node != NULL);
@@ -453,7 +517,7 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
       m.delete_n_seek_length += hops;
       if (hops > m.delete_n_max_seek) m.delete_n_max_seek = hops;
 #endif
-      free(p);
+      free_block(p);
       return;
     }
     pp = &(p->next);
@@ -695,11 +759,13 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
   discard:
     OC_DEBUG && fprintf(stdout, "Skipping node %d\n\n", from);
-    free(pnode);
+    free_block(pnode);
 
   } // end while(items in pending queue)
 
  finish:
+
+  if (graph->done && !--ouser) release_blocks();
 
 #ifdef INSTRUMENT
   if (graph -> done) {
@@ -709,9 +775,12 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
     fprintf(stderr, "  Avg.  Seeks = %g\n", ((double) m.delete_n_seek_length
 					     / m.delete_n_calls));
     fprintf(stderr, "  Max.  Seek  = %d\n", m.delete_n_max_seek);
+
+    fprintf(stderr, "\nInformation on pending queue:\n");
+    fprintf(stderr, "  Total push calls = %d\n", m.push_pending_calls);
+    fprintf(stderr, "  Max. Fill Level  = %d\n", m.pending_max_full);
   }
 #endif
-
 
   // Return done status and solved list (passed by reference)
   *solved_list = solved_head;
