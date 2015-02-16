@@ -9,7 +9,7 @@ CLIBS = -L.
 # PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
-PROF =
+PROF = -pg
 
 # External libraries
 # '-lm' for maths (ceil, floor, log, etc.)
@@ -26,6 +26,7 @@ all: libs $(PROGS)
 libs : libonline-code.a
 
 clean :
+	-rm $(PROGS) 2>/dev/null
 	-rm *.o *.a platform.h 2>/dev/null
 	-rm *.gcov *.gcno *.gcda gmon.out 2>/dev/null
 

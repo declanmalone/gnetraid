@@ -10,10 +10,27 @@
 
 #define OC_DEBUG 0
 #define STEPPING 1
+#define INSTRUMENT 1
 
 // I'm moving back to the Perl way of doing things and storing an XOR
 // list for each node (not just msg/aux)
 #define OC_USE_CHECK_XOR_LIST 1
+
+
+#ifdef INSTRUMENT
+
+// Static structure to hold measurements relating to key bottlenecks
+
+static struct {
+
+  int delete_n_calls;
+  int delete_n_seek_length;
+  int delete_n_max_seek;
+
+} m;
+
+
+#endif
 
 // Create an up edge
 oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
@@ -157,6 +174,9 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
       printf("Set edge_count for aux block %d to %d\n", aux, 
 	     (graph->edge_count[aux]));
   }
+#ifdef INSTRUMENT
+  memset(&m, 0, sizeof(m));
+#endif
 
   return 0;
 }
@@ -406,6 +426,11 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
 
   int mblocks = g->mblocks;
 
+#ifdef INSTRUMENT
+  int hops = 0;
+  ++m.delete_n_calls;
+#endif
+
   assert(upper > lower);
   assert(upper >= mblocks);
 
@@ -418,15 +443,23 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
     --(g->edge_count[upper - g->mblocks]);
   }
 
+
   // Find and remove upper from n_edges linked list
   pp = g->n_edges + lower;
   while (NULL != (p = *pp)) {
     if (p->value == upper) {
       *pp = p->next;
+#ifdef INSTRUMENT
+      m.delete_n_seek_length += hops;
+      if (hops > m.delete_n_max_seek) m.delete_n_max_seek = hops;
+#endif
       free(p);
       return;
     }
     pp = &(p->next);
+#ifdef INSTRUMENT
+    ++hops;
+#endif
   }
 
   // we shouldn't get here
@@ -525,12 +558,15 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
   // Check whether our queue is empty. If it is, the caller needs to
   // add another check block
   if (NULL == graph->phead) {
-    return graph->done;
+    goto finish;
+    //    return graph->done;
   }
 
   // Exit immediately if all message blocks are already solved
-  if (0 == graph->unsolved_count)
-    return graph->done = 1;
+  if (0 == graph->unsolved_count) {
+    graph->done = 1;
+    goto finish;
+  }
 
   while (NULL != graph->phead) { // while items in pending queue
 
@@ -664,6 +700,18 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
   } // end while(items in pending queue)
 
  finish:
+
+#ifdef INSTRUMENT
+  if (graph -> done) {
+    fprintf(stderr, "Information on oc_delete_n_edge:\n");
+    fprintf(stderr, "  Total Calls = %d\n", m.delete_n_calls);
+    fprintf(stderr, "  Total Seeks = %d\n", m.delete_n_seek_length);
+    fprintf(stderr, "  Avg.  Seeks = %g\n", ((double) m.delete_n_seek_length
+					     / m.delete_n_calls));
+    fprintf(stderr, "  Max.  Seek  = %d\n", m.delete_n_max_seek);
+  }
+#endif
+
 
   // Return done status and solved list (passed by reference)
   *solved_list = solved_head;
