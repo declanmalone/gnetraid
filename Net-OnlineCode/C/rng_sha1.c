@@ -189,3 +189,4 @@ const char *oc_rng_as_hex(oc_rng_sha1 *rng) {
   *out = '\0';
   return hex_print_buffer;
 }
+

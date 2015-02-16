@@ -4,10 +4,10 @@ CLIBS = -L..
 CINCS = -I..
 
 # Uncomment for gconv (line-by-line) profiling
-PROF = -fprofile-arcs -ftest-coverage
+# PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
-#PROF =
+PROF =
 
 # External libraries
 # '-lm' for maths (ceil, floor, log, etc.)
