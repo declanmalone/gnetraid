@@ -92,7 +92,7 @@ int main(int argc, char * const argv[]) {
   int    remainder, padding;
   int   *exor_list, *dxor_list, count;
 
-  oc_block_list *solved, *sp;
+  oc_uni_block *solved, *sp;
 
   // parse opts
   while ((opt = getopt(argc, argv, "ds:")) != -1) {
@@ -300,7 +300,7 @@ int main(int argc, char * const argv[]) {
       // Iterate over solved nodes
       while (solved != NULL) {
 	sp = solved;
-	i  = solved->value;
+	i  = solved->b.value;
 
 	if (NULL == (dxor_list = oc_expansion(&dec, i)))
 	  return fprintf(stderr, "oc_expansion error on node %d\n", i);
@@ -374,7 +374,7 @@ int main(int argc, char * const argv[]) {
 
 	//free(dxor_list);
 
-	solved = solved->next;
+	solved = solved->a.next;
 	//free(sp);
       }
 

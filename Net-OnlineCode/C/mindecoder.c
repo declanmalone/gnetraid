@@ -24,7 +24,7 @@ int main(int argc, char * const argv[]) {
   double e;
   int    q, f, ablocks, coblocks;
   int    done, i, j;
-  oc_block_list *solved, *sp;
+  oc_uni_block *solved, *sp;
 
   // parse opts
   while ((opt = getopt(argc, argv, "ds:")) != -1) {
@@ -102,8 +102,8 @@ int main(int argc, char * const argv[]) {
       printf ("%d (%d): solves ", i, done);
       while (solved != NULL) {
 	sp = solved; // stash
-	printf("%d%s", sp->value, ((NULL == sp->next) ? "\n" : ", "));
-	solved = solved->next;
+	printf("%d%s", sp->b.value, ((NULL == sp->a.next) ? "\n" : ", "));
+	solved = solved->a.next;
 	free(sp);
       }
 

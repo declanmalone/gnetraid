@@ -37,7 +37,7 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
 
 int oc_accept_check_block(oc_decoder *decoder, oc_rng_sha1 *rng);
 
-int oc_resolve(oc_decoder *decoder, oc_block_list **solved_list);
+int oc_resolve(oc_decoder *decoder, oc_uni_block **solved_list);
 int *oc_expansion(oc_decoder *decoder, int node);
 
 

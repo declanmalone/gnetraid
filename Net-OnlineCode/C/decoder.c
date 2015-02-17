@@ -134,7 +134,7 @@ int oc_accept_check_block(oc_decoder *decoder, oc_rng_sha1 *rng) {
 }
 
 // pass resolve calls onto graph decoder resolve method
-int oc_resolve(oc_decoder *decoder, oc_block_list **solved) {
+int oc_resolve(oc_decoder *decoder, oc_uni_block **solved) {
 
   assert(decoder != NULL);
   assert(solved  != NULL);

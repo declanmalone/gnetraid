@@ -35,52 +35,54 @@ static struct {
 
 #endif
 
-// Static structure to hold and return a list of freed oc_block_list
+// Static structure to hold and return a list of freed oc_uni_block
 // nodes (actually a circular list since it avoids some comparisons)
-static oc_block_list *free_head = NULL;
-static oc_block_list *free_tail = NULL;
-static oc_block_list *null_ring = NULL;
+static oc_uni_block *free_head = NULL;
+static oc_uni_block *free_tail = NULL;
+static oc_uni_block *null_ring = NULL;
 
 static int ouser = 0;		// share among all graph instances
 
-static oc_block_list *hold_blocks(void) {
-  if (NULL == (free_tail = malloc(sizeof(oc_block_list))))
+// uses pointer in universal block's a union to represent "next"
+
+static oc_uni_block *hold_blocks(void) {
+  if (NULL == (free_tail = malloc(sizeof(oc_uni_block))))
     return NULL;
-  return free_head = null_ring = free_tail->next = free_tail;
+  return free_head = null_ring = free_tail->a.next = free_tail;
 }
 
-static oc_block_list *alloc_block(void) {
-  oc_block_list *p;
+static oc_uni_block *alloc_block(void) {
+  oc_uni_block *p;
   if (free_head == free_tail)
-    return malloc(sizeof(oc_block_list));
+    return malloc(sizeof(oc_uni_block));
   
   // shift (read) head element
   p = free_head;
-  free_tail->next = free_head = free_head->next;
+  free_tail->a.next = free_head = free_head->a.next;
   return p;
 }
 
-static void free_block(oc_block_list *p) {
+static void free_block(oc_uni_block *p) {
   // push (write) after tail
-  p->next = free_head;
-  free_tail = free_tail->next = p;
+  p->a.next = free_head;
+  free_tail = free_tail->a.next = p;
 }
 
 // clean up circular list completely
 static void release_blocks(void) {
-  oc_block_list *p;
-  free_tail->next = NULL;
+  oc_uni_block *p;
+  free_tail->a.next = NULL;
   do {
-    free_head = (p=free_head)->next;
+    free_head = (p=free_head)->a.next;
     free(p);
   } while (free_head != NULL);
   free_tail = null_ring = free_head;
 }
 
 // Create an up edge
-oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
+oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
-  oc_block_list *p;
+  oc_uni_block *p;
 
   assert(upper > lower);
 
@@ -89,8 +91,8 @@ oc_block_list *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
 
-  p->value = upper;
-  p->next  = g->n_edges[lower];
+  p->a.next = g->n_edges[lower];
+  p->b.value = upper;
 
   return g->n_edges[lower] = p;
 
@@ -156,7 +158,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
 
   // "n" edges: omit check blocks
-  OC_ALLOC(n_edges, coblocks, oc_block_list *,            "n edges");
+  OC_ALLOC(n_edges, coblocks, oc_uni_block *,            "n edges");
 
   // unsolved (downward) edge counts: omit message blocks
   OC_ALLOC(edge_count, ablocks + check_space, int,        "unsolved v_edge counts");
@@ -369,7 +371,7 @@ int oc_cascade(oc_graph *g, int node) {
 
   int mblocks  = g->mblocks;
   int coblocks = g->coblocks;
-  oc_block_list *p;
+  oc_uni_block *p;
   int to;
 
   assert(node < coblocks);
@@ -380,7 +382,7 @@ int oc_cascade(oc_graph *g, int node) {
 
   // update unsolved edge count and push target to pending
   while (p != NULL) {
-    to = p->value;
+    to = p->b.value;
     assert(to != node);
 
     if (OC_DEBUG) {
@@ -389,19 +391,18 @@ int oc_cascade(oc_graph *g, int node) {
     }
 
     assert(g->edge_count[to - mblocks]);
-    --(g->edge_count[to - mblocks]);
-
-    if (NULL == oc_push_pending(g, to))
-      return -1;
-    p = p->next;
+    if (--(g->edge_count[to - mblocks]) < 2)
+      if (NULL == oc_push_pending(g, to))
+	return -1;
+    p = p->a.next;
   }
   return 0;
 }
 
 // Add a new node to the end of the pending list
-oc_block_list *oc_push_pending(oc_graph *g, int value) {
+oc_uni_block *oc_push_pending(oc_graph *g, int value) {
 
-  oc_block_list *p;
+  oc_uni_block *p;
 
 #ifdef INSTRUMENT
 
@@ -414,11 +415,11 @@ oc_block_list *oc_push_pending(oc_graph *g, int value) {
   if (NULL == (p = alloc_block()))
     return NULL;
 
-  p->next  = NULL;
-  p->value = value;
+  p->a.next = NULL;
+  p->b.value = value;
 
   if (g->ptail != NULL)
-    g->ptail->next = p;
+    g->ptail->a.next = p;
   else
     g->phead = p;
   g->ptail = p;
@@ -428,9 +429,9 @@ oc_block_list *oc_push_pending(oc_graph *g, int value) {
 
 // Remove a node from the start of the pending list (returns a pointer
 // to the node so that it can be re-used or freed later)
-oc_block_list *oc_shift_pending(oc_graph *g) {
+oc_uni_block *oc_shift_pending(oc_graph *g) {
 
-  oc_block_list *node;
+  oc_uni_block *node;
 
 #ifdef INSTRUMENT
 
@@ -441,7 +442,7 @@ oc_block_list *oc_shift_pending(oc_graph *g) {
   node = g->phead;
   assert(node != NULL);
 
-  if (NULL == (g->phead = node->next))
+  if (NULL == (g->phead = node->a.next))
     g->ptail = NULL;
 
   return node;
@@ -450,13 +451,13 @@ oc_block_list *oc_shift_pending(oc_graph *g) {
 
 void oc_flush_pending(oc_graph *graph) {
 
-  oc_block_list *tmp;
+  oc_uni_block *tmp;
 
   assert(graph != NULL);
 
   while ((tmp = graph->phead) != NULL) {
-    OC_DEBUG && fprintf(stdout, "Flushing pending node %d\n", tmp->value);
-    graph->phead = tmp->next;
+    OC_DEBUG && fprintf(stdout, "Flushing pending node %d\n", tmp->b.value);
+    graph->phead = tmp->a.next;
     free(tmp);
   }
   graph->ptail = NULL;
@@ -465,14 +466,14 @@ void oc_flush_pending(oc_graph *graph) {
 
 // Pushing to solved is similar to pushing to pending, but we don't
 // need to allocate the new node
-void oc_push_solved(oc_block_list *pnode, 
-		    oc_block_list **phead,   // update caller's head
-		    oc_block_list **ptail) { // and tail pointers
+void oc_push_solved(oc_uni_block *pnode, 
+		    oc_uni_block **phead,   // update caller's head
+		    oc_uni_block **ptail) { // and tail pointers
 
-  pnode->next  = NULL;
+  pnode->a.next  = NULL;
 
   if (*ptail != NULL)
-    (*ptail)->next = pnode;
+    (*ptail)->a.next = pnode;
   else
     *phead = pnode;
   *ptail = pnode;
@@ -482,11 +483,11 @@ void oc_push_solved(oc_block_list *pnode,
 // helper function to delete an up edge
 void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
 
-  oc_block_list **pp, *p;
+  oc_uni_block **pp, *p;
   //   pp       is the address of the prior pointer
   //  *pp       is the value of the pointer itself
-  // **pp       is the thing pointed at (an oc_block_list)
-  // (*pp)->foo is a member of the oc_block_list
+  // **pp       is the thing pointed at (an oc_uni_block)
+  // (*pp)->foo is a member of the oc_uni_block
 
   int mblocks = g->mblocks;
 
@@ -511,8 +512,8 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   // Find and remove upper from n_edges linked list
   pp = g->n_edges + lower;
   while (NULL != (p = *pp)) {
-    if (p->value == upper) {
-      *pp = p->next;
+    if (p->b.value == upper) {
+      *pp = p->a.next;
 #ifdef INSTRUMENT
       m.delete_n_seek_length += hops;
       if (hops > m.delete_n_max_seek) m.delete_n_max_seek = hops;
@@ -520,7 +521,7 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
       free_block(p);
       return;
     }
-    pp = &(p->next);
+    pp = (oc_uni_block *) &(p->a.next);
 #ifdef INSTRUMENT
     ++hops;
 #endif
@@ -602,22 +603,22 @@ static int *oc_propagate_xor(int *xors, int *edges) {
 // Returns 0 for not done, 1 for done and -1 for error (malloc)
 // If any nodes are solved, they're added to solved_list
 //
-int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
+int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 
   int mblocks  = graph->mblocks;
   int ablocks  = graph->ablocks;
   int coblocks = graph->coblocks;
 
-  oc_block_list *pnode;		// pending node
+  oc_uni_block *pnode;		// pending node
 
   // linked list for storing solved nodes (we return solved_head)
-  oc_block_list *solved_head = NULL;
-  oc_block_list *solved_tail = NULL;
+  oc_uni_block *solved_head = NULL;
+  oc_uni_block *solved_tail = NULL;
 
   int from, to, count_unsolved, xor_count, i, *p, *xp, *ep;
 
   // mark solved list (passed by reference) as empty
-  *solved_list = (oc_block_list *) NULL;
+  *solved_list = (oc_uni_block *) NULL;
 
   // Check whether our queue is empty. If it is, the caller needs to
   // add another check block
@@ -635,7 +636,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
   while (NULL != graph->phead) { // while items in pending queue
 
     pnode = oc_shift_pending(graph);
-    from  = pnode->value;
+    from  = pnode->b.value;
 
     assert(from >= mblocks);
 
@@ -713,7 +714,7 @@ int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list) {
 
       // Set 'to' as solved
       assert (!graph->solved[to]);
-      pnode->value      = to;	// update value (was 'from')
+      pnode->b.value      = to;	// update value (was 'from')
       graph->solved[to] = 1;
       oc_push_solved(pnode, &solved_head, &solved_tail);
 
