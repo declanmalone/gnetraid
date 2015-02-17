@@ -123,8 +123,8 @@ int oc_eval_f(double t);
 
 // XOR/linked list utilities
 void oc_print_xor_list(int *xp, char *terminal);
-int  oc_len_linked_list  (oc_block_list *list);
-void oc_print_linked_list(oc_block_list *list, char *terminal);
+int  oc_len_linked_list  (oc_uni_block *list);
+void oc_print_linked_list(oc_uni_block *list, char *terminal);
 
 
 #endif

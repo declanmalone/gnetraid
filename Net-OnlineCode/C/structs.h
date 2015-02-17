@@ -80,6 +80,22 @@ struct oc_linked_list_int {
   int value;
 };
 
+// Replacing above with a version based on unions so that I can write
+// generic linked-list/circular list routines using a single type.
+// The most common use case will be for list structures with a single
+// 'next' pointer and an integer 'value', so the naming of the fields
+// in the unions below reflect that usage.
+typedef struct {
+  union {
+    int   i;
+    void *next;
+  } a;
+  union {
+    int   value;
+    void *p;
+  } b;
+} oc_uni_block;
+
 
 // Online Code --- Auxiliary Mapping
 //

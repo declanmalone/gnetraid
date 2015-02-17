@@ -410,7 +410,7 @@ int oc_is_check(oc_codec *codec,int m) {
 
 // More utility routines for dealing with "XOR list" (arrays where
 // p[0] == number of elements in rest of array) and linked lists (of
-// type oc_block_list)
+// type oc_uni_block)
 
 // print an xor list
 void oc_print_xor_list(int *xp, char *terminal) {
@@ -422,20 +422,20 @@ void oc_print_xor_list(int *xp, char *terminal) {
 }
 
 // calculate the length of a linked list
-int oc_len_linked_list (oc_block_list *list) {
+int oc_len_linked_list (oc_uni_block *list) {
   int len = 0;
   while (NULL != list) {
     ++len;
-    list = list->next;
+    list = list->a.p;
   }
   return len;
 }
 
 // print contents of linked list
-void oc_print_linked_list(oc_block_list *list, char *terminal) {
+void oc_print_linked_list(oc_uni_block *list, char *terminal) {
   while (NULL != list) {
-    printf("%d%s", list->value, (NULL == list->next) ? "" : ", ");
-    list = list->next;
+    printf("%d%s", list->b.i, (NULL == list->a.p) ? "" : ", ");
+    list = list->a.p;
   }
   printf("%s", terminal);
 }

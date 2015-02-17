@@ -30,7 +30,7 @@ typedef struct {
   // arrive).
 
   int           **v_edges;	// downward ("v" points down)
-  oc_block_list **n_edges;	// upward edges ("n" ~= upside-down "v")
+  oc_uni_block **n_edges;	// upward edges ("n" ~= upside-down "v")
 
   int *edge_count;		// unsolved "v" edges (aux, check only)
   int *edge_count_x;		// "transparent" edge count (check only)
@@ -43,7 +43,7 @@ typedef struct {
   // we resolve a node (or expand an xor list).
   int **xor_list;
 
-  oc_block_list *phead, *ptail;	// queue of pending nodes
+  oc_uni_block *phead, *ptail;	// queue of pending nodes
 
   unsigned int  unsolved_count;	// count unsolved message blocks
   unsigned char done;		// are all message nodes decoded?
@@ -62,13 +62,13 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge);
 
 
 void oc_decommission_node (oc_graph *g, int node);
-void oc_push_solved (oc_block_list *pnode, 
-		     oc_block_list **phead,  // update caller's head
-		     oc_block_list **ptail); // and tail pointers
+void oc_push_solved (oc_uni_block *pnode, 
+		     oc_uni_block **phead,  // update caller's head
+		     oc_uni_block **ptail); // and tail pointers
 void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement);
-oc_block_list *oc_push_pending(oc_graph *g, int value);
+oc_uni_block *oc_push_pending(oc_graph *g, int value);
 
 
-int oc_graph_resolve(oc_graph *graph, oc_block_list **solved_list);
+int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list);
 
 #endif
