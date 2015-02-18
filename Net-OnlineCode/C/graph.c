@@ -8,13 +8,32 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 0
+#define OC_DEBUG 1
 #define STEPPING 1
 #define INSTRUMENT 1
 
 // I'm moving back to the Perl way of doing things and storing an XOR
 // list for each node (not just msg/aux)
 #define OC_USE_CHECK_XOR_LIST 1
+
+// Defines related to "bucket" lists. Conceptually, the list of up
+// edges is just a linked list but I'm going to implement them as a
+// list of fixed-sized buckets for better performance. The average
+// number of up (or down) edges that a node has is ln(F) ~= 7.66. When
+// F = 2115 (the default when dealing with a large enough number of
+// message blocks), roughly half of the nodes would need two (or more)
+// buckets of size 8, so I'm going to use double the size of the
+// buckets to 16 elements. This should result in much fewer than one
+// quarter of the nodes requiring two or more buckets.
+//
+// With bucket sizes that are powers of two, we can replace
+// potentially costly division with equivalent bit-level operations,
+// which I'm using here. The naming of the macros reflects the
+// original arithmetic operations that are being replaced:
+//
+#define BUCKET_SIZE     16                // bucket size s
+#define BUCKET_MODULUS  (BUCKET_SIZE - 1) // i % s <=> i & mask   
+#define BUCKET_DIVISOR  4                 // i / s <=> i >> shift 
 
 
 #ifdef INSTRUMENT
@@ -79,23 +98,233 @@ static void release_blocks(void) {
   free_tail = null_ring = free_head;
 }
 
+
+// iterate over n edges using a callback
+
+typedef int scan_callback(oc_graph *g, int mblocks, int lower, int uppper);
+
+int oc_scan_n_edge(oc_graph *g, scan_callback *fp, int lower) {
+
+  unsigned      bucket, offset;
+  oc_uni_block *bp;
+  int          *ip, count, retval;
+  int mblocks = g->mblocks;
+
+  bp = g->n_edge + lower;
+
+  OC_DEBUG && fprintf(stdout, "Scanning %d n edges up from %d\n",
+		      bp->b.value, lower);
+
+  if (0 == bp->b.value) return 0;
+
+  // where is the last value?
+  bucket = offset = bp->b.value - 1;
+  bucket >>= BUCKET_DIVISOR;
+  offset &=  BUCKET_MODULUS;
+
+  OC_DEBUG && fprintf(stdout, "Bucket = %d, offset = %d\n", bucket, offset);
+
+  ip = bucket? ((oc_uni_block *)(bp->a.next))->b.p : bp->a.next;
+  do {
+    count =  bucket? BUCKET_SIZE : (offset + 1);
+    while (count--)
+      if (retval = (*fp)(g, mblocks, lower, *(ip++)))
+	return retval;
+    bp = bp->a.next;
+    ip = bp->b.p;
+  } while (bucket--);
+
+  return 0;			// success
+}
+
+
 // Create an up edge
 oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
-  oc_uni_block *p;
-
-  assert(upper > lower);
-
-  if (NULL == (p = alloc_block()))
-    return NULL;
+  oc_uni_block *p, *bp, *ep;
+  unsigned bucket, offset;
 
   OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
 
-  p->a.next = g->n_edges[lower];
-  p->b.value = upper;
+  assert(upper > lower);
 
-  return g->n_edges[lower] = p;
+  // The bucket structure is implemented as follows:
+  //
+  // * the value in the block stored in the n_edge array tells how
+  //   many n edges there are
+  // * if there are fewer than BUCKET_SIZE edges, the pointer stored
+  //   in the n_edges block points to a list of ints
+  // * otherwise, it's a treated as pointer to a linked list of (next,
+  //   bucket) pointers
 
+  bp = g->n_edge + lower;
+
+  // calculate where the new element will go (and update count)
+  bucket = offset = (bp->b.value)++;
+  bucket >>= BUCKET_DIVISOR;
+  offset &=  BUCKET_MODULUS;
+
+  OC_DEBUG && fprintf(stdout, "Bucket = %d, offset = %d\n", bucket, offset);
+
+
+  // optimise for the usual case where there's only one bucket and
+  // it's not overflowing
+  if (bucket == 0) {
+    ((int *)(bp->a.next))[offset] = upper;
+    return bp;
+  }
+
+  // do we need to convert from list of ints to linked list node?
+  if ((1 == bucket) && (0 == offset)) {
+
+    // allocate a block to store existing full bucket
+    if (NULL == (p = alloc_block()))
+      return NULL;
+
+    p->a.next  = NULL; // overwritten later, but useful for testing
+    p->b.p     = bp->a.next;
+    bp->a.next = p; 
+  }
+
+  // skip to last bucket, updating bp to point to previous one
+  while (bucket--) bp = bp->a.next;
+
+  // last bucket is full, so we need to allocate a new one
+  if (0 == offset) {
+    if (NULL == (bp->a.next = alloc_block()))
+      return NULL;
+    if (NULL == (bp->b.p  = malloc(BUCKET_SIZE * sizeof(int))))
+      return NULL;
+    //    bp->a.next->a.next  = NULL;  // value never used
+  }
+
+  // save value at correct offset
+  ((int *)(bp->b.p))[offset] = upper;
+
+  // return some valid pointer instead of NULL
+  return bp;
+  
+}
+
+// helper function to delete an up edge
+void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
+
+  oc_uni_block *pp, *bp, *p;
+  int          *ip;
+  unsigned bucket, offset, skip, i;
+  int mblocks = g->mblocks;
+
+  assert(upper > lower);
+  assert(upper >= mblocks);
+
+  OC_DEBUG && printf("Deleting n edge from %d up to %d\n", lower, upper);
+
+  // To delete from a bucket list, we need to move the last element
+  // from the last bucket into the space vacated by the deleted
+  // element.
+  //
+  // We also have to take care to do what oc_create_n_edge does in
+  // reverse:
+  //
+  // * deleting the last bucket in the chain when it empties
+  //
+  // * converting the index structure to point to the list of ints if
+  //   we only have a single bucket left
+  //
+  // If the element we're searching for isn't there, the program
+  // simply exits with a failed assert().
+
+  // Update the unsolved edge count
+  if (decrement) {
+    OC_DEBUG && printf("Decrementing edge_count for block %d\n", upper);
+    assert(g->edge_count[upper - g->mblocks]);
+    --(g->edge_count[upper - g->mblocks]);
+  }
+
+  bp = g->n_edge + lower;
+
+  // where is the last element?
+  bucket = offset = --(bp->b.value);
+  bucket >>= BUCKET_DIVISOR;
+  offset &=  BUCKET_MODULUS;
+
+  OC_DEBUG && fprintf(stdout, "Bucket = %d, offset = %d\n", bucket, offset);
+
+  // optimise for the usual case where there's only one bucket to
+  // search
+  if (0 == bucket) {
+    ip = bp->a.next;
+    do {
+      if (*ip == upper) {
+	*ip = ip[offset];
+	return;
+      }
+    } while (ip++, offset--);
+    assert (0 == "N edge not found in 0'th bucket");
+  }
+
+  // address of int array to scan
+  ip = bucket? ((oc_uni_block *)(bp->a.next))->b.p : bp->a.next;
+  pp = bp;
+
+  // search full buckets
+  skip = bucket;
+  while (skip--) {
+    i = BUCKET_SIZE;
+    while(i)
+      if (ip[i--] == upper)
+	goto found;
+    pp = bp;
+    bp = bp->a.next;
+    ip = bp->b.p;
+  }
+
+  // search final bucket
+  i = offset + 1;
+  while(i)
+    if (ip[i--] == upper)
+      goto found;
+
+  // we shouldn't get here
+  assert (0 == "up edge didn't exist");
+
+  // Alternatively, emit a warning (not tested in this version)
+  //  fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
+  //  lower, upper);
+
+  found:
+
+  // at this point, we should have:
+  //
+  // ip    pointing to start of int array where we found the value
+  // ip[i] is the value itself
+  // bp    points to this bucket
+  // pp    points to the previous bucket
+
+  // advance to the last bucket and move last element
+  while (skip--)
+    bp = (pp = bp)->a.next;
+
+  ip[i] = ((int *)(bp->b.p))[offset];
+
+  // delete the last bucket if necessary
+  if (offset == 0) {
+    ip = bp->b.p;
+    switch(bucket) {
+    case 0:
+      free(ip);
+      g->n_edge[lower].a.next = NULL;
+      break;
+    case 1:
+      g->n_edge[lower].a.next = ip;
+      free_block(bp);
+      break;
+    default:
+      pp->a.next = NULL;	// not needed, but good for testing
+      free_block(bp);
+      free(ip);
+    }
+  }
 }
 
 int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
@@ -157,9 +386,16 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // "v" edges: omit message blocks
   OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
 
-  // "n" edges: omit check blocks
-  OC_ALLOC(n_edges, coblocks, oc_uni_block *,            "n edges");
+  // Prior to implementing bucket lists I had an array of list
+  // pointers for "n" edges. I'm replacing that with an array of
+  // blocks that point to a list of "buckets"
 
+  // "n" edge array: omit check blocks
+  OC_ALLOC(n_edge, coblocks, oc_uni_block,                "n edge");
+
+  // buckets: omit check blocks
+  OC_ALLOC(buckets, coblocks << BUCKET_DIVISOR, int,      "n edge buckets");
+  
   // unsolved (downward) edge counts: omit message blocks
   OC_ALLOC(edge_count, ablocks + check_space, int,        "unsolved v_edge counts");
 
@@ -174,6 +410,10 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     return fprintf(stderr, "Curiouser and curiouser!\n");
   else
     ++ouser;
+
+  // Make n edge structures point to correct place in buckets array
+  for (msg = 0; msg < coblocks; ++msg)
+    graph->n_edge[msg].a.next = (graph->buckets) + (msg << BUCKET_DIVISOR);
 
   // Register the auxiliary mapping
   // 1st stage: allocate/store message up edges, count aux down edges
@@ -367,36 +607,31 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
 
 
 // Cascade works up from a newly-solved message or auxiliary block
+
+// First, a callback to do work on each n edge
+static int cascade_n_edge(oc_graph *g, int mblocks, int lower, int upper) {
+
+  if (OC_DEBUG) {
+    fprintf(stdout, "  pending link %d\n", upper);
+    printf("Decrementing edge_count for block %d\n", upper);
+  }
+
+  // update unsolved edge count and push target to pending
+  assert(g->edge_count[upper - mblocks]);
+  if (--(g->edge_count[upper - mblocks]) < 2)
+    if (NULL == oc_push_pending(g, upper))
+      return -1;
+
+  return 0;
+}
+
 int oc_cascade(oc_graph *g, int node) {
 
-  int mblocks  = g->mblocks;
-  int coblocks = g->coblocks;
-  oc_uni_block *p;
-  int to;
-
-  assert(node < coblocks);
+  assert(node < g->coblocks);
 
   OC_DEBUG && fprintf(stdout, "Cascading from node %d:\n", node);
 
-  p = g->n_edges[node];
-
-  // update unsolved edge count and push target to pending
-  while (p != NULL) {
-    to = p->b.value;
-    assert(to != node);
-
-    if (OC_DEBUG) {
-      fprintf(stdout, "  pending link %d\n", to);
-      printf("Decrementing edge_count for block %d\n", to);
-    }
-
-    assert(g->edge_count[to - mblocks]);
-    if (--(g->edge_count[to - mblocks]) < 2)
-      if (NULL == oc_push_pending(g, to))
-	return -1;
-    p = p->a.next;
-  }
-  return 0;
+  return oc_scan_n_edge(g, &cascade_n_edge, node);
 }
 
 // Add a new node to the end of the pending list
@@ -480,61 +715,6 @@ void oc_push_solved(oc_uni_block *pnode,
 }
 
 
-// helper function to delete an up edge
-void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
-
-  oc_uni_block **pp, *p;
-  //   pp       is the address of the prior pointer
-  //  *pp       is the value of the pointer itself
-  // **pp       is the thing pointed at (an oc_uni_block)
-  // (*pp)->foo is a member of the oc_uni_block
-
-  int mblocks = g->mblocks;
-
-#ifdef INSTRUMENT
-  int hops = 0;
-  ++m.delete_n_calls;
-#endif
-
-  assert(upper > lower);
-  assert(upper >= mblocks);
-
-  OC_DEBUG && printf("Deleting n edge from %d up to %d\n", lower, upper);
-
-  // Update the unsolved count first
-  if (decrement) {
-    OC_DEBUG && printf("Decrementing edge_count for block %d\n", upper);
-    assert(g->edge_count[upper - g->mblocks]);
-    --(g->edge_count[upper - g->mblocks]);
-  }
-
-
-  // Find and remove upper from n_edges linked list
-  pp = g->n_edges + lower;
-  while (NULL != (p = *pp)) {
-    if (p->b.value == upper) {
-      *pp = p->a.next;
-#ifdef INSTRUMENT
-      m.delete_n_seek_length += hops;
-      if (hops > m.delete_n_max_seek) m.delete_n_max_seek = hops;
-#endif
-      free_block(p);
-      return;
-    }
-    pp = (oc_uni_block *) &(p->a.next);
-#ifdef INSTRUMENT
-    ++hops;
-#endif
-  }
-
-  // we shouldn't get here
-  assert (0 == "up edge didn't exist");
-
-  // Alternatively, turn the above into a warning
-  //  fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
-  //  lower, upper);
-
-}
 
 // helper function to delete edges from a solved aux or check node
 void oc_decommission_node (oc_graph *g, int node) {

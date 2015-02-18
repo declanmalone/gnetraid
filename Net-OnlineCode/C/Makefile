@@ -62,8 +62,3 @@ probdist: probdist.o libonline-code.a online-code.h
 mindecoder: mindecoder.o libonline-code.a online-code.h
 	$(CC) -o mindecoder $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)
 
-# Header file dependencies 
-codec.o: libs
-compat.o:  libs
-probdist.o: libs
-mindecoder.o : libs

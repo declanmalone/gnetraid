@@ -29,8 +29,9 @@ typedef struct {
   // upward edges added to them over time (ie, when new check blocks
   // arrive).
 
-  int           **v_edges;	// downward ("v" points down)
-  oc_uni_block **n_edges;	// upward edges ("n" ~= upside-down "v")
+  int          **v_edges;	// downward ("v" points down)
+  oc_uni_block  *n_edge;	// upward edges ("n" ~= upside-down "v")
+  int           *buckets;	// storage for n edge buckets (1st only)
 
   int *edge_count;		// unsolved "v" edges (aux, check only)
   int *edge_count_x;		// "transparent" edge count (check only)
