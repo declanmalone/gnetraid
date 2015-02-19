@@ -1,6 +1,6 @@
 
 OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o
-PROGS   = probdist mindecoder compat codec
+PROGS   = probdist mindecoder compat codec test-buckets
 
 CARGS = -O2
 CLIBS = -L.
@@ -61,4 +61,7 @@ probdist: probdist.o libonline-code.a online-code.h
 
 mindecoder: mindecoder.o libonline-code.a online-code.h
 	$(CC) -o mindecoder $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)
+
+test-buckets: test-buckets.o libonline-code.a online-code.h rng_sha1.h
+	$(CC) -o test-buckets $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)
 

@@ -72,4 +72,9 @@ oc_uni_block *oc_push_pending(oc_graph *g, int value);
 
 int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list);
 
+typedef int oc_scan_callback(oc_graph *g, int mblocks, int lower, int upper);
+
+oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower);
+int oc_scan_n_edge(oc_graph *g, oc_scan_callback *fp, int lower);
+
 #endif

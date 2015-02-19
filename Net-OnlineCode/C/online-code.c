@@ -426,7 +426,7 @@ int oc_len_linked_list (oc_uni_block *list) {
   int len = 0;
   while (NULL != list) {
     ++len;
-    list = list->a.p;
+    list = list->a.next;
   }
   return len;
 }
@@ -434,8 +434,8 @@ int oc_len_linked_list (oc_uni_block *list) {
 // print contents of linked list
 void oc_print_linked_list(oc_uni_block *list, char *terminal) {
   while (NULL != list) {
-    printf("%d%s", list->b.i, (NULL == list->a.p) ? "" : ", ");
-    list = list->a.p;
+    printf("%d%s", list->b.value, (NULL == list->a.next) ? "" : ", ");
+    list = list->a.next;
   }
   printf("%s", terminal);
 }
