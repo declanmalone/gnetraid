@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 1
+#define OC_DEBUG 0
 #define STEPPING 1
 #define INSTRUMENT 1
 
@@ -123,15 +123,15 @@ int oc_scan_n_edge(oc_graph *g, oc_scan_callback *fp, int lower) {
 
   OC_DEBUG && fprintf(stdout, "Bucket = %d, offset = %d\n", bucket, offset);
 
-  ip = bucket? ((oc_uni_block *)(bp->a.next))->b.p : bp->a.next;
+  ip = bucket? ((oc_uni_block *)(bp = bp->a.next))->b.p : bp->a.next;
   do {
     count =  bucket? BUCKET_SIZE : (offset + 1);
+    OC_DEBUG && fprintf(stdout, "Scanning %d elements in this bucket\n", 
+			count);
     while (count--)
       if (retval = (*fp)(g, mblocks, lower, *(ip++)))
 	return retval;
-    bp = bp->a.next;
-    ip = bp->b.p;
-  } while (bucket--);
+  } while ((bucket--) && (ip = (bp = bp->a.next)->b.p));
 
   return 0;			// success
 }
@@ -168,7 +168,7 @@ oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   // optimise for the usual case where there's only one bucket and
   // it's not overflowing
-  if (bucket == 0) {
+  if (0 == bucket) {
     ((int *)(bp->a.next))[offset] = upper;
     return bp;
   }
@@ -181,20 +181,22 @@ oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
       return NULL;
 
     p->a.next  = NULL; // overwritten later, but useful for testing
-    p->b.p     = bp->a.next;
-    bp->a.next = p; 
+    p->b.p     = bp->a.next;	// old int list
+    bp->a.next = p;
   }
 
-  // skip to last bucket, updating bp to point to previous one
+  // skip to second-last bucket
   while (bucket--) bp = bp->a.next;
 
-  // last bucket is full, so we need to allocate a new one
+  // end bucket is full, so we need to allocate a new one
   if (0 == offset) {
     if (NULL == (bp = bp->a.next = alloc_block()))
       return NULL;
-    if (NULL == (bp->b.p  = malloc(BUCKET_SIZE * sizeof(int))))
+    if (NULL == (bp->b.p = malloc(BUCKET_SIZE * sizeof(int))))
       return NULL;
-    //    bp->a.next->a.next  = NULL;  // value never used
+    bp->a.next = NULL;  // value never used
+  } else {
+    bp = bp->a.next;
   }
 
   // save value at correct offset
@@ -264,29 +266,31 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
     assert (0 == "N edge not found in 0'th bucket");
   }
 
-  // address of int array to scan
-  ip = ((oc_uni_block *)(bp->a.next))->b.p;
+  // When bucket > 0, bp->next is a list of buckets
   pp = bp;
+  bp = bp->a.next;
+  ip = (int *) (bp->b.p);
+  skip = bucket;
 
   // search full buckets
-  skip = bucket;
-  while (skip--) {
-    i = BUCKET_SIZE;
+  while (skip) {
+    i = BUCKET_SIZE - 1;
     do {
       if (ip[i] == upper)
 	goto found;
-    } while (--i);
+    } while (i--);
     pp = bp;
     bp = bp->a.next;
     ip = bp->b.p;
+    --skip;
   }
 
   // search final bucket
-  i = offset + 1;
+  i = offset;
   do {
     if (ip[i] == upper)
       goto found;
-  } while (--i);
+  } while (i--);
 
 
   // we shouldn't get here
@@ -302,32 +306,31 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   //
   // ip      pointing to start of int array where we found the value
   // ip[i]   is the value itself
-  // bp      points to this bucket
+  // bp      points to the bucket the value was found in
   // pp      points to the previous bucket
 
   // advance to the last bucket and move last element
-  while (--skip)
+  while (skip--)
     bp = (pp = bp)->a.next;
+
+  assert(ip[i] == upper);
+
+  OC_DEBUG && fprintf(stdout,
+		      "Overwriting n_edge list element %d with element "
+		      "%d, which was at offset %d in last bucket\n",
+		      ip[i],  ((int *)(bp->b.p))[offset], offset);
 
   ip[i] = ((int *)(bp->b.p))[offset];
 
   // delete the last bucket if necessary
-  if (offset == 0) {
-    ip = bp->b.p;
-    switch(bucket) {
-    case 0:
-      //      free(ip);
-      //      bp->a.next = ip;
-      //g->n_edge[lower].a.next = NULL;
-      break;
-    case 1:
-      g->n_edge[lower].a.next = ip;
-      free_block(bp);
-      break;
-    default:
-      pp->a.next = NULL;	// not needed, but good for testing
-      free_block(bp);
-      free(ip);
+  if (0 == offset) {
+    free(bp->b.p);
+    free_block(bp);
+    pp->a.next = NULL;
+
+    // convert main index back to having next point to int list
+    if (1 == bucket) {
+      g->n_edge[lower].a.next = pp->b.p;
     }
   }
 }

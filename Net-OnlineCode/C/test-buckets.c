@@ -188,12 +188,97 @@ int main (int ac, char *argv[]) {
   clear_sequence(1,16);
   tmp = fill_sequence(1, BUCKET_SIZE + 1);
 
-  expect_not(tmp, "problems filling beyond first bucket");
+  expect_not(tmp, "filling beyond first bucket");
 
-  printf("Adding 1..17 to n_edge list; got back %s\n", printable_list(0));
+  printf("Added 1..17 to n_edge list; got back %s\n", printable_list(0));
 
   expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 ",
 	     printable_list(0),
 	     "scan of overflowing first bucket gives 1..17");
 
+  // delete element 17
+  oc_delete_n_edge(&(dec.graph), 17, 0, 0);
+  printf("Deleted 17 from n_edge list; got back %s\n", printable_list(0));
+  expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 ",
+	     printable_list(0),
+	     "shrinking back to one bucket");
+
+  // fill up the second bucket
+  tmp = fill_sequence(17, BUCKET_SIZE);
+
+  expect_not(tmp, "filling second bucket");
+  printf("Added 17..32 to n_edge list; got back %s\n", printable_list(0));
+
+  expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 ",
+	     printable_list(0),
+	     "scan of filling two buckets gives 1..32");
+
+  // put an element in the third bucket
+  tmp = fill_sequence(33, 1);
+
+  expect_not(tmp, "entering third bucket");
+  printf("Added 33 to n_edge list; got back %s\n", printable_list(0));
+
+  expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 ",
+	     printable_list(0),
+	     "scan of entering third bucket gives 1..33");
+
+  // delete sole element from 3rd bucket
+  oc_delete_n_edge(&(dec.graph), 33, 0, 0);
+  printf("Deleted 17 from n_edge list; got back %s\n", printable_list(0));
+  expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 ",
+	     printable_list(0),
+	     "shrinking back to two buckets");
+
+  // put it back again so I can test removing something from a
+  // different bucket
+  tmp = fill_sequence(33, 1);
+
+  expect_not(tmp, "entering third bucket");
+  printf("Added 33 to n_edge list; got back %s\n", printable_list(0));
+
+  expect_seq("1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 ",
+	     printable_list(0),
+	     "scan of entering third bucket gives 1..33");
+
+  // delete something from element from 1st bucket of 3
+  oc_delete_n_edge(&(dec.graph), 1, 0, 0);
+  printf("Deleted 17 from n_edge list; got back %s\n", printable_list(0));
+  expect_seq("33 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 ",
+	     printable_list(0),
+	     "deleting from 1st of 3 buckets");
+
+  // put it back again so I can test removing something from a
+  // different bucket
+  tmp = fill_sequence(34, 1);
+
+  expect_not(tmp, "entering third bucket");
+  printf("Added 34 to n_edge list; got back %s\n", printable_list(0));
+
+  expect_seq("33 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 34 ",
+	     printable_list(0),
+	     "scan of entering third bucket gives 1..33");
+
+  // delete some element from 2nd bucket of 3
+  oc_delete_n_edge(&(dec.graph), 18, 0, 0);
+  printf("Deleted 18 from n_edge list; got back %s\n", printable_list(0));
+  expect_seq("33 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 "
+	     "17 34 19 20 21 22 23 24 25 26 27 28 29 30 31 32 ",
+	     printable_list(0),
+	     "deleting from 2nd of 3 buckets");
+
+  // delete all but one of the elements (leaving 17)
+  clear_sequence(2, 15);
+  clear_sequence(19, 34 - 19 + 1);
+  printf("Deleting everything except 17; got back %s\n", printable_list(0));
+  expect_seq("17 ",
+	     printable_list(0),
+	     "deleting everything except 17");
+  
 }
