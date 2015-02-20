@@ -216,7 +216,7 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   int mblocks = g->mblocks;
 
   assert(upper > lower);
-  //  assert(upper >= mblocks); // disabled during unit test
+  assert(upper >= mblocks); // disable during unit test
 
   OC_DEBUG && printf("Deleting n edge from %d up to %d\n", lower, upper);
 
@@ -256,13 +256,38 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   // optimise for the usual case where there's only one bucket to
   // search
   if (0 == bucket) {
-    ip = bp->a.next;
-    do {
-      if (*ip == upper) {
-	*ip = ip[offset];
-	return;
-      }
-    } while (ip++, offset--);
+    ip = bp->a.next; 
+    // unroll loop to save testing condition
+    skip=ip[offset];		// last element
+    if (   *ip  == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+    if (*(++ip) == upper) { *ip = skip; return; }
+
+    if (0) {
+      do {
+	if (*ip == upper) {
+	  *ip = skip;
+	  return;
+	}
+      } while (ip++);
+    }
+
     assert (0 == "N edge not found in 0'th bucket");
   }
 
@@ -274,11 +299,28 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
 
   // search full buckets
   while (skip) {
-    i = BUCKET_SIZE - 1;
-    do {
-      if (ip[i] == upper)
-	goto found;
-    } while (i--);
+    // unroll loop and change to using pointer instead of array
+    // arithmetic
+    if (   *ip  == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+    if (*(++ip) == upper) goto found;
+
     pp = bp;
     bp = bp->a.next;
     ip = bp->b.p;
@@ -286,12 +328,49 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   }
 
   // search final bucket
-  i = offset;
-  do {
-    if (ip[i] == upper)
-      goto found;
-  } while (i--);
-
+  if (0) {
+    switch(offset) {
+    case 15:
+      if (*ip == upper) goto found; ++ip;
+    case 14:
+      if (*ip == upper) goto found; ++ip;
+    case 13:
+      if (*ip == upper) goto found; ++ip;
+    case 12:
+      if (*ip == upper) goto found; ++ip;
+    case 11:
+      if (*ip == upper) goto found; ++ip;
+    case 10:
+      if (*ip == upper) goto found; ++ip;
+    case 9:
+      if (*ip == upper) goto found; ++ip;
+    case 8:
+      if (*ip == upper) goto found; ++ip;
+    case 7:
+      if (*ip == upper) goto found; ++ip;
+    case 6:
+      if (*ip == upper) goto found; ++ip;
+    case 5:
+      if (*ip == upper) goto found; ++ip;
+    case 4:
+      if (*ip == upper) goto found; ++ip;
+    case 3:
+      if (*ip == upper) goto found; ++ip;
+    case 2:
+      if (*ip == upper) goto found; ++ip;
+    case 1:
+      if (*ip == upper) goto found; ++ip;
+    case 0:
+      if (*ip == upper) goto found;
+    }
+  } else {
+    i=offset;
+    do {
+      if (*ip == upper)
+	goto found;
+      ++ip;
+    } while (i--);
+  }
 
   // we shouldn't get here
   assert (0 == "up edge didn't exist");
@@ -304,8 +383,7 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
 
   // at this point, we should have:
   //
-  // ip      pointing to start of int array where we found the value
-  // ip[i]   is the value itself
+  // *ip     is the found value value itself
   // bp      points to the bucket the value was found in
   // pp      points to the previous bucket
 
@@ -313,14 +391,14 @@ void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
   while (skip--)
     bp = (pp = bp)->a.next;
 
-  assert(ip[i] == upper);
+  assert(*ip == upper);
 
   OC_DEBUG && fprintf(stdout,
 		      "Overwriting n_edge list element %d with element "
 		      "%d, which was at offset %d in last bucket\n",
-		      ip[i],  ((int *)(bp->b.p))[offset], offset);
+		      *ip,  ((int *)(bp->b.p))[offset], offset);
 
-  ip[i] = ((int *)(bp->b.p))[offset];
+  *ip = ((int *)(bp->b.p))[offset];
 
   // delete the last bucket if necessary
   if (0 == offset) {
