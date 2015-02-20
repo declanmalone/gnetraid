@@ -9,7 +9,7 @@ CLIBS = -L.
 # PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
-PROF = -pg
+PROF = 
 
 # External libraries
 # '-lm' for maths (ceil, floor, log, etc.)
