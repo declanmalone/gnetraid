@@ -36,6 +36,24 @@
 #define BUCKET_DIVISOR  4                 // i / s <=> i >> shift 
 
 
+// Separate out different calls to malloc so that I can profile them.
+// I will convert these to inline functions after profiling.
+void *alloc_oc_uni_block() {
+  return malloc(sizeof(oc_uni_block));
+}
+
+void *alloc_bucket() {
+  return malloc(BUCKET_SIZE * sizeof(int));
+}
+
+void *alloc_ints(int howmany) {
+  return calloc(howmany, sizeof(int));
+}
+
+void *alloc_xor_list(int size) {
+  return calloc(size, sizeof(int));
+}
+
 #ifdef INSTRUMENT
 
 // Static structure to hold measurements relating to key bottlenecks
@@ -64,7 +82,7 @@ static int ouser = 0;		// share among all graph instances
 // uses pointer in universal block's a union to represent "next"
 
 static oc_uni_block *hold_blocks(void) {
-  if (NULL == (free_tail = malloc(sizeof(oc_uni_block))))
+  if (NULL == (free_tail = alloc_oc_uni_block()))
     return NULL;
   return free_head = free_tail->a.next = free_tail;
 }
@@ -72,7 +90,7 @@ static oc_uni_block *hold_blocks(void) {
 static oc_uni_block *alloc_block(void) {
   oc_uni_block *p;
   if (free_head == free_tail)
-    return malloc(sizeof(oc_uni_block));
+    return alloc_oc_uni_block();
   
   // shift (read) head element
   p = free_head;
@@ -192,7 +210,7 @@ oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
   if (0 == offset) {
     if (NULL == (bp = bp->a.next = alloc_block()))
       return NULL;
-    if (NULL == (bp->b.p = malloc(BUCKET_SIZE * sizeof(int))))
+    if (NULL == (bp->b.p = alloc_bucket()))
       return NULL;
     bp->a.next = NULL;  // value never used
   } else {
@@ -504,12 +522,21 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // Register the auxiliary mapping
   // 1st stage: allocate/store message up edges, count aux down edges
 
+  // I'm going to write to the n_edge structure directly here, but
+  // that requires the following condition:
+  assert (q <= BUCKET_SIZE);
+
   mp = codec->auxiliary;	// start of 2d message -> aux* map
   for (msg = 0; msg < mblocks; ++msg) {
+    graph->n_edge[msg].b.value = q;
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
-      if (NULL == oc_create_n_edge(graph, aux_temp, msg))
-	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
+      if (0) {
+	if (NULL == oc_create_n_edge(graph, aux_temp, msg))
+	  return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
+      } else {
+	((int *)(graph->n_edge[msg].a.next))[aux] = aux_temp;
+      }
       aux_temp   -= mblocks;	// relative to start of edge_count[]
       assert (aux_temp >= 0);
       assert (aux_temp < ablocks);
@@ -522,7 +549,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   for (aux = 0; aux < ablocks; ++aux) {
     aux_temp = graph->edge_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
-    if (NULL == (p = calloc(1 + aux_temp, sizeof(int))))
+    if (NULL == (p = alloc_ints(1 + aux_temp)))
       return fprintf(stdout, "graph init: failed to malloc aux down edges\n");
 
     graph->v_edges[aux] = p;
@@ -601,7 +628,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   }
 
   // Allocate xor_list and set it up with our block ID
-  if (NULL == (xp = calloc(solved_count + 2, sizeof(int))))
+  if (NULL == (xp = alloc_xor_list(solved_count + 2)))
     return fprintf(stdout, "Failed to allocate xor_list for check block\n"), 
       -1;
   g->xor_list[node] = xp;
@@ -840,7 +867,7 @@ static int *oc_propagate_xor(int *xors, int *edges) {
   assert(NULL != edges);
 
   tmp = xors[0] + edges[0];
-  if (NULL == (p = xp = calloc(tmp + 1, sizeof(int))))
+  if (NULL == (p = xp = alloc_xor_list(tmp + 1)))
     return NULL;
 
   // Write size and all elements of xor array
