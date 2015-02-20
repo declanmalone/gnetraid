@@ -98,8 +98,13 @@ void oc_rng_advance(oc_rng_sha1 *rng) {
 
   char temp[OC_RNG_BYTES];
 
-  SHA1(rng->current,OC_RNG_BYTES,temp);
-  memcpy(rng->current,temp,OC_RNG_BYTES);
+  // SHA1(rng->current,OC_RNG_BYTES,temp);
+  // memcpy(rng->current,temp,OC_RNG_BYTES);
+  // return;
+
+  // can we use SHA1 if input and output buffers are the same? 
+  // Apparently so (compat reports the same output, so we're fine).
+  SHA1(rng->current,OC_RNG_BYTES,rng->current);
   
 }
 
