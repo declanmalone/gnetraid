@@ -5,6 +5,16 @@
 
 #include "online-code.h"
 
+// n edges are stored in circular lists (one ring per message or
+// auxiliary block)
+struct oc_n_edge_ring_node;
+typedef struct oc_n_edge_ring_node oc_n_edge_ring;
+struct oc_n_edge_ring_node {
+  int upper;			// node at the other end
+  oc_n_edge_ring *left;
+  oc_n_edge_ring *right;
+};
+
 typedef struct {
 
   int mblocks;
@@ -30,12 +40,16 @@ typedef struct {
   // arrive).
 
   int           **v_edges;	// downward ("v" points down)
-  oc_uni_block **n_edges;	// upward edges ("n" ~= upside-down "v")
+  oc_n_edge_ring ***v_pipes;	// pipe from top node to bottom ring
 
-  int *edge_count;		// unsolved "v" edges (aux, check only)
-  int *edge_count_x;		// "transparent" edge count (check only)
+  //  oc_uni_block  **n_edges;	// upward edges ("n" ~= upside-down "v")
+  oc_n_edge_ring *n_rings;	// rings replace n_edges linked lists
 
-  unsigned char *solved;	// is node solved?
+
+  int *v_count;			// unsolved "v" edges (aux, check only)
+  int *v_count_x;		// "transparent" edge count (check only)
+
+  unsigned char  *solved;	// is node solved?
 
   // The XOR list contains the "expansion" of newly-solved
   // blocks/nodes. We could use a linked list, but an array will do
@@ -65,6 +79,7 @@ void oc_decommission_node (oc_graph *g, int node);
 void oc_push_solved (oc_uni_block *pnode, 
 		     oc_uni_block **phead,  // update caller's head
 		     oc_uni_block **ptail); // and tail pointers
+oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower);
 void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement);
 oc_uni_block *oc_push_pending(oc_graph *g, int value);
 

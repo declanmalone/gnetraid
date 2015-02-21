@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 0
+#define OC_DEBUG 1
 #define STEPPING 1
 #define INSTRUMENT 1
 
@@ -39,7 +39,6 @@ static struct {
 // nodes (actually a circular list since it avoids some comparisons)
 static oc_uni_block *free_head = NULL;
 static oc_uni_block *free_tail = NULL;
-static oc_uni_block *null_ring = NULL;
 
 static int ouser = 0;		// share among all graph instances
 
@@ -48,7 +47,7 @@ static int ouser = 0;		// share among all graph instances
 static oc_uni_block *hold_blocks(void) {
   if (NULL == (free_tail = malloc(sizeof(oc_uni_block))))
     return NULL;
-  return free_head = null_ring = free_tail->a.next = free_tail;
+  return free_head = free_tail->a.next = free_tail;
 }
 
 static oc_uni_block *alloc_block(void) {
@@ -76,26 +75,67 @@ static void release_blocks(void) {
     free_head = (p=free_head)->a.next;
     free(p);
   } while (free_head != NULL);
-  free_tail = null_ring = free_head;
+  free_tail = free_head;
 }
 
 // Create an up edge
-oc_uni_block *oc_create_n_edge(oc_graph *g, int upper, int lower) {
+oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
-  oc_uni_block *p;
-
-  assert(upper > lower);
-
-  if (NULL == (p = alloc_block()))
-    return NULL;
+  oc_n_edge_ring *p, *ring;
 
   OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
 
-  p->a.next = g->n_edges[lower];
-  p->b.value = upper;
+  assert(upper > lower);
 
-  return g->n_edges[lower] = p;
+  if (NULL == (p = malloc(sizeof(oc_n_edge_ring))))
+    return NULL;
 
+
+  ring = g->n_rings + lower;
+
+  // update the count of n edges in this ring
+  ring->upper = 0;
+
+  // we could push to the left (as here) or right; it doesn't matter
+  p->upper          = upper;
+  p->left           = ring->left;
+  p->right          = ring;
+  ring->left->right = p;
+  ring->left        = p;
+
+  return p;
+
+}
+
+// complementary function to oc_create_n_edge
+void oc_delete_lower_end(oc_graph *g, oc_n_edge_ring *node, 
+			 int upper, int lower, int decrement) {
+
+  oc_n_edge_ring *ring;
+
+  assert(node != NULL);
+
+  OC_DEBUG && printf("Deleting lower half from %d up to %d\n", lower, upper);
+  OC_DEBUG && printf("ring_node->upper is %d\n", node->upper);
+
+  assert(upper == node->upper);	// reciprocity
+
+  // Update the unsolved count first
+  if (decrement) {
+    OC_DEBUG && printf("Decrementing v_count for block %d\n", upper);
+    assert(g->v_count[upper - g->mblocks]);
+    --(g->v_count[upper - g->mblocks]);
+  }
+
+  // update node count in this ring
+  ring = g->n_rings + lower;
+  ring->upper =0; 
+
+  // remove node from the ring
+  node->left->right = node->right;
+  node->right->left = node->left;
+
+  free(node);
 }
 
 int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
@@ -116,6 +156,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // iterators and temporary variables
   int msg, aux, *mp, *p, aux_temp, temp;
+  oc_n_edge_ring *ring;
 
   // Check parameters and return non-zero value on failures
   if (mblocks < 1)
@@ -158,10 +199,16 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
 
   // "n" edges: omit check blocks
-  OC_ALLOC(n_edges, coblocks, oc_uni_block *,            "n edges");
+  //  OC_ALLOC(n_edges, coblocks, oc_uni_block *,             "n edges");
+
+  // n rings: omit check blocks
+  OC_ALLOC(n_rings, coblocks, oc_n_edge_ring,             "n rings");
+
+  // "n pipes" are pointers from v edges down to n ring entries
+  OC_ALLOC(v_pipes, ablocks + check_space, oc_n_edge_ring *, "n pipes");
 
   // unsolved (downward) edge counts: omit message blocks
-  OC_ALLOC(edge_count, ablocks + check_space, int,        "unsolved v_edge counts");
+  OC_ALLOC(v_count, ablocks + check_space, int,        "unsolved v_edge counts");
 
   // solved array: omit check blocks; assumed to be solved
   OC_ALLOC(solved, coblocks, char,                        "solved array");
@@ -169,11 +216,17 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // xor lists: omit nothing
   OC_ALLOC(xor_list, coblocks + check_space, int *,       "xor lists");
 
-  // Cheshire Cat
-  if ( (NULL == null_ring) && (NULL == hold_blocks()) )
+  // Hold onto freed blocks
+  if ( (NULL == free_head) && (NULL == hold_blocks()) )
     return fprintf(stderr, "Curiouser and curiouser!\n");
   else
     ++ouser;
+
+  // initialise the rings that will store n edges
+  for (msg = 0; msg < coblocks; ++msg) {
+    graph->n_rings[msg].left = graph->n_rings[msg].right
+      = graph->n_rings + msg;
+  }
 
   // Register the auxiliary mapping
   // 1st stage: allocate/store message up edges, count aux down edges
@@ -182,25 +235,31 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   for (msg = 0; msg < mblocks; ++msg) {
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
-      if (NULL == oc_create_n_edge(graph, aux_temp, msg))
-	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
-      aux_temp   -= mblocks;	// relative to start of edge_count[]
+      // this has to wait until later thanks to pipes
+      //      if (NULL == oc_create_n_edge(graph, aux_temp, msg))
+      //	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
+      aux_temp   -= mblocks;	// relative to start of v_count[]
       assert (aux_temp >= 0);
       assert (aux_temp < ablocks);
-      graph->edge_count[aux_temp] += 2; // +2 trick explained below
+      graph->v_count[aux_temp] += 2; // +2 trick explained below
     }
   }
 
-  // 2nd stage: allocate down edges for auxiliary nodes
+  // 2nd stage: allocate down edges/pipes for auxiliary nodes
 
   for (aux = 0; aux < ablocks; ++aux) {
-    aux_temp = graph->edge_count[aux];
+    aux_temp = graph->v_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
     if (NULL == (p = calloc(1 + aux_temp, sizeof(int))))
       return fprintf(stdout, "graph init: failed to malloc aux down edges\n");
 
     graph->v_edges[aux] = p;
     p[0] = aux_temp;		// array size; edges stored in next pass
+
+    // allocate pipe array, too (waste 1st element)
+    if (NULL == (p = calloc(1 + aux_temp, sizeof(oc_n_edge_ring *))))
+      return fprintf(stdout, "graph init: failed to malloc aux down pipes\n");
+    graph->v_pipes[aux] = (oc_n_edge_ring **)p;
   }
 
   // 3rd stage: store down edges
@@ -209,22 +268,34 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   for (msg = 0; msg < mblocks; ++msg) {
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++) - mblocks;
+
       p = graph->v_edges[aux_temp];
+
+      OC_DEBUG && fprintf(stdout,
+			  "creating v edge/pipe from %d down to %d\n",
+			  aux_temp + mblocks, msg);
 
       // The trick explained ...
       // * fills in array elements p[1] onwards (in reverse order)
       // * edge counts are correct after this pass (+2n - n = n)
       // * no extra array/pass to iterate over/recalculate edge counts
-      temp = (graph->edge_count[aux_temp])--;
-      p[temp - p[0]] = msg;
+      temp = (graph->v_count[aux_temp])--;
+      graph->v_edges[aux_temp][temp - p[0]] = msg;
+
+      // deferred creation of up edge until now so that we can stash
+      // the returned pointer in the array allocated in 2nd stage
+      if (NULL == (ring = oc_create_n_edge(graph, aux_temp + mblocks, msg)))
+	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
+
+      graph->v_pipes[aux_temp][temp - p[0]] = ring;
     }
   }
 
   // Print edge count information
   if (OC_DEBUG) {
     for (aux = 0; aux < ablocks; ++aux)
-      printf("Set edge_count for aux block %d to %d\n", aux, 
-	     (graph->edge_count[aux]));
+      printf("v_count for aux block %d is %d\n", aux, 
+	     (graph->v_count[aux]));
   }
 #ifdef INSTRUMENT
   memset(&m, 0, sizeof(m));
@@ -242,6 +313,8 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   int mblocks;
 
   int xor_length = 1, *ep, *xp;
+
+  oc_n_edge_ring **pipes;
 
   assert(g != NULL);
   assert(v_edges != NULL);
@@ -288,6 +361,17 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   count   = *ep;
   end     = *ep;
   *(ep++) = count - solved_count;
+
+  // also set up array of "pipes"
+  if (NULL == (pipes = calloc(count - solved_count + 1,
+			      sizeof(oc_n_edge_ring **))))
+    return fprintf(stdout,
+		   "Failed to allocate v_pipes for check block\n"),
+      -1;
+
+  g->v_pipes[node-g->mblocks] = pipes;
+  *(pipes++) = NULL;		// unused element
+
   while (count--) {
     tmp = *ep;
     if (g->solved[tmp]) {
@@ -295,7 +379,7 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
       *ep     = v_edges[end--]; // move last node and check again
       solved_count--;
     } else {
-      if (NULL == oc_create_n_edge(g, node, tmp))
+      if (NULL == (*(pipes++) = oc_create_n_edge(g, node, tmp)))
 	return -1;
       ++ep;
     }
@@ -319,10 +403,10 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 #endif
 
   g->v_edges   [node - mblocks] = v_edges;
-  g->edge_count[node - mblocks] = v_edges[0];
+  g->v_count[node - mblocks] = v_edges[0];
 
   if (OC_DEBUG) {
-    printf("Set edge_count for check block %d to %d\n", 
+    printf("Set v_count for check block %d to %d\n", 
 	   node, v_edges[0]);
 
     printf("Check block mapping after removing solved: ");
@@ -361,8 +445,12 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
 
   // delete reciprocal up edges
   count = *(p++);
-  while (count--) 
-    oc_delete_n_edge(g, aux_node, *(p++), 0);
+  while (count--) {
+    oc_delete_lower_end(g,g->v_pipes[aux_node - mblocks][count],
+			aux_node, *(p++), 0);
+    //    oc_delete_n_edge(g, aux_node, *(p++), 0);
+
+  }
 }
 
 
@@ -371,30 +459,32 @@ int oc_cascade(oc_graph *g, int node) {
 
   int mblocks  = g->mblocks;
   int coblocks = g->coblocks;
-  oc_uni_block *p;
+  oc_n_edge_ring *ring, *p;
   int to;
 
   assert(node < coblocks);
 
   OC_DEBUG && fprintf(stdout, "Cascading from node %d:\n", node);
 
-  p = g->n_edges[node];
+  assert ((g->n_rings + node) != NULL);
+
+  p = (ring = g->n_rings + node)->right;
 
   // update unsolved edge count and push target to pending
-  while (p != NULL) {
-    to = p->b.value;
+  while (p != ring) {
+    to = p->upper;
     assert(to != node);
 
     if (OC_DEBUG) {
       fprintf(stdout, "  pending link %d\n", to);
-      printf("Decrementing edge_count for block %d\n", to);
+      printf("Decrementing v_count for block %d\n", to);
     }
 
-    assert(g->edge_count[to - mblocks]);
-    if (--(g->edge_count[to - mblocks]) < 2)
+    assert(g->v_count[to - mblocks]);
+    if (--(g->v_count[to - mblocks]) < 2)
       if (NULL == oc_push_pending(g, to))
 	return -1;
-    p = p->a.next;
+    p = p->right;
   }
   return 0;
 }
@@ -479,77 +569,22 @@ void oc_push_solved(oc_uni_block *pnode,
   *ptail = pnode;
 }
 
-
-// helper function to delete an up edge
-void oc_delete_n_edge (oc_graph *g, int upper, int lower, int decrement) {
-
-  oc_uni_block **pp, *p;
-  //   pp       is the address of the prior pointer
-  //  *pp       is the value of the pointer itself
-  // **pp       is the thing pointed at (an oc_uni_block)
-  // (*pp)->foo is a member of the oc_uni_block
-
-  int mblocks = g->mblocks;
-
-#ifdef INSTRUMENT
-  int hops = 0;
-  ++m.delete_n_calls;
-#endif
-
-  assert(upper > lower);
-  assert(upper >= mblocks);
-
-  OC_DEBUG && printf("Deleting n edge from %d up to %d\n", lower, upper);
-
-  // Update the unsolved count first
-  if (decrement) {
-    OC_DEBUG && printf("Decrementing edge_count for block %d\n", upper);
-    assert(g->edge_count[upper - g->mblocks]);
-    --(g->edge_count[upper - g->mblocks]);
-  }
-
-
-  // Find and remove upper from n_edges linked list
-  pp = g->n_edges + lower;
-  while (NULL != (p = *pp)) {
-    if (p->b.value == upper) {
-      *pp = p->a.next;
-#ifdef INSTRUMENT
-      m.delete_n_seek_length += hops;
-      if (hops > m.delete_n_max_seek) m.delete_n_max_seek = hops;
-#endif
-      free_block(p);
-      return;
-    }
-    pp = (oc_uni_block *) &(p->a.next);
-#ifdef INSTRUMENT
-    ++hops;
-#endif
-  }
-
-  // we shouldn't get here
-  assert (0 == "up edge didn't exist");
-
-  // Alternatively, turn the above into a warning
-  //  fprintf(stdout, "oc_delete_n_edge: up edge %d -> %d didn't exist\n",
-  //  lower, upper);
-
-}
-
 // helper function to delete edges from a solved aux or check node
 void oc_decommission_node (oc_graph *g, int node) {
 
   int *down, upper, lower, i;
   int mblocks = g->mblocks;
+  oc_n_edge_ring **pipes;
 
   assert(node >= mblocks);
 
-  //  printf("Clearing edge_count for node %d\n", node);
-  //  g->edge_count[node - mblocks] = 0;
+  //  printf("Clearing v_count for node %d\n", node);
+  //  g->v_count[node - mblocks] = 0;
 
   down = g->v_edges[node - mblocks];
   g->v_edges   [node - mblocks] = NULL;
 
+  pipes = g->v_pipes[node - mblocks];
 
   if (NULL == down) return;	// nodes may be decommissioned twice
 
@@ -559,7 +594,8 @@ void oc_decommission_node (oc_graph *g, int node) {
   }
 
   for (i = down[0]; i > 0; --i) {
-    oc_delete_n_edge (g, node, down[i], 0);
+    oc_delete_lower_end (g, pipes[i], node, down[i], 0);
+    //    oc_delete_n_edge (g, node, down[i], 0);
   }
   free(down);
 }
@@ -642,7 +678,7 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 
     OC_DEBUG && fprintf(stdout, "\nStarting resolve at %d with ", from);
 
-    count_unsolved = graph->edge_count[from - mblocks];
+    count_unsolved = graph->v_count[from - mblocks];
 
     OC_DEBUG && fprintf(stdout, "%d unsolved edges\n", count_unsolved);
 
@@ -674,6 +710,8 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 
     } else if (count_unsolved == 1) {
 
+      oc_n_edge_ring **pipes;
+
       // Discard unsolved auxiliary blocks
       if ((from < coblocks) && !graph->solved[from])
 	goto discard;
@@ -684,6 +722,9 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
       // many elements will be in it.
       ep = graph->v_edges[from - mblocks]; assert (ep != NULL);
       xor_count = *(ep++);	// number of v edges
+
+      pipes = graph->v_pipes[from - mblocks];
+      assert(pipes != NULL);
 
       // find the single solved edge
       assert(to =  -1);
@@ -700,7 +741,17 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
       *ep = graph->v_edges[from - mblocks][xor_count];
             graph->v_edges[from - mblocks][0]        = xor_count - 1;
 
-      oc_delete_n_edge(graph, from, to, 1);
+
+      OC_DEBUG && fprintf(stdout, "Before shuffle ...\n");
+      
+      OC_DEBUG && fprintf(stdout, "i=%d, xor_count=%d ...\n", i, xor_count);
+	    
+      oc_delete_lower_end(graph, pipes[i + 1], from, to, 1);
+      //      oc_delete_n_edge(graph, from, to, 1);
+
+      // also delete to from pipes
+      pipes[i + 1] = pipes[xor_count];
+
       if (to < mblocks)
 	assert(graph->xor_list[to] == NULL);
       if (NULL ==
