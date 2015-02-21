@@ -96,11 +96,9 @@ void oc_rng_advance(oc_rng_sha1 *rng) {
 
   assert((void*) rng != 0);
 
-  char temp[OC_RNG_BYTES];
-
-  SHA1(rng->current,OC_RNG_BYTES,temp);
-  memcpy(rng->current,temp,OC_RNG_BYTES);
-  
+  // use rng->current as both input and output (works fine according
+  // to run of compat program)
+  SHA1(rng->current,OC_RNG_BYTES,rng->current);
 }
 
 // Generate a random seed/uuid by reading from /dev/urandom.  This

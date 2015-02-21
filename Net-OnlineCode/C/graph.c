@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 1
+#define OC_DEBUG 0
 #define STEPPING 1
 #define INSTRUMENT 1
 
@@ -445,8 +445,10 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
 
   // delete reciprocal up edges
   count = *(p++);
-  while (count--) {
-    oc_delete_lower_end(g,g->v_pipes[aux_node - mblocks][count],
+  OC_DEBUG && fprintf(stdout, "There are %d solved down edges\n", count);
+
+  while (count) {
+    oc_delete_lower_end(g,g->v_pipes[aux_node - mblocks][count--],
 			aux_node, *(p++), 0);
     //    oc_delete_n_edge(g, aux_node, *(p++), 0);
 
