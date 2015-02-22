@@ -35,7 +35,7 @@ package Net::OnlineCode::Bones;
 
 
 # 
-sub new_bone {
+sub new {
   my ($class, $graph, $top, $nodes) = @_;
   my $bone = $nodes;
   my $unknowns = scalar(@$right_nodes);
@@ -62,12 +62,90 @@ sub new_bone {
   bless $bone, $class;
 }
 
+# Throw the caller a bone (ahem) if they want to construct the object
+# themself (useful in GraphDecoder constructor)
+sub bless {
+  my ($class, $object) = @_;
+
+  die "Bones: bless is a class method (call with ...::Bones->bless())\n"
+    if ref($class);
+
+  die "Net::OnlineCode::Bones::bless can only bless an ARRAY reference\n"
+    unless ref($object) eq "ARRAY";
+
+  warn "Bones got ARRAY: " . (join ", ", @$object) . "\n";
+
+  die "Net::OnlineCode::Bones::bless was given an incorrectly constructed array\n"
+    if scalar(@$object) == 0 or $object->[0] > scalar(@$object);
+
+  bless $object, $class;
+}
+
+
+# "Firm up" a bone by turning an unknown node from the left side of
+# the equation into a known one on the right side
+sub firm {
+  my ($bone, $index) = @_;
+  my $unknowns = $bone->[0]--;
+
+  @{$bone}[$index,$unknowns] = @{$bone}[$unknowns,$index];
+}
+
+# The "top" and "bottom" methods only make sense at certain stages in
+# the graph evolution, and only if elements are shuffled in the
+# correct order with firm() above.
+#
+# To explain, first note the general evolution of bones. They start with:
+#
+# [list of unknown nodes] <- [zero or one known node(s)]
+#
+# In the case of check nodes, there will be one node on the right,
+# whereas aux nodes are initially unknown so the list on the right is
+# empty.
+#
+# We want to evolve the lists into the form:
+#
+# [one unknown node] <- [list of known nodes]
+#
+# For check nodes that undergo the propagation rule, there is no
+# problem: we go from the first form into a final form:
+#
+# [one "bottom" aux/msg node] <- [ known nodes ... "top" check node ]
+#
+# This is guaranteed because:
+#
+# * the check node was always at the end of the list and can never
+#   be shuffled elsewhere (firm() only shuffles the left side)
+# * the propagation rule always ends with just a single node on the
+#   left, which is the "bottom" of the edge
+# 
+# In the case of bones leading down from auxiliary nodes, however,
+# there are two complications:
+#
+# * the aux node itself starts as being unknown
+# * we can still apply the propagation rule even if the aux node is
+#   unknown
+#
+# To preserve the [bottom ... top] format, it is essential that during
+# the propagation rule, the auxiliary node is the first element that
+# is moved from the unknown side to the known side.
+# 
+
 # The "top" node is the number of the check or aux block where the
 # bone was first created. It's always the last value of the list
 sub top_node {
   my $bone = shift;
 
-  return $bone->[$#bone];  
+  return $bone->[scalar(@$bone)];  
+}
+
+# The "bottom" node will shuffle to the start of the list of unknown
+# blocks (call only when there is just a single unknown left)
+sub bottom_node {
+  my $bone = shift;
+
+  die "Bones: multiple bottom nodes exist\n" if $bone->[0] > 1;
+  return $bone->[1];
 }
 
 # how many unknowns on left side?
@@ -76,9 +154,16 @@ sub unknowns {
   return $bone->[0];
 }
 
+# how many knowns on right side?
+sub knowns {
+  my $bone = shift;
+  return @$bone - $bone->[0];
+}
+
+
 # For extracting the actual known or unknown elements, rather than
 # return a list or spliced part of it, return the range of the knowns
-# part of the array for the caller to iterate over.
+# part of the array for the caller to iterate over. (more efficient)
 #
 # Both the following subs return an inclusive range [first, last]
 # that's suitable for iterating over with for ($first .. $last)
@@ -86,23 +171,13 @@ sub unknowns {
 
 sub knowns_range {
   my $bone = shift;
-  return ($bone->[0] + 1, $#bone); 
+  return ($bone->[0] + 1, scalar(@$bone)); 
 }
 
 # unknowns_range can return [1, 0] if there are no unknowns. Beware!
 sub unknowns_range {
   my $bone = shift;
   return (1, $bone->[0]); 
-}
-
-
-# "Firm up" a bone by turning a node from the left side of the
-# equation into a newly-known one on the right side
-sub firm_bone {
-  my ($bone, $index) = @_;
-  my $unknowns = $bone->[0]--;
-
-  @{$bone}[$index,$unknowns] = @{$bone}[$unknowns,$index];
 }
 
 # scan the list of unknowns on the left hand side to see if one is
@@ -114,6 +189,24 @@ sub find_known {
     return $_ if $graph->{unknowns}->[$_] == 0;
   }
   return undef;
+}
+
+# "pretty printer": output in the form "[unknowns] <- [knowns]"
+sub pp {
+
+  my $bone = shift;
+  my ($s, $min, $max) = ("[");
+
+  ($min, $max) = $bone->unknowns_range;
+  $s.= join ", ", map { $bone->[$_] } ($min .. $max);
+
+  $s.= "] <- [";
+
+  ($min, $max) = $bone->knowns_range;
+  $s.= join ", ", map { $bone->[$_] } ($min .. $max);
+
+  return $s . "]";
+
 }
 
 1;

@@ -14,6 +14,8 @@ use constant TRACE => 0;
 use constant ASSERT => 1;
 use constant STEPPING => 1;
 
+use Net::OnlineCode::Bones;
+
 # Implements a data structure for decoding the bipartite graph (not
 # needed for encoding). Note that this does not store Block IDs or any
 # actual block data and, consequently, does not do any XORs. Those
@@ -130,7 +132,6 @@ sub new {
      mblocks    => $mblocks,
      ablocks    => $ablocks,
      coblocks   => $mblocks + $ablocks, # "composite"
-#     edges          => [],	# stores both check, aux block mappings
 
      # Replace single edges list with lists of v_edges (down) and
      # n_egdes (up). Up edges will continue to be tracked as a list of
@@ -141,12 +142,23 @@ sub new {
      # aux blocks (since message blocks have no down edges)
      v_edges        => [],	# down: mnemonic "v" points down
      n_edges        => [],	# up: mnemonic "n" is like upside-down "v"
+     xor_list       => [],
+
+     # Edges will be replaced again, this time with "bones", which are
+     # a combination of old v_edges and xor_lists. The top and bottom
+     # structures store links to the bones objects.
+     top            => [],	# from aux/check
+     bottom         => [],	# to message/aux
 
      edge_count     => [],	# count unsolved "v" edges (aux, check only)
      edge_count_x   => [],	# "transparent" edge count (check only)
      solved         => [],
+
+     # edge_count and solved arrays will be replaced with a single
+     # unknowns array that contains a count of unknown component nodes
+     unknowns       => [],
+
      nodes          => $mblocks + $ablocks, # running count
-     xor_list       => [],
      unresolved     => [],      # queue of nodes needing resolution
 
      unsolved_count => $mblocks,# count unsolved message blocks
@@ -162,6 +174,7 @@ sub new {
     $self->{xor_list} ->[$i] = [];
     push @{$self->{n_edges}}, {};
     push @{$self->{v_edges}}, [] if $i >= $mblocks;
+    push @{$self->{bottom}}, {}; # hash, like n_edges
   }
 
   # set up edge structure (convert from auxlist's list of lists)
@@ -174,6 +187,35 @@ sub new {
     push @{$self->{v_edges}->[$i-$mblocks]}, @{$auxlist->[$i]}
   }
 
+  # Set up auxiliary mapping in terms of bones
+  for my $aux ($mblocks .. $mblocks + $ablocks - 1) {
+
+    # The top end aggregates several down links (like old v_edges)
+    my @down = @{$auxlist->[$aux]};
+    my $bone = [(1 + @down),  $aux, @down];
+    Net::OnlineCode::Bones->bless($bone);
+    $self->{top}->[$aux-$mblocks] = $bone;
+
+    # The links fan out at the bottom end
+    my ($first, $last) = $bone->unknowns_range;
+    for my $i ($first .. $last) {
+      my $msg = $bone->[$i];
+      $self->{bottom}->[$msg]->{$aux} = $bone;
+    }
+  }
+
+  # Set up unknown counts (1 + number of downward edges)
+  $self->{unknowns}=[ 1 x $mblocks ];
+  for my $aux (0 .. $ablocks - 1) {
+    push @{$self->{unknowns}}, 1 + $self->{top}->[$aux]->unknowns();
+  }
+
+  if (DEBUG) {
+    print "Auxiliary mapping expressed as bones:\n";
+    for my $aux (0 .. $ablocks - 1) {
+      print "  " . ($self->{top}->[$aux]->pp()) . "\n";
+    }
+  }
 
   # set up edge counts for aux blocks
   for my $i (0 .. $ablocks - 1) {
