@@ -46,12 +46,12 @@ sub new {
   die "Bones: refusing to create a bone with empty node list\n"
     unless $unknowns;
 
-  print "new bone $top with list @$nodes\n";
+  #print "new bone $top with list @$nodes\n";
 
   unshift @$bone, $unknowns;	# count unknowns
   push    @$bone, $top;		# add "top" node to knowns
 
-  print "bone after unshift/push: @$nodes\n";
+  #print "bone after unshift/push: @$nodes\n";
 
   my $index = 1;
 

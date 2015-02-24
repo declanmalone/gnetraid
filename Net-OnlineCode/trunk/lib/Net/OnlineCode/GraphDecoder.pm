@@ -622,7 +622,7 @@ sub resolve {
 
     if (DEBUG) {
       my ($type, $status) = ("auxiliary", "unsolved");
-      $type   = "message" if $from < $mblocks;
+      $type   = "message" if $to < $mblocks;
       $status = "solved"  if $self->{solution}->[$to];
 
       # Now we know the 'to' node:
@@ -654,7 +654,6 @@ sub resolve {
 	}
       }
 
-
       # We might be solving an unsolved aux node that has already had
       # the propagation rule applied, or be solving a message node
       # that has such an aux block as a parent. I'll handle both cases
@@ -673,7 +672,18 @@ sub resolve {
 	  print "Extra cascade from message $lower_msg\n" if DEBUG;
 	  push @newly_solved, $lower_bone;
 	  delete $self->{bottom}->[$lower_msg]->{$to};
-	  push @cascades, $lower_msg
+	  push @cascades, $lower_msg;
+
+	  if ($to < $mblocks) {
+	    print "Solved message block $to completely\n" if DEBUG;
+	    unless (--($self->{unsolved_count})) {
+	      $self->{done} = 1;
+	      # comment out next two lines to continue decoding just in
+	      # case there's a bug later
+	      @$pending = ();
+	      last;                 # finish searching
+	    }
+	  }
 
 	} else {
 	  # If the aux node didn't already trigger propagation rule,
@@ -682,6 +692,17 @@ sub resolve {
 	}
 
       } else {
+
+	if ($to < $mblocks) {
+	  print "Solved message block $to completely\n" if DEBUG;
+	  unless (--($self->{unsolved_count})) {
+	    $self->{done} = 1;
+	    # comment out next two lines to continue decoding just in
+	    # case there's a bug later
+	    @$pending = ();
+	    last;                 # finish searching
+	  }
+	}
 
 	# We already found the parent nodes of this message node;
 	# check if any of them is an unsolved aux node that's we've
@@ -715,6 +736,9 @@ sub resolve {
       # 
 
     }
+
+    
+
 
     # Do all the pending cascades to higher nodes
     do {

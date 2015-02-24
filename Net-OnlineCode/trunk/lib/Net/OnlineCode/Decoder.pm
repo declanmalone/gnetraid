@@ -7,6 +7,7 @@ use Carp;
 
 use Net::OnlineCode;
 use Net::OnlineCode::GraphDecoder;
+use Net::OnlineCode::Bones;
 
 require Exporter;
 
@@ -18,7 +19,7 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 
 sub new {
 
@@ -96,15 +97,31 @@ sub resolve {
 # flags.
 sub expansion {
 
-  my ($self, $node) = @_;
+  my ($self, $bone_or_node) = @_;
+
+  my ($bone, $node);
+
+  if (ref($bone_or_node)) {
+    $bone = $bone_or_node;
+    $node = $bone->[1];
+  } else {
+    $node = $bone_or_node;
+    $bone = $self->{graph}->{solution}->[$node];
+  }
 
   # pull out frequently-used variables (using hash slice)
   my ($expand_aux,$expand_msg) = @{$self}{"expand_aux","expand_msg"};
   my ($mblocks,$coblocks)      = @{$self}{"mblocks","coblocks"};
 
+
   # Stage 1: collect list of nodes in the expansion, honouring flags
-  my ($in,$out,$expanded,$done) =
-    ($self->{graph}->{xor_list}->[$node],[],0,0);
+  my ($min, $max) = $bone->knowns_range;
+  my $in = [ @{$bone}[$min .. $max] ];
+  my ($out,$expanded,$done) = ([],0,0);
+
+  print "Expander got initial bone " . $bone->pp . "\n";
+  print "It has known range of [$min,$max]\n";
+  print "The values are " . (join ", ", @{$bone}[$min .. $max]) . "\n";
 
   if (DEBUG) {
     print "Expansion: node ${node}'s input list is " . (join " ", @$in) . "\n";
@@ -119,10 +136,14 @@ sub expansion {
     for my $i (@$in) {
       if ($expand_msg and $i < $mblocks) {
         ++$expanded;
-        push @$out, @{$self->{graph}->{xor_list}->[$i]};
+	$bone = $self->{solution}->[$i];
+	($min, $max) = $bone->knowns_range;
+        push @$out, ($bone->[$min .. $max]);
       } elsif ($expand_aux and $i >= $mblocks and $i < $coblocks) {
         ++$expanded;
-        push @$out, @{$self->{graph}->{xor_list}->[$i]};
+	$bone = $self->{solution}->[$i];
+	($min, $max) = $bone->knowns_range;
+        push @$out, ($bone->[$min .. $max]);
       } else {
         push @$out, $i;
       }

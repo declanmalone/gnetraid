@@ -208,9 +208,6 @@ until ($done) {
     ($done,@decoded) = $dec->resolve;
     last unless @decoded;
 
-    # right now I don't have a way to check that the check block was
-    # composed the same was as in the decoder. That information is
-    # stored in the decoder's graph object, though.
 
     print "This checkblock solved " . scalar(@decoded) . " composite block(s):\n";
     foreach (@decoded) { print "  " . $_->pp . "\n"; }
@@ -218,11 +215,13 @@ until ($done) {
 
     foreach my $decoded_block (@decoded) {
 
+      my $decoded = $decoded_block->[1];
+
       my @dec_xor_list = $dec->expansion($decoded_block);
 
-      print "\nDecoded block $decoded_block is composed of: ",
+      print "\nDecoded block $decoded is composed of: ",
 	(join ", ", @dec_xor_list) . "\n";
-      die "Decoded message block $decoded_block had empty XOR list\n"
+      die "Decoded message block $decoded had empty XOR list\n"
 	unless @dec_xor_list;
 
       my $block = "\0" x $blksiz;
@@ -235,33 +234,33 @@ until ($done) {
 	  if ($dec_expand_msg) {
 	    die "FATAL: codec: got message block $i with expand_msg set\n";
 	  }
-	  print "DECODER: XORing block $i (message) into $decoded_block\n";
+	  print "DECODER: XORing block $i (message) into $decoded\n";
 	  xor_strings(\$block, $decoded_mblocks[$i]);
 
 	} elsif ($i >= $coblocks) { # check block
 
 	  print "DECODER: XORing block $i (check #" .
 	    ($i - $coblocks) .
-	      ") into $decoded_block\n";
+	      ") into $decoded\n";
 	  xor_strings(\$block, $check_blocks[$i - $coblocks]);
 
 	} else {			# auxiliary block
 	  if ($dec_expand_aux) {
 	    die "FATAL: codec: got aux block $i with expand_aux set\n";
 	  }
-	  print "DECODER: XORing block $i (auxiliary) into $decoded_block\n";
+	  print "DECODER: XORing block $i (auxiliary) into $decoded\n";
 	  xor_strings(\$block, $decoded_ablocks[$i - $mblocks]);
 	}
       }
 
       # save newly-decoded message/aux block
-      if ($decoded_block < $mblocks) {
-	print "Decoded block $decoded_block (message): '$block'\n";
-	$decoded_mblocks[$decoded_block] = $block;
+      if ($decoded < $mblocks) {
+	print "Decoded block $decoded (message): '$block'\n";
+	$decoded_mblocks[$decoded] = $block;
       } else {
-	print "Decoded block $decoded_block (auxiliary): ";
+	print "Decoded block $decoded (auxiliary): ";
 	print_sum($block, $blksiz, "(signature ", ")\n");
-	$decoded_ablocks[$decoded_block - $mblocks] = $block;
+	$decoded_ablocks[$decoded - $mblocks] = $block;
       }
     }
     last if $done;		# escape inner loop
