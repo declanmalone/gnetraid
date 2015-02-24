@@ -31,7 +31,7 @@ sub mark_as_unsolved {
   my ($self,$node) = @_;
 
   print "Marking block $node as unsolved\n" if DEBUG;
-  $self->{solved}->[$node] = 0;
+  $self->{solution}->[$node] = 0;
 }
 
 sub mark_as_solved {
@@ -39,7 +39,7 @@ sub mark_as_solved {
 
   print "Marking block $node as solved\n" if DEBUG;
 
-  $self->{solved}->[$node] = 1;
+  $self->{solution}->[$node] = 1;
 }
 
 
@@ -149,6 +149,7 @@ sub new {
      # structures store links to the bones objects.
      top            => [],	# from aux/check
      bottom         => [],	# to message/aux
+     solution       => [],      # message/aux; will be a bone
 
      edge_count     => [],	# count unsolved "v" edges (aux, check only)
      edge_count_x   => [],	# "transparent" edge count (check only)
@@ -157,6 +158,7 @@ sub new {
      # edge_count and solved arrays will be replaced with a single
      # unknowns array that contains a count of unknown component nodes
      unknowns       => [],
+     
 
      nodes          => $mblocks + $ablocks, # running count
      unresolved     => [],      # queue of nodes needing resolution
@@ -197,17 +199,12 @@ sub new {
     $self->{top}->[$aux-$mblocks] = $bone;
 
     # The links fan out at the bottom end
-    my ($first, $last) = $bone->unknowns_range;
-    for my $i ($first .. $last) {
-      my $msg = $bone->[$i];
+    for my $msg (@down) {
       $self->{bottom}->[$msg]->{$aux} = $bone;
     }
-  }
 
-  # Set up unknown counts (1 + number of downward edges)
-  $self->{unknowns}=[ 1 x $mblocks ];
-  for my $aux (0 .. $ablocks - 1) {
-    push @{$self->{unknowns}}, 1 + $self->{top}->[$aux]->unknowns();
+    # Set count of unknown down edges
+    push @{$self->{unknowns}}, scalar(@down);
   }
 
   if (DEBUG) {
@@ -260,30 +257,15 @@ sub is_check {
 sub add_check_block {
   my $self = shift;
   my $nodelist = shift;
+  my $mblocks = $self->{mblocks};
 
   unless (ref($nodelist) eq "ARRAY") {
     croak ref($self) . "->add_check_block: nodelist should be a listref!\n";
   }
 
-  # The original code that I was using here would create a new entry
-  # in the graph structure regardless of whether the check block
-  # actually added any new information or not. Later, I modified this
-  # to only add checkblocks that add new info to the graph.
-  # Unfortunately, that led to a (fairly trivial) bug in my codec code
-  # where it failed to check the return value of
-  # Decoder->accept_check_block and got confused about its check block
-  # array.
-  #
-  # Given the choice of making more work for the calling program (and
-  # making them more error-prone) and using slightly more memory, I've
-  # decided that the latter option is best. So this routine will now
-  # revert to the original method and always add a check block,
-  # regardless of whether it adds new information or not.
-
   my $node = $self->{nodes}++;
 
   # set up new array elements
-  #push @{$self->{xor_hash}}, { $node => undef };
   push @{$self->{xor_list}}, [$node];
   $self->mark_as_solved($node);
   push @{$self->{v_edges}}, [];
@@ -292,9 +274,21 @@ sub add_check_block {
   my @solved = ();		# ditto
   my $unsolved_count = 0;
 
+  # Bones version handles edges and xor list in one list.
+  # The constructor also tests whether elements are solved/unsolved
+  my $bone = Net::OnlineCode::Bones->new($self, $node, $nodelist);
+  die "add_check_block: failed to create bone\n" unless ref($bone);
+
+  $self->{unknowns}->[$node-$mblocks] = $bone->unknowns;
+  $self->{top}->     [$node-$mblocks] = $bone;
+
+  print "Created new bone: " . $bone->pp . "\n";
+
+  # Old version sets up v_edges, xor_list, solved and unsolved_count
+
   # set up graph edges and/or xor list
   foreach my $i (@$nodelist) {
-    if ($self->{solved}->[$i]) {
+    if ($self->{solution}->[$i]) {
       ++$solved;
       push @solved, $i;
       # solved, so add node $i to our xor list
@@ -316,8 +310,6 @@ sub add_check_block {
 
   if (DEBUG) {
     print "New check block $node: " . (join " ", @$nodelist) . "\n";
-    print "of which, there are $solved solved node(s): " . 
-      (join " ", @solved) . "\n";
   }
 
   # mark node as pending resolution
@@ -404,7 +396,7 @@ sub decommission_node {
 }
 
 # Work down from a check or auxiliary block
-sub resolve {
+sub resolve_old {
 
   # now doesn't take any arguments (uses unresolved queue instead)
   my ($self, @junk) = @_;
@@ -441,7 +433,7 @@ sub resolve {
 
     my ($from, $to) = (shift @$pending);
 
-    unless ($self->is_auxiliary($from) or $self->{solved}->[$from]) {
+    unless ($self->is_auxiliary($from) or $self->{solution}->[$from]) {
       print "skipping unproductive node $from\n" if DEBUG;
       next;
     }
@@ -463,7 +455,7 @@ sub resolve {
 
     if ($count_unsolved == 0) {
 
-      if ($self->is_check($from) or $self->{solved}->[$from]) {
+      if ($self->is_check($from) or $self->{solution}->[$from]) {
 
 	# This node can't solve anything else: decommission it
 
@@ -482,14 +474,14 @@ sub resolve {
 
     } elsif ($count_unsolved == 1) {
 
-      next unless $self->{solved}->[$from];
+      next unless $self->{solution}->[$from];
 
       # Propagation rule matched; separate solved from unsolved
 
       # TODO: this whole section (up to "Update global structure") can
       # be rewritten to only scan @lower_nodes list once
       for my $i (@lower_nodes) {
-	if ($self->{solved}->[$i]) {
+	if ($self->{solution}->[$i]) {
 	  push @solved_nodes, $i;
 	} else {
 	  $to = $i; 
@@ -544,6 +536,207 @@ sub resolve {
   }
 
   return ($self->{done}, @newly_solved);
+
+}
+
+sub resolve {
+
+  my ($self, @junk) = @_;
+
+  if (ASSERT and scalar(@junk)) {
+    die "resolve doesn't take arguments\n";
+  }
+
+  my $pending = $self->{unresolved};
+  unless (@$pending) {
+    return ($self->{done});
+  }
+
+  my $start_node = $pending->[0];
+  if (ASSERT and $start_node < $self->{mblocks}) {
+    croak ref($self) . "->resolve: start node '$start_node' is a message block!\n";
+  }
+
+  my @newly_solved = ();
+  my $mblocks  = $self->{mblocks};
+  my $ablocks  = $self->{ablocks};
+  my $coblocks = $self->{coblocks};
+
+  unless ($self->{unsolved_count}) {
+    $self->{done}=1;
+    return (1);
+  }
+
+  while (@$pending) {
+
+    my ($from, $toindex, $to) = (shift @$pending);
+
+    my @solved_nodes = ();
+    my @unsolved_nodes;
+    my $bone =  $self->{top}->[$from - $mblocks];
+    my $unknowns = $self->{unknowns}->[$from - $mblocks];
+
+    if (DEBUG) {
+      print "\nStarting resolve at $from: " . $bone->pp . "\n";
+    }
+
+    next unless $unknowns == 1;
+
+    # Propagation rule matched (one unknown down edge)
+
+    # There are two cases to consider:
+    #
+    # * this is an unsolved aux block (we propagate, but end up with
+    #   two unknowns in the bone)
+    #
+    # * this is a check block or a solved aux block (there will be a
+    #   single unknown and we can cascade)
+
+    # We can between distinguish the two cases based on whether this
+    # node is solved:
+
+    my $solved = $self->{solution}->[$from];
+
+    # We may need to add to the list of nodes that we need to
+    # cascade up from:
+    my @cascades = ();
+    my @upper    = ();		# upper nodes for first cascade
+
+    if (DEBUG) {
+      my ($type, $status) = ("check", "unsolved");
+      $type   = "auxiliary" if $from < $coblocks;
+      $status = "solved"    if $solved;
+
+      # We don't know the 'to' node yet; just print what we do know
+      print "Propagating from $status $type node $from to ";
+    }
+
+    # pull out the unknown node
+    if ($solved) {
+      $to = $bone->one_unknown($self);
+    } else {
+      $to = $bone->two_unknowns($self);
+      die "Second unknown was not this aux block\n" 
+	  unless ASSERT and $bone->[2] == $from;
+    }
+
+    if (DEBUG) {
+      my ($type, $status) = ("auxiliary", "unsolved");
+      $type   = "message" if $from < $mblocks;
+      $status = "solved"  if $self->{solution}->[$to];
+
+      # Now we know the 'to' node:
+      print "$status $type node $to\n";
+    }
+
+    # delete reciprocal links for all known edges
+    my ($min, $max) = $bone->knowns_range;
+    for ($min .. $max) {
+      delete $self->{bottom}->[$bone->[$_]]->{$from};
+    }
+
+    # Different logic for two cases
+    if ($solved) {
+
+      # mark child node as solved
+      $self->{solution}->[$to] = $bone;
+      push @newly_solved, $bone;
+
+      # Remember which nodes to cascade to
+      @upper = keys %{$self->{bottom}->[$to]};
+
+      if (DEBUG) {
+	if (@upper > 1) {
+	  print "Solved node $to cascades to nodes " . 
+	    (join " ", @upper) . "\n";
+	} else {
+	  print "Solved node $to has no cascade\n";
+	}
+      }
+
+
+      # We might be solving an unsolved aux node that has already had
+      # the propagation rule applied, or be solving a message node
+      # that has such an aux block as a parent. I'll handle both cases
+      # here.
+
+      if ($to >= $mblocks) {
+
+	my $lower_bone = $self->{top}->[$to - $mblocks];
+	if ($lower_bone->unknowns == 2) {
+	
+	  # previous propagation rule put unknowns in msg, aux order
+	  my $lower_msg = $lower_bone->[1];
+	  $lower_bone->[0] = 1;
+	  $self->{solution}->[$lower_msg] = $lower_bone;
+
+	  print "Extra cascade from message $lower_msg\n" if DEBUG;
+	  push @newly_solved, $lower_bone;
+	  delete $self->{bottom}->[$lower_msg]->{$to};
+	  push @cascades, $lower_msg
+
+	} else {
+	  # If the aux node didn't already trigger propagation rule,
+	  # then maybe it will now?
+	  push @$pending, $to;	# ???
+	}
+
+      } else {
+
+	# We already found the parent nodes of this message node;
+	# check if any of them is an unsolved aux node that's we've
+	# already applied the propagation rule to (we may get multiple
+	# hits)
+
+	for (@upper) {
+	  next if $_ >= $coblocks or $self->{solution}->[$_];
+
+	  my $lower_bone = $self->{bottom}->[$to]->{$_}; 
+	  next unless $lower_bone->unknowns == 2;
+
+	  # Message node $to solves the aux node $_
+
+	  # Fix up order (aux, msg) and unsolved count (1)
+	  @{$lower_bone}[0..2] = (1, $_, $to);
+
+	  print "Extra cascade from aux $_\n" if DEBUG;
+
+	  $self->{solution}->[$_] = $lower_bone;
+	  delete $self->{bottom}->[$to]->{$_};
+	  push @newly_solved, $lower_bone;
+	  push @cascades, $_;
+
+	}
+      }
+      
+    } else {
+
+
+      # 
+
+    }
+
+    # Do all the pending cascades to higher nodes
+    do {
+      foreach (@upper) {
+	push @$pending, $_;
+	die "Unknown edge count for node $_ went negative\n"
+	  if ASSERT and 0 == ($self->{unknowns}->[$_ - $mblocks])--;
+      }
+
+      @upper = ();
+      if (@cascades) {
+	$to = shift @cascades;
+	@upper = keys %{$self->{bottom}->[$to]};
+      }
+    } while (@upper);
+
+    return ($self->{done}, @newly_solved)
+      if (@newly_solved and STEPPING)
+  }
+
+  return ($self->{done}, @newly_solved);
+
 
 }
 

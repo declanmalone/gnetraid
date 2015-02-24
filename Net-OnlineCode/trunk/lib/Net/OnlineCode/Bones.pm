@@ -1,5 +1,8 @@
 package Net::OnlineCode::Bones;
 
+use strict;
+use warnings;
+
 # "Bones" (or "bundles of node elements") are one of the building
 # blocks of the Online Codes decoding algorithm.
 #
@@ -38,21 +41,27 @@ package Net::OnlineCode::Bones;
 sub new {
   my ($class, $graph, $top, $nodes) = @_;
   my $bone = $nodes;
-  my $unknowns = scalar(@$right_nodes);
+  my $unknowns = scalar(@$nodes);
 
   die "Bones: refusing to create a bone with empty node list\n"
     unless $unknowns;
 
+  print "new bone $top with list @$nodes\n";
+
   unshift @$bone, $unknowns;	# count unknowns
   push    @$bone, $top;		# add "top" node to knowns
+
+  print "bone after unshift/push: @$nodes\n";
 
   my $index = 1;
 
   while ($index <= $unknowns) {
-    if ($graph->{unknowns}->[$bone->[$index]] == 0) {
+    if ($graph->{solved}->[$bone->[$index]]) {
+#      print "swapping bone known bone index $index with $unknowns\n";
       @{$bone}[$index,$unknowns] = @{$bone}[$unknowns,$index];
       --$unknowns;
     } else {
+#      print "bone index $index is not known\n";
       ++$index;
     }
   }    
@@ -73,7 +82,7 @@ sub bless {
   die "Net::OnlineCode::Bones::bless can only bless an ARRAY reference\n"
     unless ref($object) eq "ARRAY";
 
-  warn "Bones got ARRAY: " . (join ", ", @$object) . "\n";
+#  warn "Bones got ARRAY to bless: " . (join ", ", @$object) . "\n";
 
   die "Net::OnlineCode::Bones::bless was given an incorrectly constructed array\n"
     if scalar(@$object) == 0 or $object->[0] > scalar(@$object);
@@ -133,7 +142,7 @@ sub firm {
 
 # The "top" node is the number of the check or aux block where the
 # bone was first created. It's always the last value of the list
-sub top_node {
+sub top {
   my $bone = shift;
 
   return $bone->[scalar(@$bone)];  
@@ -141,7 +150,7 @@ sub top_node {
 
 # The "bottom" node will shuffle to the start of the list of unknown
 # blocks (call only when there is just a single unknown left)
-sub bottom_node {
+sub bottom {
   my $bone = shift;
 
   die "Bones: multiple bottom nodes exist\n" if $bone->[0] > 1;
@@ -171,7 +180,7 @@ sub knowns {
 
 sub knowns_range {
   my $bone = shift;
-  return ($bone->[0] + 1, scalar(@$bone)); 
+  return ($bone->[0] + 1, scalar(@$bone) - 1); 
 }
 
 # unknowns_range can return [1, 0] if there are no unknowns. Beware!
@@ -180,15 +189,47 @@ sub unknowns_range {
   return (1, $bone->[0]); 
 }
 
-# scan the list of unknowns on the left hand side to see if one is
-# known
-sub find_known {
+# Find a single unknown, shift it to the start of the array and mark
+# all other nodes as known (used in propagation rule)
+sub one_unknown {
+
   my ($bone, $graph) = @_;
 
   for (1 .. $bone->[0]) {
-    return $_ if $graph->{unknowns}->[$_] == 0;
+    if (!$graph->{solved}->[$_]) {
+      @{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
+      $bone->[0] = 1;
+      return $bone->[1];
+    }
   }
-  return undef;
+  die "Bones: bone has no unknown node\n";
+}
+
+# We can use the propagation rule from an aux block to a message
+# block, but if the aux block itself is not solved, we end up with two
+# unknown values in the list. This routine takes the aux block number
+# and the single unknown down edge, marks both of them as unknown and
+# the rest as known.
+sub two_unknowns {
+  my ($bone, $graph)   = @_;
+  my ($index, $kindex) = (1,1);
+  my $unknowns         = $bone->[0];
+
+  while ($index <= $unknowns) {
+    if (!$graph->{solved}->[$_]) {
+      @{$bone}[$index,$kindex] = @{$bone}[$kindex,$index]
+	if $index != $kindex;
+      --$unknowns;
+      last if (++$kindex > 2);
+    }
+  }
+  die "Bones: didn't find two unknowns\n" unless $unknowns == 2;
+
+  # swap elments if needed so that message node is first
+  @{$bone}[1,2] = @{$bone}[2,1] if $bone->[1] > $bone->[2];
+ 
+  $bone->[0] = 2;
+  return $bone->[1];
 }
 
 # "pretty printer": output in the form "[unknowns] <- [knowns]"
@@ -197,13 +238,17 @@ sub pp {
   my $bone = shift;
   my ($s, $min, $max) = ("[");
 
+#  print "raw bone is ". (join ",", @$bone) . "\n";
+
   ($min, $max) = $bone->unknowns_range;
-  $s.= join ", ", map { $bone->[$_] } ($min .. $max);
+#  print "unknown range: [$min,$max]\n";
+  $s.= join ", ", map { $bone->[$_] } ($min .. $max) if $min <= $max;
 
   $s.= "] <- [";
 
   ($min, $max) = $bone->knowns_range;
-  $s.= join ", ", map { $bone->[$_] } ($min .. $max);
+#  print "known range: [$min,$max]\n";
+  $s.= join ", ", map { $bone->[$_] } ($min .. $max) if $min <= $max;
 
   return $s . "]";
 

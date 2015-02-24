@@ -9,6 +9,7 @@ use lib '../lib';
 use Net::OnlineCode::Encoder;
 use Net::OnlineCode::Decoder;
 use Net::OnlineCode::RNG;
+use Net::OnlineCode::Bones;
 use Digest::SHA qw(sha1);
 
 # export xor helper function names into our namespace
@@ -211,8 +212,8 @@ until ($done) {
     # composed the same was as in the decoder. That information is
     # stored in the decoder's graph object, though.
 
-    print "This checkblock solved " . scalar(@decoded) . " composite block(s) (";
-    print "". (join " ", @decoded) . ")\n";
+    print "This checkblock solved " . scalar(@decoded) . " composite block(s):\n";
+    foreach (@decoded) { print "  " . $_->pp . "\n"; }
     print "This solves the entire message\n" if $done;
 
     foreach my $decoded_block (@decoded) {
