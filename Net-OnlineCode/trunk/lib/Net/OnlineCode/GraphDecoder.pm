@@ -9,7 +9,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 use constant TRACE => 0;
 use constant ASSERT => 1;
 use constant STEPPING => 1;
@@ -304,6 +304,8 @@ sub resolve {
     my $unknowns = $self->{unknowns}->[$from - $mblocks];
     my $solved   = $self->{solution}->[$from];
 
+    next unless ref($bone);
+
     if (DEBUG) {
       print "\nStarting resolve at $from: " . $bone->pp .
 	" ($unknowns unknowns)\n";
@@ -327,23 +329,24 @@ sub resolve {
       }
 
       die "Aux rule: didn't have one unknown\n"
-	if ($from != $bone->one_unknown($self));
+	if ($from != $bone->one_unknown($from));
 
       $self->{solution}->[$from] = $bone;
 
       # delete all edges that point up to us
       ($min,$max) = $bone->knowns_range;
       for ($min .. $max) {
-	my $message = $bone->[$_];
+	my $lower = $bone->[$_];
 	die "Tried to delete non-existent up edge\n" if ASSERT and
-	  !exists($self->{bottom}->[$message]->{$from});
-	delete $self->{bottom}->[$message]->{$from};
+	  !exists($self->{bottom}->[$lower]->{$from});
+	delete $self->{bottom}->[$lower]->{$from};
       }
 
       $self->{top}->[$from - $mblocks] = undef;
       
       push @newly_solved, $bone;
       push @$pending, keys %{$self->{bottom}->[$from]};
+      cascade($self, $from);
 
     } elsif ($unknowns == 1) {
 
@@ -399,7 +402,7 @@ sub resolve {
 	print "Solved auxiliary block $to completely\n" if DEBUG;
 	push @$pending, $to;
       }
-      cascade($self, $to, \@newly_solved);
+      cascade($self, $to);
     }
 
     return ($self->{done}, @newly_solved)
