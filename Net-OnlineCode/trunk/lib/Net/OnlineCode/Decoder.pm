@@ -19,7 +19,7 @@ use vars qw(@ISA @EXPORT_OK @EXPORT %EXPORT_TAGS $VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 1;
+use constant DEBUG => 0;
 
 sub new {
 
@@ -119,11 +119,10 @@ sub expansion {
   my $in = [ @{$bone}[$min .. $max] ];
   my ($out,$expanded,$done) = ([],0,0);
 
-  print "Expander got initial bone " . $bone->pp . "\n";
-  print "It has known range of [$min,$max]\n";
-  print "The values are " . (join ", ", @{$bone}[$min .. $max]) . "\n";
-
   if (DEBUG) {
+    print "Expander got initial bone " . $bone->pp . "\n";
+    print "It has known range of [$min,$max]\n";
+    print "The values are " . (join ", ", @{$bone}[$min .. $max]) . "\n";
     print "Expansion: node ${node}'s input list is " . (join " ", @$in) . "\n";
   }
 

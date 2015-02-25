@@ -59,7 +59,7 @@ until ($done) {
     ($done,@A) =$o->resolve;
     last unless @A;
 
-    print $i . " ($done): solves " . (join (", ", @A)).  "\n";
+    print $i . " ($done): solves " . (join (", ", map { $_->[1]} @A)).  "\n";
 
     last if $done;
   }

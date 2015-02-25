@@ -56,7 +56,7 @@ sub new {
   my $index = 1;
 
   while ($index <= $unknowns) {
-    if ($graph->{solved}->[$bone->[$index]]) {
+    if ($graph->{solution}->[$bone->[$index]]) {
 #      print "swapping bone known bone index $index with $unknowns\n";
       @{$bone}[$index,$unknowns] = @{$bone}[$unknowns,$index];
       --$unknowns;
@@ -193,16 +193,41 @@ sub unknowns_range {
 # all other nodes as known (used in propagation rule)
 sub one_unknown {
 
-  my ($bone, $graph) = @_;
+  my ($bone, $node_or_graph) = @_;
 
-  for (1 .. $bone->[0]) {
-    if (!$graph->{solved}->[$_]) {
-      @{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
-      $bone->[0] = 1;
-      return $bone->[1];
+  my ($node, $graph);
+
+#  print "one_unknown: got bone " . $bone->pp . "\n";
+
+  if (ref($node_or_graph)) {
+
+    # If we were given a graph, we look up nodes in it to see if
+    # they're solved
+    $graph = $node_or_graph;
+    for (1 .. $bone->[0]) {
+#      print "Considering node $_\n";
+      if (!$graph->{solution}->[$bone->[$_]]) {
+	@{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
+	$bone->[0] = 1;
+	return $bone->[1];
+      }
     }
+    die "Bones: Bone has no unsolved nodes\n";
+
+  } else {
+
+    # If we were given a node number, we just scan the list to find it
+    
+    $node = $node_or_graph;
+    for (1 .. $bone->[0]) {
+      if ($node == $bone->[$_]) {
+	@{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
+	$bone->[0] = 1;
+	return $bone->[1];
+      }
+    }
+    die "Bones: Didn't find unsolved node $node\n";
   }
-  die "Bones: bone has no unknown node\n";
 }
 
 # We can use the propagation rule from an aux block to a message
@@ -215,20 +240,32 @@ sub two_unknowns {
   my ($index, $kindex) = (1,1);
   my $unknowns         = $bone->[0];
 
-  while ($index <= $unknowns) {
-    if (!$graph->{solved}->[$_]) {
+  print "two_unknowns: Looking for two unsolved in " . $bone->pp . 
+    " (had $unknowns unknowns)\n";
+
+  while ($index <= $unknowns + 1) {
+    my $node = $bone->[$index];
+    print "two_unknowns: Considering node $node at index $index\n";
+    if ($graph->{solution}->[$node]) {
+      print "two_unknowns: Node $node is solved; skipping\n";
+      --$unknowns;
+    } else {
+      print "two_unknowns: Node $node is unsolved; shuffling to position $kindex\n";
       @{$bone}[$index,$kindex] = @{$bone}[$kindex,$index]
 	if $index != $kindex;
-      --$unknowns;
-      last if (++$kindex > 2);
+      ++$kindex;
     }
+    ++$index;
   }
-  die "Bones: didn't find two unknowns\n" unless $unknowns == 2;
+  die "Bones: didn't find two unknowns\n" unless $kindex == 3;
 
   # swap elments if needed so that message node is first
   @{$bone}[1,2] = @{$bone}[2,1] if $bone->[1] > $bone->[2];
  
   $bone->[0] = 2;
+
+  print "two_unknowns: Final contents are " . $bone->pp . "\n";
+
   return $bone->[1];
 }
 
