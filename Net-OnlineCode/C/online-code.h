@@ -19,7 +19,7 @@
 //
 // PC (AMD Athlon X2, x86_64 2.2GHz)  ~31s           ~13s
 // ODROID X2 (ARMv7, 1.7GHz)          ~17s           ~15s
-// Raspberry Pi B (ARMv6 800MHz)      ~128s          ~116s
+// Raspberry Pi B (ARMv6 700MHz)      ~128s          ~116s
 //
 // These benchmarks were correct at time of this commit:
 //   edd970f23ed504781bd5f729a93e4b073823bb32
