@@ -8,18 +8,21 @@
 // macro below changes the routine so that it calculates the array to
 // be shuffled every time instead of using memcpy.
 //
-// It's quite possible that memcpy will be faster on some platforms or
-// compiler/libc combinations. For comparison, I tested on three
+// It's quite possible that memcpy will be faster on *some* platforms
+// or compiler/libc combinations. For comparison, I tested on three
 // platforms (all Linux/gcc/glibc).
 //
 // Running mindecoder -d 100000, no OC_DEBUG or profiling options set
 // and stdout directed to /dev/null:
 //
-// Machine                          with memcpy    without memcpy
-// 
-// PC (AMD Athlon X2, 2.2GHz)       ~31s           ~13s
-// ODROID X2 (ARMv7, 1.7GHz)        ~17s             
-// Raspberry Pi B (ARMv6 800MHz)    ~127s
+// Machine                            with memcpy    without memcpy
+//
+// PC (AMD Athlon X2, x86_64 2.2GHz)  ~31s           ~13s
+// ODROID X2 (ARMv7, 1.7GHz)          ~17s           ~15s
+// Raspberry Pi B (ARMv6 800MHz)      ~128s          ~116s
+//
+// These benchmarks were correct at time of this commit:
+//   edd970f23ed504781bd5f729a93e4b073823bb32
 
 #define OC_AVOID_MEMCPY
 
