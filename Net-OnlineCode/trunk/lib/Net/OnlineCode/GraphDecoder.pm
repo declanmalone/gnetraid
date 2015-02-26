@@ -345,7 +345,6 @@ sub resolve {
       $self->{top}->[$from - $mblocks] = undef;
       
       push @newly_solved, $bone;
-      push @$pending, keys %{$self->{bottom}->[$from]};
       cascade($self, $from);
 
     } elsif ($unknowns == 1) {

@@ -95,7 +95,11 @@ double *oc_codec_init_probdist(oc_codec *codec) {
 // elements are gathered at the end of it. A pointer to the start of
 // this area of the working array is returned.
 
+#ifdef OC_AVOID_MEMCPY
+int *oc_fisher_yates(int *src, int *dst, int start, int k, int n, oc_rng_sha1 *rng) {
+#else
 int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng) {
+#endif
 
   int i,tmp;
   unsigned j;
@@ -109,7 +113,13 @@ int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng) {
   assert(k > 0);
   assert(k <= n);
 
+#ifdef OC_AVOID_MEMCPY
+  tmp = n;
+  src = dst;
+  while (tmp--) *(src++) = start++;
+#else
   memcpy(dst, src, n * sizeof(int));
+#endif
 
   // algorithm gathers picks at the end of the array
   i=n;
@@ -159,15 +169,21 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 
   codec->auxiliary = map;
 
+#ifndef OC_AVOID_MEMCPY
   // initialise source array for Fisher-Yates shuffle (just once)
   p=src;
   for (i=0; i < ablocks; ++i) {
     *(p++) = mblocks + i;
   }
+#endif
 
   // attach each mblock to q ablocks
   for (i=0; i < mblocks; ++i) {
+#ifdef OC_AVOID_MEMCPY
+    p = oc_fisher_yates(src, dst, mblocks, q, ablocks, rng);
+#else
     p = oc_fisher_yates(src, dst, q, ablocks, rng);
+#endif
     for (j=0; j < q; ++j) {
       *(map++) = *(p++);
     }
@@ -226,7 +242,11 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
 
   // select 'degree' composite blocks ('src' array is assumed to be
   // initialised already)
+#ifdef OC_AVOID_MEMCPY
+  q = oc_fisher_yates(src, dst, 0, degree, coblocks, rng);
+#else
   q = oc_fisher_yates(src, dst, degree, coblocks, rng);
+#endif
 
   // save degree and list of blocks in our array
   *(p++) = degree;

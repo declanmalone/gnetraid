@@ -88,8 +88,10 @@ int oc_decoder_init(oc_decoder *dec, int mblocks, oc_rng_sha1 *rng,
     return super_flag & OC_FATAL_ERROR;
   }
 
+#ifndef OC_AVOID_MEMCPY
   // set up Fisher-Yates source array for check block selection
   oc_init_cblock_shuffle_source(&(dec->base));
+#endif
 
   // Create graph decoder
   if (oc_graph_init(&(dec->graph), &(dec->base), fudge)) {

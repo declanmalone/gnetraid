@@ -37,8 +37,11 @@ int main (int ac, char *av[]) {
   for (i = 0; i < 25; ++i)
     fisher_src[i] = i;
   for (i = 0; i < 10000; ++i) {
+#ifdef OC_AVOID_MEMCPY
+    list = oc_fisher_yates(fisher_src, fisher_dst, 0, 20, 25, &rng);
+#else
     list = oc_fisher_yates(fisher_src, fisher_dst, 20, 25, &rng);
-
+#endif
     for (j = 20; j ; --j) {
       printf ("%d%s", *(list++), (j==1) ? "\n" : ", ");
     }

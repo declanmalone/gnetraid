@@ -3,6 +3,26 @@
 #ifndef OC_ONLINE_CODE_H
 #define OC_ONLINE_CODE_H
 
+// Profiling with valgrind showed me that the memcpy in the
+// Fisher-Yates shuffle routine was taking a lot of time. Defining the
+// macro below changes the routine so that it calculates the array to
+// be shuffled every time instead of using memcpy.
+//
+// It's quite possible that memcpy will be faster on some platforms or
+// compiler/libc combinations. For comparison, I tested on three
+// platforms (all Linux/gcc/glibc).
+//
+// Running mindecoder -d 100000, no OC_DEBUG or profiling options set
+// and stdout directed to /dev/null:
+//
+// Machine                          with memcpy    without memcpy
+// 
+// PC (AMD Athlon X2, 2.2GHz)       ~31s           ~13s
+// ODROID X2 (ARMv7, 1.7GHz)        ~17s             
+// Raspberry Pi B (ARMv6 800MHz)    ~127s
+
+#define OC_AVOID_MEMCPY
+
 // #include "oc_encoder.h"
 // #include "oc_decoder.h"
 
@@ -64,7 +84,12 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...);
 double *oc_codec_init_probdist(oc_codec *codec);
 
 // Fisher-Yates shuffle routine
+#ifdef OC_AVOID_MEMCPY
+int *oc_fisher_yates(int *src, int *dst, int start, int k, int n, oc_rng_sha1 *rng);
+#else
 int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng);
+#endif
+
 
 // Create auxiliary map
 int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng);
