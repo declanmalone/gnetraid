@@ -7,7 +7,7 @@ use warnings;
 # do:
 #
 # * correctness (make sure that we have correct number of unique picks)
-# * distribution (chi-squared over n!/(n-p)! bins)
+# * distribution (chi-squared over n!/((n-p)!p!) bins)
 
 use lib '../lib';
 use Net::OnlineCode::Encoder;
