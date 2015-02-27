@@ -404,10 +404,10 @@ sub floyd {
   my ($j, $t) = ($n - $k);
   while ($j < $n) {
     $t = $rng->randint(0,$j);
-    if (!exists($set{$t})) {
-      $set{$t} = undef;
+    if (!exists($set{$t + $start})) {
+      $set{$t + $start} = undef;
     } else {
-      $set{$j} = undef;
+      $set{$j + $start} = undef;
     }
     ++$j;
   }
@@ -517,7 +517,9 @@ sub auxiliary_mapping {
   for my $msg (0 .. $mblocks - 1) {
     # list of all aux block indices
 
-    foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
+    # foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
+    # Use Floyd's algorithm instead of Fisher-Yates
+    foreach my $aux (floyd($rng, $mblocks, $ablocks, $q)) {
       $hashes[$aux]->{$msg}=undef;
       $hashes[$msg]->{$aux}=undef;
     }

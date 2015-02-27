@@ -152,7 +152,7 @@ sub rand {
     # unpack 5 32-bit words from the 160-bit SHA sum. Changed to
     # unpack using little-endian as this is more common (x86/arm
     # anyway)
-    my @uints = unpack "V5", $self->{current};
+    my @uints = unpack "V1", $self->{current};
 
     # We calculate the rand by max * uint/(max 32-bit int).
     while (@uints>=1) {
