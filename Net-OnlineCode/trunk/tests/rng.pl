@@ -84,8 +84,16 @@ for (1..$nkeys) {
   my $s = sprintf "%0.15f", $r1;
   print RANDOM "$s\n";
 
-  $s =~ s/^0\.(\d\d).*$/$1/;
+#  $s =~ s/^0\.(\d\d).*$/$1/;
+
+  # pick a different number to go in the bins
+  $s=$rng1->randint(0,99);
   $bins[$s]++;
+}
+
+# we shouldn't have any empty bins
+for (@bins) {
+  die "Empty bin\n" unless $_;
 }
 
 print "\nTesting RNG for cycles ($nkeys trials): ";
