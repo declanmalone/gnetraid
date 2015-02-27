@@ -115,16 +115,17 @@ static int global_n, global_k;
 // Set implementation for SET_UNORDERED_LIST
 
  // The structures below are also used by SET_ORDERED_LIST
-static int *int_list;
+static int *int_list = 0;
 static int items;
 
-static void alloc_int_list(int start, int n, int k) {
+void oc_alloc_int_list(int start, int n, int k) {
   STASH_GLOBALS(start, n, k);
 }
 
 // I'll actually allocate the list here so that SET_OUT returns a
 // freshly-allocated array and I avoid a memcpy.
 static void clear_int_list(void) {
+  //printf("Allocating/clearing int_list (size %d)\n", global_k);
   int_list = malloc(global_k * sizeof(int));
   if (NULL == int_list) {
     fprintf(stderr, "clear_int_list: Failed to allocate int_list\n");
@@ -142,6 +143,7 @@ int scan_unordered_list(int x) {
 }
 
 static void append_int_list(int x) {
+  //printf("Adding %d (item %d/%d)\n", x, items+1, global_k);
   if (items == global_k) {
     fprintf(stderr, "append_int_list: list is already full\n");
     exit (1);
@@ -164,6 +166,7 @@ int *oc_floyd(oc_rng_sha1 *rng, int start, int n, int k) {
   int j, t;
   SET_CLR();			// initialize set S to empty
   j =  n-k;
+  //  printf("oc_floyd: going to choose %d elements\n", k);
   while (j < n) {		// for J := N-K + 1 to N do
     t = RandInt(0,j);		//   T := RandInt(1, J)
     if (!SET_GET(t+start))	//   if T is not in S then

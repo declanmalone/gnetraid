@@ -27,14 +27,15 @@
 // structures. Later on I might define typedefs and add structure
 // pointers to the argument lists above.
 
-// All the functions listed below are declared as static in floyd.c so
-// they shouldn't cause namespace pollution (apart from the SET_*
-// macro names themselves)
+// Most the functions listed below are declared as static in floyd.c
+// so they shouldn't cause namespace pollution (apart from the SET_*
+// macro names themselves). The exception is SET_INIT since that needs
+// to be called during program initialisation.
 
 #if   SET_METHOD == SET_UNORDERED_LIST
 #warning Using unordered list
 
-#define SET_INIT alloc_int_list
+#define SET_INIT oc_alloc_int_list
 #define SET_CLR  clear_int_list
 #define SET_GET  scan_unordered_list
 #define SET_PUT  append_int_list

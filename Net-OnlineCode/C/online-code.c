@@ -9,6 +9,7 @@
 
 #include "structs.h"
 #include "online-code.h"
+#include "floyd.h"
 
 double *oc_codec_init_probdist(oc_codec *codec) {
 
@@ -169,6 +170,7 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 
   codec->auxiliary = map;
 
+#if 0
 #ifndef OC_AVOID_MEMCPY
   // initialise source array for Fisher-Yates shuffle (just once)
   p=src;
@@ -176,17 +178,26 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
     *(p++) = mblocks + i;
   }
 #endif
+#endif
+
+  SET_INIT(mblocks, ablocks, q);
 
   // attach each mblock to q ablocks
   for (i=0; i < mblocks; ++i) {
+#if 0
 #ifdef OC_AVOID_MEMCPY
     p = oc_fisher_yates(src, dst, mblocks, q, ablocks, rng);
-#else
+#endif
+#ifndef OC_AVOID_MEMCPY
     p = oc_fisher_yates(src, dst, q, ablocks, rng);
 #endif
+#endif
+
+    p = oc_floyd(rng, mblocks, ablocks, q);
     for (j=0; j < q; ++j) {
-      *(map++) = *(p++);
+      *(map++) = p[j];
     }
+    free(p);
   }
 
   return codec->auxiliary;
@@ -242,11 +253,17 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
 
   // select 'degree' composite blocks ('src' array is assumed to be
   // initialised already)
+#if 0
 #ifdef OC_AVOID_MEMCPY
   q = oc_fisher_yates(src, dst, 0, degree, coblocks, rng);
-#else
+#endif
+#ifndef OC_AVOID_MEMCPY
   q = oc_fisher_yates(src, dst, degree, coblocks, rng);
 #endif
+#endif
+
+  SET_INIT(0, coblocks, degree);
+  q = oc_floyd(rng, 0, coblocks, degree);
 
   // save degree and list of blocks in our array
   *(p++) = degree;
