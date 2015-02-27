@@ -1,8 +1,9 @@
 
-OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o
+OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o \
+          floyd.o
 PROGS   = probdist mindecoder compat codec
 
-CARGS = -O2
+CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST
 CLIBS = -L.
 
 # Uncomment for gconv (line-by-line) profiling
@@ -18,8 +19,6 @@ OTHERLIBS = -lm -lssl -lcrypto
 
 .c.o:
 	$(CC) $(CARGS) $(CINCS) -c -g  $(PROF) $<
-
-
 
 all: libs $(PROGS)
 
@@ -42,10 +41,11 @@ encoder.o : encoder.c
 decoder.o : decoder.c
 
 # Rebuild if included header files change
+floyd.o : rng_sha1.h
 encoder.o : encoder.h online-code.h rng_sha1.h
 decoder.o : decoder.h online-code.h graph.h rng_sha1.h
 graph.o : graph.h online-code.h
-online-code.o : online-code.h rng_sha1.h
+online-code.o : online-code.h rng_sha1.h floyd.h
 rng_sha1.o : rng_sha1.h
 
 
