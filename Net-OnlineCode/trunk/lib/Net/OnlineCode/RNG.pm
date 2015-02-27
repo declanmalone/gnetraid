@@ -82,15 +82,18 @@ $VERSION = '0.03';
 # However, I believe that the benefits of using a readily-available
 # implementation (along with the other advantages listed) outweigh
 # this minor disadvantage. For those reasons, I will use SHA-1 here.
-#
+
+
+# RNG object only contains seed and current values so store them in an
+# array rather than a hash for efficiency.
+
+use constant CURRENT => 0;
+use constant SEED    => 1;
 
 sub new {
 
   my ($class, $seed) = @_;
-  my $self = {
-	      seed => $seed,
-	      current => undef,
-	     };
+  my $self = [ undef, $seed ];
 
   bless $self, $class;
   $self->seed($seed);
@@ -100,10 +103,7 @@ sub new {
 sub new_random {
 
   my $class = shift;
-  my $self = {
-	      seed => undef,
-	      current => undef,
-	     };
+  my $self = [ undef, undef ];
 
   bless $self, $class;
   $self->seed_random();
@@ -122,8 +122,8 @@ sub seed {
   die "seed: self object not a reference\n" unless ref($self);
 
   $seed = "\0" x 20 unless defined($seed);
-  $self->{seed} = $seed;
-  $self->{current} = $seed;
+  $self->[SEED] = $seed;
+  $self->[CURRENT] = $seed;
   return $seed;
 }
 
@@ -135,7 +135,7 @@ sub seed_random {
 }
 
 sub get_seed {
-  return  shift->{seed};
+  return  shift->[SEED];
 }
 
 # As per Perl's rand, return a float value, 0 <= value < x
@@ -147,12 +147,12 @@ sub rand {
   $max += 0.0;			# ensure max is a float
 
   while(1) {
-    $self->{current} = sha1($self->{current}); # advance to next rand
+    $self->[CURRENT] = sha1($self->[CURRENT]); # advance to next rand
 
     # unpack 5 32-bit words from the 160-bit SHA sum. Changed to
     # unpack using little-endian as this is more common (x86/arm
     # anyway)
-    my @uints = unpack "V1", $self->{current};
+    my @uints = unpack "V1", $self->[CURRENT];
 
     # We calculate the rand by max * uint/(max 32-bit int).
     while (@uints>=1) {
@@ -189,26 +189,26 @@ sub randint {
 
 
 sub current {
-  return shift->{current};
+  return shift->[CURRENT];
 }
 
 sub as_string {			# alias for "current" method
-  return shift->{current};
+  return shift->[CURRENT];
 }
 
 # Unpacking as bytes or 32-bit unsigned ints. Using little-endian
 # since it's more common
 sub as_byte_array {
-  return unpack "C20", shift->{current};
+  return unpack "C20", shift->[CURRENT];
 }
 
 sub as_uint32_array {
-  return unpack "V5", shift->{current};
+  return unpack "V5", shift->[CURRENT];
 }
 
 
 sub as_hex {
-  return unpack "H40", shift->{current};
+  return unpack "H40", shift->[CURRENT];
 }
 
 # *nix-specific helper function to get a random 160-bit value from the
