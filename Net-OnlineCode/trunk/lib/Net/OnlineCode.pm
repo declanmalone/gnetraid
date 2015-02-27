@@ -394,6 +394,27 @@ sub _probability_distribution {
 }
 
 
+# Using Floyd's algorithm instead of Fisher-Yates shuffle. Picks k
+# distinct elements from the range [start, start + n - 1]. Avoids the
+# need to copy/re-initialise an array of size n every time we make a
+# new check block.
+sub floyd {
+  my ($rng, $start, $n, $k) = @_;
+  my %set;
+  my ($j, $t) = ($n - $k);
+  while ($j < $n) {
+    $t = $rng->randint(0,$j);
+    if (!exists($set{$t})) {
+      $set{$t} = undef;
+    } else {
+      $set{$j} = undef;
+    }
+    ++$j;
+  }
+  die "Floyd didn't pick $k elements" if ASSERT and $k != (keys %set);
+  return keys %set;
+}
+
 # Fisher-Yates shuffle algorithm, based on recipe 4.17 from the Perl
 # Cookbook. Takes an input array it randomises the order (ie,
 # shuffles) and then truncates the array to "picks" elements.
@@ -563,7 +584,8 @@ sub checkblock_mapping {
   ++$i;
 
   # select i composite blocks uniformly
-  @coblocks = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
+#  @coblocks = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
+  @coblocks = floyd($rng, 0, $coblocks , $i);
 
   if (ASSERT) {
     die "fisher_yates_shuffle: created empty check block\n!" unless @coblocks;

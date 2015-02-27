@@ -5,6 +5,7 @@ use warnings;
 
 use Fcntl;
 use Digest::SHA qw(sha1);
+use POSIX qw(ceil floor);
 
 use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
 
@@ -173,6 +174,13 @@ sub rand {
       }
     }
   }
+}
+
+# Encapsulate a common use case of wanting random integers in the
+# range [low,high]
+sub randint {
+  my ($self, $low, $high) = @_;
+  return $low + floor($self->rand($high - $low + 1));
 }
 
 # The remaining subs are debugging purposes. They report back the
