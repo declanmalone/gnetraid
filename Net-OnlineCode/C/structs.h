@@ -97,6 +97,36 @@ typedef struct {
 } oc_uni_block;
 
 
+
+// n edges are stored in circular lists (one ring per message or
+// auxiliary block)
+struct oc_n_edge_ring_node;
+typedef struct oc_n_edge_ring_node oc_n_edge_ring;
+struct oc_n_edge_ring_node {
+  int upper;			// node at the other end
+  oc_n_edge_ring *left;
+  oc_n_edge_ring *right;
+};
+
+
+// "Bones" are part edge, part xor list. The C struct needs extra
+// information because I'm not using hashed keys to look up the lower
+// ends of the edges and because we need to store the total length of
+// the bone.
+typedef struct {
+
+  union {
+    int unknowns;		// number of unknown nodes in the list
+    int node;			// the actual node numbers
+  } a;
+  union {
+    int             size;	// sum of knowns + unknowns
+    oc_n_edge_ring *link;	// lower end of edge
+  } b;
+
+} oc_bone;
+
+
 // Online Code --- Auxiliary Mapping
 //
 // The basic structure encodes a list of edges going from message
@@ -106,5 +136,60 @@ typedef struct {
 // Where the reverse mapping (that of auxliary blocks to message
 // blocks) is needed, it uses one linked list per auxliary block.
 //
+
+
+
+typedef struct {
+
+  int mblocks;
+  int ablocks;
+  int coblocks;
+  int nodes;			// running count of all blocks
+  int node_space;		// nodes < node_space
+
+  // Node Edges
+  // 
+  // Block/node numbers are ordered by the relation:
+  //
+  // message block IDs < auxiliary block IDs < check block IDs
+  // 
+  // Downward edges (eg, check -> aux) are stored in fixed-sized
+  // arrays since we know in advance (or can calculate) how many down
+  // edges each node has. Also, this number never increases. The first
+  // element of the list tells how many block numbers are in the rest
+  // of the list.
+  //
+  // Upward edges are stored in linked lists since nodes can have new
+  // upward edges added to them over time (ie, when new check blocks
+  // arrive).
+
+  int           **v_edges;	// downward ("v" points down)
+  oc_n_edge_ring ***v_pipes;	// pipe from top node to bottom ring
+
+  //  oc_uni_block  **n_edges;	// upward edges ("n" ~= upside-down "v")
+  oc_n_edge_ring *n_rings;	// rings replace n_edges linked lists
+
+
+  int *v_count;			// unsolved "v" edges (aux, check only)
+  int *v_count_x;		// "transparent" edge count (check only)
+
+  unsigned char  *solved;	// is node solved?
+  oc_bone **solution;		// use bones instead
+
+  // The XOR list contains the "expansion" of newly-solved
+  // blocks/nodes. We could use a linked list, but an array will do
+  // just as well since we can calculate its length at the time that
+  // we resolve a node (or expand an xor list).
+  int **xor_list;
+
+  oc_uni_block *phead, *ptail;	// queue of pending nodes
+
+  unsigned int  unsolved_count;	// count unsolved message blocks
+  unsigned char done;		// are all message nodes decoded?
+
+} oc_graph;
+
+
+
 
 #endif

@@ -1,6 +1,6 @@
 
 OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o \
-          floyd.o
+          floyd.o bones.o
 PROGS   = probdist mindecoder compat codec
 
 CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST
