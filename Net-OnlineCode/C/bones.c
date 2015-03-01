@@ -11,8 +11,8 @@ oc_bone *oc_new_bone(oc_graph *g, int size) {
   int required = size + 1;
   oc_bone *p;
 
-  printf("Requested new bone of size %d from pool of [%d,%d]\n",
-	 required, g->boneyard_next, g->boneyard_size);
+  // printf("Requested new bone of size %d from pool of [%d,%d]\n",
+  //   required, g->boneyard_next, g->boneyard_size);
 
   if (required + g->boneyard_next >= g->boneyard_size)
     return NULL;

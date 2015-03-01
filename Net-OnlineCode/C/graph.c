@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 
 #include "online-code.h"
 #include "graph.h"
@@ -216,7 +217,10 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   check_space = check_space + check_space * log(f) * fudge;
   printf("Allocating %d bones\n", (int) check_space);
-  OC_ALLOC(boneyard, check_space, oc_bone,         "boneyard");
+  //  OC_ALLOC(boneyard, check_space, oc_bone,         "boneyard");
+  if (NULL == (graph->boneyard = malloc(check_space * sizeof(oc_bone))))
+    return fprintf(stdout, "graph init: Failed to allocate boneyard \n");
+  // no need to clear this memory
   graph->boneyard_size = check_space;
   graph->boneyard_next = 0;
 
