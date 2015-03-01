@@ -12,11 +12,6 @@
 #define STEPPING 1
 #define INSTRUMENT 1
 
-// I'm moving back to the Perl way of doing things and storing an XOR
-// list for each node (not just msg/aux)
-#define OC_USE_CHECK_XOR_LIST 1
-
-
 #ifdef INSTRUMENT
 
 // Static structure to hold measurements relating to key bottlenecks
@@ -91,7 +86,7 @@ oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower) {
     return NULL;
 
 
-  ring = g->n_rings + lower;
+  ring = g->bottom + lower;
 
   // update the count of n edges in this ring
   ring->upper = 0;
@@ -128,7 +123,7 @@ void oc_delete_lower_end(oc_graph *g, oc_n_edge_ring *node,
   }
 
   // update node count in this ring
-  ring = g->n_rings + lower;
+  ring = g->bottom + lower;
   ring->upper =0; 
 
   // remove node from the ring
@@ -156,6 +151,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
   // iterators and temporary variables
   int msg, aux, *mp, *p, aux_temp, temp;
+  oc_bone *bone;
   oc_n_edge_ring *ring;
 
   // Check parameters and return non-zero value on failures
@@ -196,16 +192,13 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   memset(graph->MEMBER, 0, (SPACE) * sizeof(TYPE));
 
   // "v" edges: omit message blocks
-  OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
-
-  // "n" edges: omit check blocks
-  //  OC_ALLOC(n_edges, coblocks, oc_uni_block *,             "n edges");
+  //  OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
 
   // n rings: omit check blocks
-  OC_ALLOC(n_rings, coblocks, oc_n_edge_ring,             "n rings");
+  //  OC_ALLOC(n_rings, coblocks, oc_n_edge_ring,             "n rings");
 
   // "n pipes" are pointers from v edges down to n ring entries
-  OC_ALLOC(v_pipes, ablocks + check_space, oc_n_edge_ring *, "n pipes");
+  //  OC_ALLOC(v_pipes, ablocks + check_space, oc_n_edge_ring *, "n pipes");
 
   // unsolved (downward) edge counts: omit message blocks
   OC_ALLOC(v_count, ablocks + check_space, int,        "unsolved v_edge counts");
@@ -216,16 +209,31 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // xor lists: omit nothing
   OC_ALLOC(xor_list, coblocks + check_space, int *,       "xor lists");
 
+  //
+  // New bones-related arrays
+  //
+
+  // solutions: omit check blocks; they are their own solutions
+  OC_ALLOC(solution, coblocks, oc_bone *,                 "solutions");
+
+  // top end of edges: omit message blocks
+  OC_ALLOC(top, ablocks + check_space, oc_bone *,         "top");
+
+  // bottom end of edges: omit check blocks
+  OC_ALLOC(bottom, coblocks, oc_n_edge_ring,              "bottom");
+
+
+
   // Hold onto freed blocks
   if ( (NULL == free_head) && (NULL == hold_blocks()) )
     return fprintf(stderr, "Curiouser and curiouser!\n");
   else
     ++ouser;
 
-  // initialise the rings that will store n edges
+  // initialise the rings that will store bottom ends of edges
   for (msg = 0; msg < coblocks; ++msg) {
-    graph->n_rings[msg].left = graph->n_rings[msg].right
-      = graph->n_rings + msg;
+    graph->bottom[msg].left = graph->bottom[msg].right
+      = graph->bottom + msg;
   }
 
   // Register the auxiliary mapping
@@ -235,9 +243,6 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   for (msg = 0; msg < mblocks; ++msg) {
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++);
-      // this has to wait until later thanks to pipes
-      //      if (NULL == oc_create_n_edge(graph, aux_temp, msg))
-      //	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
       aux_temp   -= mblocks;	// relative to start of v_count[]
       assert (aux_temp >= 0);
       assert (aux_temp < ablocks);
@@ -245,21 +250,19 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     }
   }
 
-  // 2nd stage: allocate down edges/pipes for auxiliary nodes
+  // 2nd stage: allocate bones for auxiliary nodes
 
   for (aux = 0; aux < ablocks; ++aux) {
     aux_temp = graph->v_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
-    if (NULL == (p = calloc(1 + aux_temp, sizeof(int))))
-      return fprintf(stdout, "graph init: failed to malloc aux down edges\n");
 
-    graph->v_edges[aux] = p;
-    p[0] = aux_temp;		// array size; edges stored in next pass
+    if (NULL == (bone = calloc(2 + aux_temp, sizeof(oc_bone))))
+      return fprintf(stdout, "graph init: failed to malloc aux bones\n");
 
-    // allocate pipe array, too (waste 1st element)
-    if (NULL == (p = calloc(1 + aux_temp, sizeof(oc_n_edge_ring *))))
-      return fprintf(stdout, "graph init: failed to malloc aux down pipes\n");
-    graph->v_pipes[aux] = (oc_n_edge_ring **)p;
+    // save bone and array size; edges stored in next pass
+    graph->top[aux] = bone;
+    bone->a.unknowns = aux_temp + 1;
+    bone->b.size     = aux_temp + 1;
   }
 
   // 3rd stage: store down edges
@@ -269,10 +272,10 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     for (aux = 0; aux < q; ++aux) {
       aux_temp    = *(mp++) - mblocks;
 
-      p = graph->v_edges[aux_temp];
+      bone = graph->top[aux_temp];
 
       OC_DEBUG && fprintf(stdout,
-			  "creating v edge/pipe from %d down to %d\n",
+			  "creating bone from %d down to %d\n",
 			  aux_temp + mblocks, msg);
 
       // The trick explained ...
@@ -280,14 +283,15 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
       // * edge counts are correct after this pass (+2n - n = n)
       // * no extra array/pass to iterate over/recalculate edge counts
       temp = (graph->v_count[aux_temp])--;
-      graph->v_edges[aux_temp][temp - p[0]] = msg;
+
+      graph->top[aux_temp][temp - p[0]].a.node = msg;
 
       // deferred creation of up edge until now so that we can stash
       // the returned pointer in the array allocated in 2nd stage
       if (NULL == (ring = oc_create_n_edge(graph, aux_temp + mblocks, msg)))
 	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
 
-      graph->v_pipes[aux_temp][temp - p[0]] = ring;
+      graph->top[aux_temp][temp - p[0]].b.link = ring;
     }
   }
 
@@ -316,6 +320,8 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 
   oc_n_edge_ring **pipes;
 
+  oc_bone *bone;
+
   assert(g != NULL);
   assert(v_edges != NULL);
 
@@ -328,86 +334,20 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   if (node >= g->node_space)
     return fprintf(stdout, "oc_graph_check_block: node >= node_space\n"), -1;
 
-#if OC_USE_CHECK_XOR_LIST
+  // When using bones, most of the work is now done in oc_check_bone
 
-  // Be like the Perl version: check blocks have an xor_list
-  //
-  // This will be composed of the node's ID plus any solved
-  // nodes. Since we're allocating a fixed-sized list, we need two
-  // passes (separated out into two loops for clarity).
-  //
-
-  solved_count = 0;
-  ep    = v_edges;
-  count = *(ep++);
-  while (count--) {
-    tmp = *(ep++);
-    assert(tmp < g->coblocks);
-    if (g->solved[tmp])
-      ++solved_count;
+  if (NULL == (bone=oc_check_bone(g, node, v_edges))) {
+    fprintf(stderr, "Failed to allocate bone for check block\n");
+    return -1;
   }
 
-  // Allocate xor_list and set it up with our block ID
-  if (NULL == (xp = calloc(solved_count + 2, sizeof(int))))
-    return fprintf(stdout, "Failed to allocate xor_list for check block\n"), 
-      -1;
-  g->xor_list[node] = xp;
-  *(xp++) = solved_count + 1;
-  *(xp++) = node;
-
-  // Scan edge list again. Solved nodes go to xor_list, unsolved have
-  // n edges created for them.
-  ep      = v_edges;
-  count   = *ep;
-  end     = *ep;
-  *(ep++) = count - solved_count;
-
-  // also set up array of "pipes"
-  if (NULL == (pipes = calloc(count - solved_count + 1,
-			      sizeof(oc_n_edge_ring **))))
-    return fprintf(stdout,
-		   "Failed to allocate v_pipes for check block\n"),
-      -1;
-
-  g->v_pipes[node-g->mblocks] = pipes;
-  *(pipes++) = NULL;		// unused element
-
-  while (count--) {
-    tmp = *ep;
-    if (g->solved[tmp]) {
-      *(xp++) = tmp;
-      *ep     = v_edges[end--]; // move last node and check again
-      solved_count--;
-    } else {
-      if (NULL == (*(pipes++) = oc_create_n_edge(g, node, tmp)))
-	return -1;
-      ++ep;
-    }
-  }
-
-#else
-
-  // Edge creation (no pruning/xor_list)
-
-  unsolved_count = count = v_edges[0];
-  for (i=1; i <=count; ++i) {
-    tmp = v_edges[i];
-    OC_DEBUG && fprintf(stdout, "  %d -> %d\n", node, tmp);
-    if (g->solved[tmp])
-      --unsolved_count;
-    if (NULL == oc_create_n_edge(g, node, tmp))
-      return -1;
-  }
-  OC_DEBUG && fprintf(stdout, "\n");
-
-#endif
-
-  g->v_edges   [node - mblocks] = v_edges;
-  g->v_count[node - mblocks] = v_edges[0];
+  // we only have to stash the pointer and unsolved v edge count
+  g->top    [node - mblocks] = bone;
+  g->v_count[node - mblocks] = bone->a.unknowns;
 
   if (OC_DEBUG) {
     printf("Set v_count for check block %d to %d\n", 
-	   node, v_edges[0]);
+	   node, bone->a.unknowns);
 
     printf("Check block mapping after removing solved: ");
     oc_print_xor_list(v_edges,"\n");
@@ -430,12 +370,14 @@ void oc_aux_rule(oc_graph *g, int aux_node) {
 
   int mblocks = g->mblocks;
   int *p, i, count;
+  oc_bone *bone;
 
-  assert(aux_node >= mblocks);
-  assert(aux_node < g->coblocks);
   OC_DEBUG && fprintf(stdout, "Aux rule triggered on node %d\n", aux_node);
+  assert(aux_node >=    mblocks);
+  assert(aux_node <  g->coblocks);
 
-  g->solved[aux_node] = 1;
+  bone = g->top[aux_node - mblocks];
+  g->solution[aux_node] = bone;
 
   // xor list becomes list of v edges
   g->xor_list[aux_node] = p = g->v_edges[aux_node - mblocks];
@@ -468,9 +410,9 @@ int oc_cascade(oc_graph *g, int node) {
 
   OC_DEBUG && fprintf(stdout, "Cascading from node %d:\n", node);
 
-  assert ((g->n_rings + node) != NULL);
+  assert ((g->bottom + node) != NULL);
 
-  p = (ring = g->n_rings + node)->right;
+  p = (ring = g->bottom + node)->right;
 
   // update unsolved edge count and push target to pending
   while (p != ring) {

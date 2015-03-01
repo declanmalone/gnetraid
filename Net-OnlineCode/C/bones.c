@@ -89,3 +89,54 @@ void oc_validate_bone(oc_bone *bone, oc_graph *g, int anode) {
   }
 }
 
+// When the propagation rule triggers we should be left with a single
+// unsolved value in the bone, but we don't know which one it is. The
+// following scans the list of unknowns, looks them up in the graph
+// and returns the index of the first match.
+
+int oc_unknown_unsolved(oc_bone *bone, oc_graph *g) {
+
+  int count, node, index; //, coblocks;
+  coblocks = g->coblocks;
+  count = bone->a.unknowns;
+  index = 0;
+  while (count--) {
+    node = bone[++index].a.node;
+    //    if (node >= coblocks)	// check blocks aren't in solution[]
+    //      continue;
+    if (!g->solution[node])
+      return index;
+  }
+  fprintf(stderr, "oc_unknown_unsolved: didn't find any unsolved\n");
+  exit(1);
+}
+
+// When the aux rule triggers, we know that there should be only one
+// unsolved value in the list, but this time we know that it's the aux
+// node. As with the previous routine, we return the array index it
+// lives at.
+int oc_known_unsolved(oc_bone *bone, int anode) {
+
+  int count, node, index;
+  count = bone->a.unknowns;
+  index = 0;
+  while (count--) {
+    node = bone[++index].a.node;
+    if (node == anode)
+      return index;
+  }
+  fprintf(stderr, "oc_known_unsolved: didn't find unsolved aux\n");
+  exit(1);
+
+}
+
+// When either the propagation rule or the aux rule triggers we want
+// to shift the single unsolved value to the start. We call one of the
+// above routines to find where it is. Then, the following routine
+// "bubbles it up" to the start of the list and deletes any reciprocal
+// links for any of the other previously-unknown edges.
+
+void oc_bubble_unsolved(oc_bone *bone, oc_graph *g, int index) {
+
+
+}

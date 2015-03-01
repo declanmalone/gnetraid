@@ -110,9 +110,10 @@ struct oc_n_edge_ring_node {
 
 
 // "Bones" are part edge, part xor list. The C struct needs extra
-// information because I'm not using hashed keys to look up the lower
-// ends of the edges and because we need to store the total length of
-// the bone.
+// information (compared to the Perl implementation) because I'm not
+// using hashed keys to look up the lower ends of the edges and
+// because we need to store the total length of the bone.
+
 typedef struct {
 
   union {
@@ -153,34 +154,27 @@ typedef struct {
   //
   // message block IDs < auxiliary block IDs < check block IDs
   // 
-  // Downward edges (eg, check -> aux) are stored in fixed-sized
-  // arrays since we know in advance (or can calculate) how many down
-  // edges each node has. Also, this number never increases. The first
-  // element of the list tells how many block numbers are in the rest
-  // of the list.
+  // The naming convention I'm using reflects this:
   //
-  // Upward edges are stored in linked lists since nodes can have new
-  // upward edges added to them over time (ie, when new check blocks
-  // arrive).
+  // * downward edges ("v" points down) go down from check/aux nodes
+  // * up edges ("n" points up) go up from message/aux
+  // 
 
-  int           **v_edges;	// downward ("v" points down)
-  oc_n_edge_ring ***v_pipes;	// pipe from top node to bottom ring
+  // These are the old structures I was using
+  //oc_n_edge_ring ***v_pipes;	// pipe from top node to bottom ring
+  //int             **v_edges;	// downward ("v" points down)
+  int             **xor_list;	// node solutions
+  //oc_n_edge_ring   *n_rings;	// doubly-linked rings of n edges
+  unsigned char    *solved;	// is node solved?
 
-  //  oc_uni_block  **n_edges;	// upward edges ("n" ~= upside-down "v")
-  oc_n_edge_ring *n_rings;	// rings replace n_edges linked lists
 
+  // They're replaced by structures using bones:
+  oc_bone          **top;	// upper side of link
+  oc_n_edge_ring    *bottom;	// lower side (rings)
+  oc_bone          **solution;	// bone morphs into an xor list 
 
-  int *v_count;			// unsolved "v" edges (aux, check only)
-  int *v_count_x;		// "transparent" edge count (check only)
-
-  unsigned char  *solved;	// is node solved?
-  oc_bone **solution;		// use bones instead
-
-  // The XOR list contains the "expansion" of newly-solved
-  // blocks/nodes. We could use a linked list, but an array will do
-  // just as well since we can calculate its length at the time that
-  // we resolve a node (or expand an xor list).
-  int **xor_list;
+  // These two stay the same in the new implementation
+  int            *v_count;	// per-node count of unsolved v edges
 
   oc_uni_block *phead, *ptail;	// queue of pending nodes
 
