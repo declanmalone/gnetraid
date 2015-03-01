@@ -208,9 +208,17 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // bottom end of edges: omit check blocks
   OC_ALLOC(bottom, coblocks, oc_n_edge_ring,       "bottom");
 
+  // Space for bones will be carved out of a single chunk of
+  // memory. Since the average number of edges per node will be
+  // log(F), I'll use a rough value of fudge * fudge * expected number
+  // of check blocks times that to decide on the size of the
+  // allocation.
 
-  // scratch space
-  OC_ALLOC(xor_scratch, f + 1, int,                "xor scratch");
+  check_space = check_space + check_space * log(f) * fudge;
+  printf("Allocating %d bones\n", (int) check_space);
+  OC_ALLOC(boneyard, check_space, oc_bone,         "boneyard");
+  graph->boneyard_size = check_space;
+  graph->boneyard_next = 0;
 
   // Hold onto freed blocks
   if ( (NULL == free_head) && (NULL == hold_blocks()) )

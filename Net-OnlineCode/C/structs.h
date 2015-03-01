@@ -176,8 +176,10 @@ typedef struct {
   // These two stay the same in the new implementation
   int               *v_count;	// per-node count of unsolved v edges
 
-  // Avoid using malloc for checkblock's xor list
-  int               *xor_scratch;
+  // Avoid using malloc for bones
+  oc_bone           *boneyard;
+  int                boneyard_size;
+  int                boneyard_next;
 
   oc_uni_block *phead, *ptail;	// queue of pending nodes
 

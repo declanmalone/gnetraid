@@ -6,9 +6,21 @@
 
 #include "bones.h"
 
-oc_bone *oc_new_bone(int size) {
-  // reserve one element at start for unknowns/size fields
-  return malloc((size + 1) * sizeof(oc_bone));
+oc_bone *oc_new_bone(oc_graph *g, int size) {
+
+  int required = size + 1;
+  oc_bone *p;
+
+  printf("Requested new bone of size %d from pool of [%d,%d]\n",
+	 required, g->boneyard_next, g->boneyard_size);
+
+  if (required + g->boneyard_next >= g->boneyard_size)
+    return NULL;
+
+  p = g->boneyard + g->boneyard_next;
+  g->boneyard_next += required;
+
+  return p;
 }
 
 // Create a bone that will attach to a check node
@@ -25,7 +37,7 @@ oc_bone *oc_check_bone(oc_graph *g, int cnode, int *list) {
   // reserve one extra space for known check node
   last_index = size + 1;
 
-  if (NULL == (bone = oc_new_bone(last_index)))
+  if (NULL == (bone = oc_new_bone(g, last_index)))
     return NULL;
 
   // save total size of array

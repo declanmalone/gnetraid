@@ -36,7 +36,7 @@ static inline int oc_count_knowns(oc_bone *b) {
   return b->b.size - b->a.unknowns;
 }
 
-oc_bone *oc_new_bone(int size);
+oc_bone *oc_new_bone(oc_graph *g, int size);
 oc_bone *oc_check_bone(oc_graph *g, int cnode, int *list);
 void oc_validate_bone(oc_bone *bone, int anode);
 int oc_unknown_unsolved(oc_bone *bone, oc_graph *g);
