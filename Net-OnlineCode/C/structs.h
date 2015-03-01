@@ -163,9 +163,9 @@ typedef struct {
   // These are the old structures I was using
   //oc_n_edge_ring ***v_pipes;	// pipe from top node to bottom ring
   //int             **v_edges;	// downward ("v" points down)
-  int             **xor_list;	// node solutions
+  //int             **xor_list;	// node solutions
   //oc_n_edge_ring   *n_rings;	// doubly-linked rings of n edges
-  unsigned char    *solved;	// is node solved?
+  //unsigned char    *solved;	// is node solved?
 
 
   // They're replaced by structures using bones:

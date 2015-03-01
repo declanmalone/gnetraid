@@ -163,7 +163,7 @@ until ($done) {
 
   my $enc_xor_list = $enc->create_check_block($erng);
 
-  print "Encoder check block (after expansion): " .
+  print "Encoder check block: " .
     (join ", ", @$enc_xor_list) . "\n";
 
   # xor check block (just a list of message blocks thanks to

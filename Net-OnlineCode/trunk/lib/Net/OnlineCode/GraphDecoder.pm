@@ -9,7 +9,7 @@ use vars qw($VERSION);
 
 $VERSION = '0.03';
 
-use constant DEBUG => 0;
+use constant DEBUG => 1;
 use constant TRACE => 0;
 use constant ASSERT => 1;
 use constant STEPPING => 1;
@@ -30,14 +30,14 @@ use Net::OnlineCode::Bones;
 sub mark_as_unsolved {
   my ($self,$node) = @_;
 
-  print "Marking block $node as unsolved\n" if DEBUG;
+  #  print "Marking block $node as unsolved\n" if DEBUG;
   $self->{solution}->[$node] = 0;
 }
 
 sub mark_as_solved {
   my ($self,$node) = @_;
 
-  print "Marking block $node as solved\n" if DEBUG;
+#  print "Marking block $node as solved\n" if DEBUG;
 
   $self->{solution}->[$node] = 1;
 }
@@ -314,7 +314,7 @@ sub resolve {
       my ($type, $status) = ("check", "unsolved");
       $type   = "auxiliary" if $from < $coblocks;
       $status = "solved"    if $solved;
-      print "Propagating from $status $type node $from\n";
+      print "Resolving from $status $type node $from\n";
     }
 
     # I'm going back to the old way of doing up-propagation since the

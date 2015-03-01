@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "bones.h"
 
@@ -38,8 +39,8 @@ oc_bone *oc_check_bone(oc_graph *g, int cnode, int *list) {
   count = size; bp = bone + 1;
   while (count--) {
     lower = *(list++);
-    if ((g->solution)[cnode]) {
-      bone[last_index].a.node = cnode; 
+    if (g->solution[lower]) {
+      bone[last_index].a.node = lower; 
       bone[last_index].b.link = NULL; // known => no edge
       --last_index;
       --unknowns;
@@ -64,7 +65,7 @@ oc_bone *oc_check_bone(oc_graph *g, int cnode, int *list) {
 // during graph initialisation. This routine does some checks on the
 // bone to make sure that it's correctly constructed.
 
-void oc_validate_bone(oc_bone *bone, oc_graph *g, int anode) {
+void oc_validate_bone(oc_bone *bone, int anode) {
 
   int count, lower;
   oc_n_edge_ring *ring;
@@ -96,12 +97,13 @@ void oc_validate_bone(oc_bone *bone, oc_graph *g, int anode) {
 
 int oc_unknown_unsolved(oc_bone *bone, oc_graph *g) {
 
-  int count, node, index; //, coblocks;
-  coblocks = g->coblocks;
+  int count, node, index;
+  int coblocks = g->coblocks;
   count = bone->a.unknowns;
   index = 0;
   while (count--) {
     node = bone[++index].a.node;
+    assert (node < coblocks);
     //    if (node >= coblocks)	// check blocks aren't in solution[]
     //      continue;
     if (!g->solution[node])
@@ -138,5 +140,53 @@ int oc_known_unsolved(oc_bone *bone, int anode) {
 
 void oc_bubble_unsolved(oc_bone *bone, oc_graph *g, int index) {
 
+  int count, node;
+  oc_n_edge_ring *ring;
+
+  // swap node, ring elements to front
+  node = bone[index].a.node;
+  if (index != 1) {
+    bone[index].a.node = bone[1]    .a.node;
+    bone[1]    .a.node = node;
+    ring               = bone[index].b.link;
+    bone[index].b.link = bone[1]    .b.link;
+    bone[1]    .b.link = ring;
+  }
+
+  // set unknown count
+  bone->a.unknowns = 1;
+
+  // delete reciprocal links for other elements. If called during the
+  // propagation rule, bone[1] will still contain a reciprocal link;
+  // we leave it for the caller to deal with.
+  count = bone->a.unknowns - 1;
+  ++bone;
+  while (++bone, count--)
+    oc_delete_lower_end(g, bone->b.link, node, bone->a.node, 0);
+}
+
+
+void oc_print_bone(oc_bone *bone, char *final) {
+
+  static char null[]  = "";
+  static char comma[] = ", ";
+  int i, min, max;
+
+  char *sep = null;
+
+  printf("[");
+  min = 1; max = oc_last_unknown(bone);
+  for (i = min; i <= max; ++i) {
+    printf("%s%d", sep, bone[i].a.node);
+    sep = comma;
+  }
+  printf("] <- [");
+  sep = null;
+  min = max + 1; max = oc_last_known(bone);
+  for (i = min; i <= max; ++i) {
+    printf("%s%d", sep, bone[i].a.node);
+    sep = comma;
+  }
+  printf("]%s",final);
 
 }

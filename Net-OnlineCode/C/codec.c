@@ -311,8 +311,8 @@ int main(int argc, char * const argv[]) {
 	if (0 == *dxor_list)
 	  return fprintf(stderr,"Decoded block had empty XOR list\n");
 
-	// Check that cache contents are right  (only prints plain text)
-	if ((1 == dxor_list[0]) && (i <= mblocks)) {
+	// print the cache contents (only plain text)
+	if ((1 == dxor_list[0]) && (i < mblocks)) {
 	  j = dxor_list[1] - coblocks;
 	  printf("SOLITARY DECODED: '%.*s' (check #%d)\n", block_size, 
 		 chk_cache + j * block_size, j);

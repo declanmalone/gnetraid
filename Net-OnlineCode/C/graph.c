@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 0
+#define OC_DEBUG 1
 #define STEPPING 1
 #define INSTRUMENT 1
 
@@ -78,7 +78,7 @@ oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   oc_n_edge_ring *p, *ring;
 
-  OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
+  //  OC_DEBUG && fprintf(stdout, "Adding n edge %d -> %d\n", lower, upper);
 
   assert(upper > lower);
 
@@ -117,14 +117,14 @@ void oc_delete_lower_end(oc_graph *g, oc_n_edge_ring *node,
 
   // Update the unsolved count first
   if (decrement) {
-    OC_DEBUG && printf("Decrementing v_count for block %d\n", upper);
+    OC_DEBUG && printf("Decrementing unknowns count for block %d\n", upper);
     assert(g->v_count[upper - g->mblocks]);
     --(g->v_count[upper - g->mblocks]);
   }
 
   // update node count in this ring
   ring = g->bottom + lower;
-  ring->upper =0; 
+  ring->upper = 0; 
 
   // remove node from the ring
   node->left->right = node->right;
@@ -191,37 +191,21 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 		   MESSAGE "\n"); \
   memset(graph->MEMBER, 0, (SPACE) * sizeof(TYPE));
 
-  // "v" edges: omit message blocks
-  //  OC_ALLOC(v_edges, ablocks + check_space, int *,         "v edges");
-
-  // n rings: omit check blocks
-  //  OC_ALLOC(n_rings, coblocks, oc_n_edge_ring,             "n rings");
-
-  // "n pipes" are pointers from v edges down to n ring entries
-  //  OC_ALLOC(v_pipes, ablocks + check_space, oc_n_edge_ring *, "n pipes");
-
   // unsolved (downward) edge counts: omit message blocks
-  OC_ALLOC(v_count, ablocks + check_space, int,        "unsolved v_edge counts");
-
-  // solved array: omit check blocks; assumed to be solved
-  OC_ALLOC(solved, coblocks, char,                        "solved array");
-
-  // xor lists: omit nothing
-  OC_ALLOC(xor_list, coblocks + check_space, int *,       "xor lists");
+  OC_ALLOC(v_count, ablocks + check_space, int,    "unsolved v_edge counts");
 
   //
   // New bones-related arrays
   //
 
   // solutions: omit check blocks; they are their own solutions
-  OC_ALLOC(solution, coblocks, oc_bone *,                 "solutions");
+  OC_ALLOC(solution, coblocks, oc_bone *,          "solutions");
 
   // top end of edges: omit message blocks
-  OC_ALLOC(top, ablocks + check_space, oc_bone *,         "top");
+  OC_ALLOC(top, ablocks + check_space, oc_bone *,  "top");
 
   // bottom end of edges: omit check blocks
-  OC_ALLOC(bottom, coblocks, oc_n_edge_ring,              "bottom");
-
+  OC_ALLOC(bottom, coblocks, oc_n_edge_ring,       "bottom");
 
 
   // Hold onto freed blocks
@@ -259,10 +243,11 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     if (NULL == (bone = calloc(2 + aux_temp, sizeof(oc_bone))))
       return fprintf(stdout, "graph init: failed to malloc aux bones\n");
 
-    // save bone and array size; edges stored in next pass
-    graph->top[aux] = bone;
+    // save bone size, aux node; edges stored in next pass
     bone->a.unknowns = aux_temp + 1;
     bone->b.size     = aux_temp + 1;
+    bone[aux_temp + 1].a.node = aux + mblocks;
+    graph->top[aux]  = bone;
   }
 
   // 3rd stage: store down edges
@@ -274,33 +259,49 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
 
       bone = graph->top[aux_temp];
 
+#if 0
       OC_DEBUG && fprintf(stdout,
-			  "creating bone from %d down to %d\n",
+			  "creating edge from %d down to %d\n",
 			  aux_temp + mblocks, msg);
+#endif
 
       // The trick explained ...
-      // * fills in array elements p[1] onwards (in reverse order)
+      // * fills in array elements bone[1 ...] (in reverse order)
       // * edge counts are correct after this pass (+2n - n = n)
       // * no extra array/pass to iterate over/recalculate edge counts
       temp = (graph->v_count[aux_temp])--;
+      assert (temp - bone->a.unknowns >= 0);
 
-      graph->top[aux_temp][temp - p[0]].a.node = msg;
+      // fprintf(stdout, "temp is %d, unknowns is %d\n", 
+      //   temp,  bone->a.unknowns);
+
+      bone += temp - bone->a.unknowns + 1;
+
+      bone->a.node = msg;
 
       // deferred creation of up edge until now so that we can stash
       // the returned pointer in the array allocated in 2nd stage
       if (NULL == (ring = oc_create_n_edge(graph, aux_temp + mblocks, msg)))
 	return fprintf(stdout, "graph init: failed to malloc aux up edge\n");
 
-      graph->top[aux_temp][temp - p[0]].b.link = ring;
+      bone->b.link = ring;
     }
   }
 
-  // Print edge count information
+  // Print details
   if (OC_DEBUG) {
-    for (aux = 0; aux < ablocks; ++aux)
-      printf("v_count for aux block %d is %d\n", aux, 
-	     (graph->v_count[aux]));
+    printf ("Auxiliary mapping expressed as bones:\n");
+    for (aux = 0; aux < ablocks; ++aux) {
+      bone = graph->top[aux];
+#ifndef NDEBUG
+      oc_validate_bone(bone, aux + mblocks);
+#endif
+      printf ("  ");
+      oc_print_bone(bone, "\n");
+    }
   }
+
+
 #ifdef INSTRUMENT
   memset(&m, 0, sizeof(m));
 #endif
@@ -346,14 +347,11 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
   g->v_count[node - mblocks] = bone->a.unknowns;
 
   if (OC_DEBUG) {
-    printf("Set v_count for check block %d to %d\n", 
+    printf("Set unknowns count for check block %d to %d\n", 
 	   node, bone->a.unknowns);
 
-    printf("Check block mapping after removing solved: ");
-    oc_print_xor_list(v_edges,"\n");
-
-    printf("XOR list after adding solved: ");
-    oc_print_xor_list(g->xor_list[node],"\n");
+    printf("New check block %d: ",node);
+    oc_print_bone(bone, "\n");
   }
 
   // mark node as pending resolution
@@ -366,35 +364,38 @@ int oc_graph_check_block(oc_graph *g, int *v_edges) {
 }
 
 // Aux rule triggers when an unsolved aux node has no unsolved v edges
-void oc_aux_rule(oc_graph *g, int aux_node) {
+void oc_aux_rule(oc_graph *g, int anode) {
 
   int mblocks = g->mblocks;
   int *p, i, count;
   oc_bone *bone;
 
-  OC_DEBUG && fprintf(stdout, "Aux rule triggered on node %d\n", aux_node);
-  assert(aux_node >=    mblocks);
-  assert(aux_node <  g->coblocks);
+  OC_DEBUG && fprintf(stdout, "Aux rule triggered on node %d\n", anode);
+  assert(anode >=    mblocks);
+  assert(anode <  g->coblocks);
+  assert(g->v_count[anode - mblocks] == 0);
 
-  bone = g->top[aux_node - mblocks];
-  g->solution[aux_node] = bone;
+  // bone becomes a solution
+  bone = g->top[anode - mblocks];
+  g->solution[anode] = bone;
 
-  // xor list becomes list of v edges
-  g->xor_list[aux_node] = p = g->v_edges[aux_node - mblocks];
-
-  // mark aux node as having no down edges
-  g->v_edges[aux_node - mblocks] = NULL;
-
-  // delete reciprocal up edges
-  count = *(p++);
+  // count all nodes except aux node itself:
+  count = oc_count_unknowns(bone) - 1;
   OC_DEBUG && fprintf(stdout, "There are %d solved down edges\n", count);
 
-  while (count) {
-    oc_delete_lower_end(g,g->v_pipes[aux_node - mblocks][count--],
-			aux_node, *(p++), 0);
-    //    oc_delete_n_edge(g, aux_node, *(p++), 0);
+  // find where the aux node is in the list, then bubble up
+  i = oc_known_unsolved(bone, anode);
+  oc_bubble_unsolved(bone, g, i);
 
-  }
+  count = oc_count_unknowns(bone);
+  assert(1 == count);
+
+  // check that aux details in first element are OK
+  assert(bone[1].a.node == anode);
+  assert(bone[1].b.link == NULL);
+
+  // clean up 
+  g->top[anode - mblocks] = NULL; 
 }
 
 
@@ -513,70 +514,6 @@ void oc_push_solved(oc_uni_block *pnode,
   *ptail = pnode;
 }
 
-// helper function to delete edges from a solved aux or check node
-void oc_decommission_node (oc_graph *g, int node) {
-
-  int *down, upper, lower, i;
-  int mblocks = g->mblocks;
-  oc_n_edge_ring **pipes;
-
-  assert(node >= mblocks);
-
-  //  printf("Clearing v_count for node %d\n", node);
-  //  g->v_count[node - mblocks] = 0;
-
-  down = g->v_edges[node - mblocks];
-  g->v_edges   [node - mblocks] = NULL;
-
-  pipes = g->v_pipes[node - mblocks];
-
-  if (NULL == down) return;	// nodes may be decommissioned twice
-
-  if (OC_DEBUG) {
-    printf("Decommissioning node %d's v edges: ", node);
-    oc_print_xor_list(down, "\n");
-  }
-
-  for (i = down[0]; i > 0; --i) {
-    oc_delete_lower_end (g, pipes[i], node, down[i], 0);
-    //    oc_delete_n_edge (g, node, down[i], 0);
-  }
-  free(down);
-}
-
-// merge an xor list and a list of v edges into a new xor list
-static int *oc_propagate_xor(int *xors, int *edges) {
-
-  int *xp, *p;
-  int tmp, count, found = 0;
-
-  assert(NULL != xors);
-  assert(NULL != edges);
-
-  tmp = xors[0] + edges[0];
-  if (NULL == (p = xp = calloc(tmp + 1, sizeof(int))))
-    return NULL;
-
-  // Write size and all elements of xor array
-  *(xp++) = tmp;
-
-  count = *(xors++);
-  while (count--) {
-    tmp = *(xors++);
-    OC_DEBUG && printf("Propagating new XOR list element %d\n", tmp);
-    *(xp++) = tmp;
-  }
-
-  // Write all down edges (caller already removed solved one)
-  count = *(edges++);
-  while (count--) {
-    tmp = *(edges++);
-    OC_DEBUG && printf("Propagating solved down edge %d\n", tmp);
-    *(xp++) = tmp;
-  }
-
-  return p;
-}
 
 // Resolve nodes by working down from check or aux blocks
 // 
@@ -596,6 +533,8 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
   oc_uni_block *solved_tail = NULL;
 
   int from, to, count_unsolved, xor_count, i, *p, *xp, *ep;
+
+  oc_bone *bone = NULL;
 
   // mark solved list (passed by reference) as empty
   *solved_list = (oc_uni_block *) NULL;
@@ -620,18 +559,23 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 
     assert(from >= mblocks);
 
-    OC_DEBUG && fprintf(stdout, "\nStarting resolve at %d with ", from);
-
+    bone           = graph->top    [from - mblocks];
     count_unsolved = graph->v_count[from - mblocks];
 
-    OC_DEBUG && fprintf(stdout, "%d unsolved edges\n", count_unsolved);
+    if (OC_DEBUG) {
+
+      printf("\nStarting resolve at %d: ",from);
+      oc_print_bone(bone, "");
+      printf(" (%d unknowns)\n", count_unsolved);
+
+    }
 
     if (count_unsolved > 1)
       goto discard;
 
     if (count_unsolved == 0) {
 
-      if ((from >= coblocks) || graph->solved[from]) {
+      if ((from >= coblocks) || graph->solution[from]) {
 
 	// The first test above matches check blocks, while the second
 	// matches a previously-solved auxiliary block (the order of
@@ -640,7 +584,7 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 	// so adds no new information. We can remove it from the
 	// graph.
 
-	oc_decommission_node(graph, from);
+	//	oc_decommission_node(graph, from);
 	goto discard;
       }
 
@@ -654,79 +598,32 @@ int oc_graph_resolve(oc_graph *graph, oc_uni_block **solved_list) {
 
     } else if (count_unsolved == 1) {
 
-      oc_n_edge_ring **pipes;
-
       // Discard unsolved auxiliary blocks
-      if ((from < coblocks) && !graph->solved[from])
+      if ((from < coblocks) && !graph->solution[from])
 	goto discard;
 
       // Propagation rule matched (solved aux/check with 1 unsolved)
 
-      // xor_list will be fixed-size array, so we need to count how
-      // many elements will be in it.
-      ep = graph->v_edges[from - mblocks]; assert (ep != NULL);
-      xor_count = *(ep++);	// number of v edges
-
-      pipes = graph->v_pipes[from - mblocks];
-      assert(pipes != NULL);
-
-      // find the single solved edge
-      assert(to =  -1);
-      for (i = 0; i < xor_count; ++i, ++ep)
-	if (!graph->solved[*ep]) {
-	  to = *ep;
-	  break;
-	}
-      assert(to != -1);
-      assert(i < xor_count);
-
-      // remove to from the list of down edges here to simplify xor
-      // propagation below
-      *ep = graph->v_edges[from - mblocks][xor_count];
-            graph->v_edges[from - mblocks][0]        = xor_count - 1;
-
-
-      OC_DEBUG && fprintf(stdout, "Before shuffle ...\n");
+      // find the unsolved child node in the list, then bubble up
+      to = oc_unknown_unsolved(bone, graph);
+      oc_bubble_unsolved(bone, graph, to);
       
-      OC_DEBUG && fprintf(stdout, "i=%d, xor_count=%d ...\n", i, xor_count);
-	    
-      oc_delete_lower_end(graph, pipes[i + 1], from, to, 1);
-      //      oc_delete_n_edge(graph, from, to, 1);
+      // to was previously an index; dereference it
+      to = bone[1].a.node;
 
-      // also delete to from pipes
-      pipes[i + 1] = pipes[xor_count];
-
-      if (to < mblocks)
-	assert(graph->xor_list[to] == NULL);
-      if (NULL ==
-	  (p = oc_propagate_xor(graph->xor_list[from],
-				graph->v_edges[from - mblocks])))
-	return -1;
+      oc_delete_lower_end(graph, bone[1].b.link, from, to, 1);
 
       if (OC_DEBUG) {
-	fprintf(stdout, "Node %d solves node %d\n", from, to);
+	fprintf(stdout, "Node %d solves node %d\nSolution: ", from, to);
+	oc_print_bone(bone, "\n");
       }
 
       // Set 'to' as solved
-      assert (!graph->solved[to]);
+      assert (!graph->solution[to]);
       pnode->b.value      = to;	// update value (was 'from')
-      graph->solved[to] = 1;
+      graph->solution[to] = bone;
       oc_push_solved(pnode, &solved_head, &solved_tail);
 
-      // Save 'to' xor list and decommission 'from' node
-      assert (NULL == graph->xor_list[to]);
-      graph->xor_list[to] = p;
-      oc_decommission_node(graph, from);
-
-      if (OC_DEBUG) {
-	fprintf(stdout, "Node %d (from) has xor list: ", from);
-	if (from > coblocks)
-	  fprintf(stdout, "%d\n", from);
-	else
-	  oc_print_xor_list(graph->xor_list[from], "\n");
-	fprintf(stdout, "Node %d (to) has xor list: ", to);
-	oc_print_xor_list(graph->xor_list[to], "\n");
-      }
 
       // Update global structure and decide if we're done
       if (to < mblocks) {

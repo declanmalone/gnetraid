@@ -179,8 +179,7 @@ static void count(oc_decoder *d, int node) { ++(d->count); };
 static void copy(oc_decoder *d, int node)  { *((d->dest)++) = node; };
 
 // recursive part
-static void expandr(oc_decoder *d, int flags,
-		    int *nodelist) { // [size, elem1, elem2, ... ]
+static void expandr(oc_decoder *d, int flags, oc_bone *b) {
 
   register int i, node, size;
   register int mblocks, coblocks;
@@ -188,17 +187,18 @@ static void expandr(oc_decoder *d, int flags,
   mblocks  = d->base.mblocks;
   coblocks = d->base.coblocks;
 
-  assert(nodelist != NULL);
-  size = *(nodelist++);
+  assert(b != NULL);
+  size = b->b.size - 1;
+  b+=2; // skip past size and target unknown
 
-  for (i=0; i < size; ++i, ++nodelist) {
-    node = *nodelist;
+  for (i=0; i < size; ++i, ++b) {
+    node = b->a.node;
     // TODO: implement cache-related stuff
     if (
 	((flags & OC_EXPAND_MSG) && (node <  mblocks)) ||
 	((flags & OC_EXPAND_AUX) && (node >= mblocks) && (node < coblocks))
        )
-      expandr(d, flags, d->graph.xor_list[node]);
+      expandr(d, flags, d->graph.solution[node]);
     else 
       (*(d->callback))(d, node);	// call callback on unexpanded block
   }
@@ -218,7 +218,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
   // 1st Stage: expand into a list with duplicates
   decoder->callback = &count;
   decoder->count    = 0;
-  expandr(decoder, decoder->flags, decoder->graph.xor_list[node]);
+  expandr(decoder, decoder->flags, decoder->graph.solution[node]);
 
   // Allocate memory, including space for a sentinel at the end.
   if (NULL == (p = calloc(decoder->count + 2, sizeof(int))))
@@ -229,7 +229,7 @@ int *oc_expansion(oc_decoder *decoder, int node) {
 
   decoder->callback = &copy;
   decoder->dest     = p + 1;
-  expandr(decoder, decoder->flags, decoder->graph.xor_list[node]);
+  expandr(decoder, decoder->flags, decoder->graph.solution[node]);
 
   assert(-1 == p[ic + 1]);	// make sure sentinel wasn't clobbered
 

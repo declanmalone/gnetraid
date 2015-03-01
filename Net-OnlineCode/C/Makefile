@@ -35,19 +35,18 @@ libonline-code.a : $(OBJECTS)
 
 
 online-code.o : online-code.c
-rng_sha1.o : rng_sha1.c
-graph.o : graph.c
-encoder.o : encoder.c
-decoder.o : decoder.c
+rng_sha1.o    : rng_sha1.c
+graph.o       : graph.c
+encoder.o     : encoder.c
+decoder.o     : decoder.c
 
 # Rebuild if included header files change
-floyd.o : rng_sha1.h
-encoder.o : encoder.h online-code.h rng_sha1.h
-decoder.o : decoder.h online-code.h graph.h rng_sha1.h
-graph.o : graph.h online-code.h structs.h
-online-code.o : online-code.h rng_sha1.h floyd.h
-rng_sha1.o : rng_sha1.h
-
+floyd.o       : structs.h rng_sha1.h
+encoder.o     : structs.h encoder.h online-code.h rng_sha1.h
+decoder.o     : structs.h decoder.h online-code.h graph.h rng_sha1.h
+graph.o       : structs.h graph.h online-code.h structs.h
+rng_sha1.o    : structs.h rng_sha1.h
+online-code.o : structs.h online-code.h rng_sha1.h floyd.h
 
 
 codec: codec.o libonline-code.a
