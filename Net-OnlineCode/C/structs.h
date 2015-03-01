@@ -181,6 +181,11 @@ typedef struct {
   int                boneyard_size;
   int                boneyard_next;
 
+  // Avoid using malloc for lower side of edges
+  oc_n_edge_ring    *ringfence;
+  int                ringfence_size;
+  int                ringfence_next;  
+
   oc_uni_block *phead, *ptail;	// queue of pending nodes
 
   unsigned int  unsolved_count;	// count unsolved message blocks

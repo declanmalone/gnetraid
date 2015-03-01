@@ -83,9 +83,13 @@ oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   assert(upper > lower);
 
-  if (NULL == (p = malloc(sizeof(oc_n_edge_ring))))
+  //  if (NULL == (p = malloc(sizeof(oc_n_edge_ring))))
+  //    return NULL;
+
+  if (g->ringfence_next + 1 >= g->ringfence_size)
     return NULL;
 
+  p = g->ringfence + g->ringfence_next++;
 
   ring = g->bottom + lower;
 
@@ -131,7 +135,7 @@ void oc_delete_lower_end(oc_graph *g, oc_n_edge_ring *node,
   node->left->right = node->right;
   node->right->left = node->left;
 
-  free(node);
+  //  free(node);
 }
 
 int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
@@ -216,13 +220,23 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // allocation.
 
   check_space = check_space + check_space * log(f) * fudge;
-  printf("Allocating %d bones\n", (int) check_space);
+
+  OC_DEBUG && printf("Allocating %d bones\n", (int) check_space);
   //  OC_ALLOC(boneyard, check_space, oc_bone,         "boneyard");
   if (NULL == (graph->boneyard = malloc(check_space * sizeof(oc_bone))))
     return fprintf(stdout, "graph init: Failed to allocate boneyard \n");
   // no need to clear this memory
   graph->boneyard_size = check_space;
   graph->boneyard_next = 0;
+
+  // Also ring-fence an area of memory for reciprocal links
+  if (NULL == (graph->ringfence = malloc(check_space * 
+					 sizeof(oc_n_edge_ring))))
+    return fprintf(stdout, "graph init: Failed to allocate ringfence \n");
+  // no need to clear this memory
+  graph->ringfence_size = check_space;
+  graph->ringfence_next = 0;
+  
 
   // Hold onto freed blocks
   if ( (NULL == free_head) && (NULL == hold_blocks()) )
