@@ -143,6 +143,7 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // we need e and q to calculate the expected number of check blocks
   double e = codec->e;
   int    q = codec->q;		// also needed to iterate over aux mapping
+  int    f = codec->F;		// used to calculate some fixed arrays
 
   float expected;		// expected number of check blocks
   int   check_space;		// actual space for check blocks (fudged)
@@ -207,6 +208,9 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
   // bottom end of edges: omit check blocks
   OC_ALLOC(bottom, coblocks, oc_n_edge_ring,       "bottom");
 
+
+  // scratch space
+  OC_ALLOC(xor_scratch, f + 1, int,                "xor scratch");
 
   // Hold onto freed blocks
   if ( (NULL == free_head) && (NULL == hold_blocks()) )

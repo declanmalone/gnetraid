@@ -174,7 +174,10 @@ typedef struct {
   oc_bone          **solution;	// bone morphs into an xor list 
 
   // These two stay the same in the new implementation
-  int            *v_count;	// per-node count of unsolved v edges
+  int               *v_count;	// per-node count of unsolved v edges
+
+  // Avoid using malloc for checkblock's xor list
+  int               *xor_scratch;
 
   oc_uni_block *phead, *ptail;	// queue of pending nodes
 

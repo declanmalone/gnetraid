@@ -87,9 +87,6 @@ int oc_encoder_init(oc_encoder *enc, int mblocks, oc_rng_sha1 *rng,
     return super_flag & OC_FATAL_ERROR;
   }
 
-  // set up Fisher-Yates source array for check block selection
-  oc_init_cblock_shuffle_source(&(enc->base));
-
   return super_flag;
 
 }

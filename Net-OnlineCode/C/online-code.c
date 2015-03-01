@@ -78,64 +78,6 @@ double *oc_codec_init_probdist(oc_codec *codec) {
 
 }
 
-// Fisher-Yates shuffle routine
-//
-// Randomly picks some combination of elements from a list
-//
-// If we were selecting a combination of all elements of an n-element
-// array it would be possible to use an "inside-out" version of the
-// Fisher-Yates shuffle algorithm that only requires one array which
-// is built up on the fly. However, there's no such algorithm (that I
-// can find) that only needs one array when we pick k out of n
-// elements (k < n). As a result, this version requires that the
-// caller sets up the source array before calling this routine. As
-// this array will be copied into the "working" array at the start of
-// the routine, it needs to be able to hold the full n elements.
-//
-// This version works by shuffling the working array so that selected
-// elements are gathered at the end of it. A pointer to the start of
-// this area of the working array is returned.
-
-#ifdef OC_AVOID_MEMCPY
-int *oc_fisher_yates(int *src, int *dst, int start, int k, int n, oc_rng_sha1 *rng) {
-#else
-int *oc_fisher_yates(int *src, int *dst, int k, int n, oc_rng_sha1 *rng) {
-#endif
-
-  int i,tmp;
-  unsigned j;
-
-  // catch various calling errors (turn off by #defining NDEBUG)
-  assert(src != NULL);
-  assert(dst != NULL);
-  assert(src != dst);
-  assert(rng != NULL);
-  assert(n > 0);
-  assert(k > 0);
-  assert(k <= n);
-
-#ifdef OC_AVOID_MEMCPY
-  tmp = n;
-  src = dst;
-  while (tmp--) *(src++) = start++;
-#else
-  memcpy(dst, src, n * sizeof(int));
-#endif
-
-  // algorithm gathers picks at the end of the array
-  i=n;
-  while (--i >= n - k) {
-    j=floor(oc_rng_rand(rng,i + 1));	// range [0,i]
-    // if (i==j) continue;	// not worth checking
-    tmp    = dst[i];
-    dst[i] = dst[j];
-    dst[j] = tmp;
-  }
-
-  return &(dst[n - k]);
-
-}
-
 // Create the auxiliary mapping 
 //
 // Conceptually, this creates a 2d array of mblocks x q elements which
@@ -160,8 +102,6 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
   int  q       = codec->q;
   int  mblocks = codec->mblocks;
   int  ablocks = codec->ablocks;
-  int *src     = codec->shuffle_source;
-  int *dst     = codec->shuffle_dest;
   int *p, i, j;
 
   int *map = calloc(q * mblocks, sizeof(int));
@@ -170,28 +110,10 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 
   codec->auxiliary = map;
 
-#if 0
-#ifndef OC_AVOID_MEMCPY
-  // initialise source array for Fisher-Yates shuffle (just once)
-  p=src;
-  for (i=0; i < ablocks; ++i) {
-    *(p++) = mblocks + i;
-  }
-#endif
-#endif
-
   SET_INIT(mblocks, ablocks, q);
 
   // attach each mblock to q ablocks
   for (i=0; i < mblocks; ++i) {
-#if 0
-#ifdef OC_AVOID_MEMCPY
-    p = oc_fisher_yates(src, dst, mblocks, q, ablocks, rng);
-#endif
-#ifndef OC_AVOID_MEMCPY
-    p = oc_fisher_yates(src, dst, q, ablocks, rng);
-#endif
-#endif
 
     p = oc_floyd(rng, mblocks, ablocks, q);
     for (j=0; j < q; ++j) {
@@ -221,46 +143,18 @@ int oc_random_degree(oc_codec *codec, oc_rng_sha1 *rng) {
   return i + 1;
 }
 
-// Factor out code to initialise shuffle_source array for use in
-// generating check blocks (call once rather than doing it for every
-// check block)
-void oc_init_cblock_shuffle_source(oc_codec *codec) {
-
-  int i, *p = codec->shuffle_source;
-  int coblocks = codec->mblocks + codec->ablocks;
-
-  assert(p != NULL);
-
-  for (i=0; i < coblocks; ++i)
-    *(p++) = i;
-
-}
-
 // Create a new check block as a list of 'degree' downward edges.
 // 'Degree' is stored in the first element of the returned list.
 
 int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
 
-  int *list     = calloc(degree + 1, sizeof(int));
   int  coblocks = codec->mblocks + codec->ablocks;
-  int *src      = codec->shuffle_source;
-  int *dst      = codec->shuffle_dest;
   int *p, *q;
 
-  if (list == NULL) return NULL;
-
-  p = list;			// temporary iterator
+  p = codec->xor_scratch;			
 
   // select 'degree' composite blocks ('src' array is assumed to be
   // initialised already)
-#if 0
-#ifdef OC_AVOID_MEMCPY
-  q = oc_fisher_yates(src, dst, 0, degree, coblocks, rng);
-#endif
-#ifndef OC_AVOID_MEMCPY
-  q = oc_fisher_yates(src, dst, degree, coblocks, rng);
-#endif
-#endif
 
   SET_INIT(0, coblocks, degree);
   q = oc_floyd(rng, 0, coblocks, degree);
@@ -269,7 +163,7 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
   *(p++) = degree;
   memcpy(p, q, degree * sizeof(int));
 
-  return list;
+  return codec->xor_scratch;
 
 }
 
@@ -410,10 +304,8 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
     flags |= OC_F_CHANGED;
   f = new_f;
 
-  // allocate scratch space for shuffles
-  if (NULL == (codec->shuffle_source = calloc(mblocks + ablocks, sizeof(int))))
-    flags |= OC_FATAL_ERROR;
-  if (NULL == (codec->shuffle_dest   = calloc(mblocks + ablocks, sizeof(int))))
+  // allocate scratch space for creating check block mapping
+  if (NULL == (codec->xor_scratch = calloc(f + 1, sizeof(int))))
     flags |= OC_FATAL_ERROR;
 
   // Fill in remaining fields
