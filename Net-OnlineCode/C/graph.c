@@ -8,7 +8,7 @@
 #include "online-code.h"
 #include "graph.h"
 
-#define OC_DEBUG 1
+#define OC_DEBUG 0
 #define STEPPING 1
 #define INSTRUMENT 1
 
