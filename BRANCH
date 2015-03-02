@@ -1,0 +1,49 @@
+Info for the "mapper" branch
+
+Before doing anything directly related to sending/receiving check
+blocks over the network or doing XORs with actual files (instead of
+keeping everything in memory), I'm implementing a simple "mapper"
+script that will take a set of codec parameters and output a "map"
+file that includes the necessary codec metadata and information about
+how blocks are constructed. An example of a map for a particular
+encoding job could look something like this:
+
+ %input message file: foo
+ %output check file: bar
+ %blocksize: 1024
+ %auxiliary uuid: b156ec815859d9de0398f0e7770bb656797c3e7f
+ %message blocks: 400
+ %auxiliary blocks: 26
+ %e: e=0.0387051932151602
+ %q: 3
+ %F: 404
+ %% Auxiliary Mapping
+ [400] <- [3, 6, 8, 200] <some uuid>
+ ... (rest of auxiliary nodes)
+ %% Check Mapping
+ [426] <- [400, 1, 33] <some uuid>
+ ... (more check nodes)
+
+A similar map file could be created separately for decoding jobs, or
+encode and decode information could be stored in a single file.
+
+
+I haven't figured out the best way of doing disk I/O for when dealing
+with encoding and decoding large files, so this mapper program will
+allow me to decouple the encoding/decoding steps from the actual I/O
+scheduler. By using a simple file format to store all the relevant
+metadata and block construction I can experiment with various I/O and
+caching techniques without getting bogged down in calling interfaces
+and the like.
+
+With a standard "map" file format and a check block file, I can also
+write a simple network-sending program. I can also write a receiver
+program that receives check blocks, resolves the graph and outputs a
+map file and a check block file that can be read by another
+stand-alone program that does the actual XORs.
+
+I'll be doing most of the development in Perl to begin with since it's
+better for developing prototypes and experimenting. I will probably
+release the results of this branch on CPAN as OCD::Mapper.
+
+
