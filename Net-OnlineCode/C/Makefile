@@ -3,14 +3,14 @@ OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o \
           floyd.o bones.o
 PROGS   = probdist mindecoder compat codec
 
-CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST
+CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST -DNDEBUG
 CLIBS = -L.
 
 # Uncomment for gconv (line-by-line) profiling
 # PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
 # PROF = -pg
-#PROF = -pg
+PROF = -pg
 
 # External libraries
 # '-lm' for maths (ceil, floor, log, etc.)

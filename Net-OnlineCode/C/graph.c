@@ -83,11 +83,11 @@ oc_n_edge_ring *oc_create_n_edge(oc_graph *g, int upper, int lower) {
 
   assert(upper > lower);
 
-  //  if (NULL == (p = malloc(sizeof(oc_n_edge_ring))))
-  //    return NULL;
-
-  if (g->ringfence_next + 1 >= g->ringfence_size)
-    return NULL;
+  // We shouldn't need to test for overflowing so long as we have
+  // similar checks when creating bones and we always create bones
+  // before the bottom links.
+  //  if (g->ringfence_next + 1 >= g->ringfence_size)
+  //  return NULL;
 
   p = g->ringfence + g->ringfence_next++;
 
@@ -270,8 +270,10 @@ int oc_graph_init(oc_graph *graph, oc_codec *codec, float fudge) {
     aux_temp = graph->v_count[aux];
     aux_temp >>= 1;		// reverse +2 trick
 
-    if (NULL == (bone = calloc(2 + aux_temp, sizeof(oc_bone))))
-      return fprintf(stdout, "graph init: failed to malloc aux bones\n");
+    //    if (NULL == (bone = calloc(2 + aux_temp, sizeof(oc_bone))))
+    //      return fprintf(stdout, "graph init: failed to malloc aux bones\n");
+    if (NULL == (bone = oc_new_bone(graph, 2 + aux_temp)))
+      return  fprintf(stdout, "graph init: failed to malloc aux bones\n");
 
     // save bone size, aux node; edges stored in next pass
     bone->a.unknowns = aux_temp + 1;

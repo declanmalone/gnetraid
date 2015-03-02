@@ -11,6 +11,7 @@
 #include "online-code.h"
 #include "floyd.h"
 
+
 double *oc_codec_init_probdist(oc_codec *codec) {
 
   int    coblocks = codec->coblocks;
@@ -112,14 +113,37 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 
   SET_INIT(mblocks, ablocks, q);
 
-  // attach each mblock to q ablocks
-  for (i=0; i < mblocks; ++i) {
+  // return values in the range [0,MAX]
+#define RandInt(RNG, MAX) (floor(oc_rng_rand(RNG, MAX + 1)))
+  
+  // Attach each mblock to q ablocks
 
-    p = oc_floyd(rng, mblocks, ablocks, q);
-    for (j=0; j < q; ++j) {
-      *(map++) = p[j];
+  // The default value of q would allow us to use a more efficient
+  // unrolled version of Floyd's algorithm
+  if (q == 3) {
+    int a, b, c;
+    for (i=0; i < mblocks; ++i) {
+
+      a = mblocks + RandInt(rng, ablocks - 3);
+      *(map++) = a;
+      b = mblocks + RandInt(rng, ablocks - 2);
+      if (b == a)
+	b = mblocks + ablocks - 2;
+      *(map++) = b;
+      c = mblocks + RandInt(rng, ablocks - 1);
+      if ((c == a) || (c == b) )
+	c = mblocks + ablocks - 1;
+      *(map++) = c;
+      // printf("msg block %d attaches to %d, %d, %d\n", i, a, b, c);
     }
-    free(p);
+  } else {
+    for (i=0; i < mblocks; ++i) {
+      p = oc_floyd(rng, mblocks, ablocks, q);
+      for (j=0; j < q; ++j) {
+	*(map++) = p[j];
+      }
+      free(p);
+    }
   }
 
   return codec->auxiliary;
