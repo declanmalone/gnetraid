@@ -156,7 +156,8 @@ sub rand {
     # Divide first
     if ($r < $maxint) {
       $ratio = $r / $maxint;
-      return $max * $ratio;
+      $ratio *= $max;
+      return $ratio;
     }
   }
 }
