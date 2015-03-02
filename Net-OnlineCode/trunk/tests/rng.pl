@@ -87,7 +87,7 @@ for (1..$nkeys) {
 #  $s =~ s/^0\.(\d\d).*$/$1/;
 
   # pick a different number to go in the bins
-  $s=$rng1->randint(0,99);
+  $s=$rng1->randint(99);
   $bins[$s]++;
 }
 

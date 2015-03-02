@@ -397,7 +397,7 @@ sub floyd {
   my %set;
   my ($j, $t) = ($n - $k);
   while ($j < $n) {
-    $t = $rng->randint(0,$j);
+    $t = floor($rng->rand($j + 1));
     if (!exists($set{$t + $start})) {
       $set{$t + $start} = undef;
     } else {
@@ -405,7 +405,7 @@ sub floyd {
     }
     ++$j;
   }
-  die "Floyd didn't pick $k elements" if ASSERT and $k != (keys %set);
+  // die "Floyd didn't pick $k elements" if ASSERT and $k != (keys %set);
   return keys %set;
 }
 

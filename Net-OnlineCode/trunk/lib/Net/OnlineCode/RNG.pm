@@ -162,11 +162,11 @@ sub rand {
   }
 }
 
-# Encapsulate a common use case of wanting random integers in the
-# range [low,high]
+# Encapsulate the most common use case of wanting random integers in
+# the range [0,max]
 sub randint {
-  my ($self, $low, $high) = @_;
-  return $low + floor($self->rand($high - $low + 1));
+  my ($self, $max) = @_;
+  return floor($self->rand($max + 1));
 }
 
 # The remaining subs are debugging purposes. They report back the
