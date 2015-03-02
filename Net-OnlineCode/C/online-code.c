@@ -111,8 +111,6 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
 
   codec->auxiliary = map;
 
-  SET_INIT(mblocks, ablocks, q);
-
   // return values in the range [0,MAX]
 #define RandInt(RNG, MAX) (floor(oc_rng_rand(RNG, MAX + 1)))
   
@@ -137,6 +135,7 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
       // printf("msg block %d attaches to %d, %d, %d\n", i, a, b, c);
     }
   } else {
+    SET_INIT(mblocks, ablocks, q);
     for (i=0; i < mblocks; ++i) {
       p = oc_floyd(rng, mblocks, ablocks, q);
       for (j=0; j < q; ++j) {
