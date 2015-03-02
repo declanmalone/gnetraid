@@ -13,7 +13,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(random_uuid_160);
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 #
 # Random number generator

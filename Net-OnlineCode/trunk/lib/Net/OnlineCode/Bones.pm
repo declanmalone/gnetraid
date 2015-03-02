@@ -3,6 +3,11 @@ package Net::OnlineCode::Bones;
 use strict;
 use warnings;
 
+use vars qw(@ISA @EXPORT_OK %EXPORT_TAGS $VERSION);
+
+$VERSION = '0.04';
+
+
 # "Bones" (or "bundles of node elements") are one of the building
 # blocks of the Online Codes decoding algorithm.
 #

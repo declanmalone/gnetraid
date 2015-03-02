@@ -12,10 +12,13 @@ lib/Net/OnlineCode/Encoder.pm
 lib/Net/OnlineCode/GraphDecoder.pm
 lib/Net/OnlineCode/RNG.pm
 lib/Net/OnlineCode.xs
+lib/Net/OnlineCode/Bones.pm
 MANIFEST			This list of files
 MANIFEST.SKIP
 README
 tests/bipartite.pl
+tests/floyd.pl
+tests/compat.pl
 tests/codec.pl
 tests/fisher-yates.pl
 tests/mindecoder.pl
@@ -29,6 +32,7 @@ t/02_OnlineCode.t
 t/03_OnlineCode_xor.t
 t/04_Encoder.t
 t/05_Decoder.t
+t/06_Bones.t
 Makefile.PL
 META.yml
 META.json

@@ -6,6 +6,7 @@
 \.s$
 \.bak$
 ^MANIFEST\.SKIP$
+\.gitignore$
 \.svn/
 ^ctest/gen_this_machine$
 ^ctest/xor_test$

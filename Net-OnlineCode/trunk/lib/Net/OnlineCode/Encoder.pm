@@ -15,7 +15,7 @@ require Exporter;
 @ISA = qw(Net::OnlineCode Exporter);
 @EXPORT_OK = qw();
 
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 sub new {
 

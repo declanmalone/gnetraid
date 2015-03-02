@@ -23,7 +23,7 @@ our @export_default = qw();
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = ();
-$VERSION = '0.03';
+$VERSION = '0.04';
 
 # Use XS for fast xors (TODO: make this optional)
 require XSLoader;
@@ -415,56 +415,11 @@ sub floyd {
   return keys %set;
 }
 
-# Fisher-Yates shuffle algorithm, based on recipe 4.17 from the Perl
-# Cookbook. Takes an input array it randomises the order (ie,
-# shuffles) and then truncates the array to "picks" elements.
-#
-# This is much more efficient than the usual approach of "keep picking
-# new elements until we get k distinct ones" particularly as k
-# approaches the size of the array. That algorithm could make
-# exponentially many calls to rand, whereas this just makes one call
-# per item to be picked.
-#
-# 
-
-sub fisher_yates_shuffle {
-
-  my ($rng, $array, $picks) = @_;
-
-  if (ASSERT) {
-    die "fisher_yates_shuffle: 1st arg not an RNG object\n"
-      unless ref($rng);
-  }
-
-  # length in 32-bit words
-  my $len = length($array) >> 2;
-
-  # Change recipe to pick subset of list
-  $picks=$len unless
-    defined($picks) and $picks >= 0;
-
-  # algorithm fills picks into the end of the array
-  my $i=$len;
-  while (--$i >= $len - $picks) {
-    my $j=floor($rng->rand($i + 1)); # range [0,$i]
-    #next if $i==$j;	           # not worth checking, probably
-    #    @$array[$i,$j]=@$array[$j,$i]
-    my $tmp1 = substr $array, $i << 2, 4;
-    my $tmp2 = substr $array, $j << 2, 4;
-    substr $array, $i << 2, 4, $tmp2;
-    substr $array, $j << 2, 4, $tmp1;
-  }
-
-  return (unpack "L*", substr $array, ($len - $picks) << 2);
-}
-
-#
 # Routine to calculate the auxiliary block -> message block* mapping.
 # The passed rng object must already have been seeded, and both sender
 # and receiver should use the same seed.  Returns [[..],[..],..]
 # representing which message blocks each of the auxiliary block is
 # composed of.
-#
 
 sub auxiliary_mapping {
 
@@ -473,38 +428,8 @@ sub auxiliary_mapping {
 
   croak "auxiliary_mapping: rng is not a reference\n" unless ref($rng);
 
-  #print "auxiliary_mapping: entering RNG value: " . ($rng->as_hex). "\n";
-
   # hash slices: powerful, but syntax is sometimes confusing
   my ($mblocks,$ablocks,$q) = @{$self}{"mblocks","ablocks","q"};
-
-  # make sure hash(ref) slice above actually did something sensible:
-  # die "weird mblocks/ablocks" unless $nblocks + $aux_blocks >= 2;
-
-  # I made a big mistake when reading the description for creating aux
-  # blocks. What I implemented first (in the commented-out section
-  # below) was to link each of the auxiliary blocks to q message
-  # blocks. What I should have done was to link each *message block*
-  # to q auxiliary blocks. As a result, it was taking much more than
-  # the expected number of check blocks to decode the message.
-
-  # as a result of the new algorithm, it makes sense to work out
-  # reciprocal links between message blocks and auxiliary blocks
-  # within the base class. Storing them here won't work out very well,
-  # though: the encoder doesn't care about the message block to aux
-  # block mapping, so it would be a waste of memory, but more
-  # importantly, the decoder object stores all mappings in a private
-  # GraphDecoder object (so duplicating the structure here would be a
-  # waste).
-
-  # I will make one change to the output, though: instead of just
-  # returning the mappings for the 0.55qen auxiliary blocks, I will
-  # return a list of message block *and* auxiliary block mappings. The
-  # encoder and decoder will have to be changed: encoder immediately
-  # splices the array to remove unwanted message block mappings, while
-  # the decoder will be simplified by only having to pass the full
-  # list to the graph decoder (which will have to be modified
-  # appropriately).
 
   my $aux_mapping = [];
 
@@ -514,14 +439,29 @@ sub auxiliary_mapping {
   my @hashes;
   for (0 .. $mblocks + $ablocks -1) { $hashes[$_] = {}; }
 
-  for my $msg (0 .. $mblocks - 1) {
-    # list of all aux block indices
-
-    # foreach my $aux (fisher_yates_shuffle($rng, $ab_string, $q)) {
-    # Use Floyd's algorithm instead of Fisher-Yates
-    foreach my $aux (floyd($rng, $mblocks, $ablocks, $q)) {
-      $hashes[$aux]->{$msg}=undef;
-      $hashes[$msg]->{$aux}=undef;
+  # Use an unrolled version of Floyd's algorithm for the default case
+  # where q=3
+  if ($q == 3) {
+    my ($a,$b,$c);
+    for my $msg (0 .. $mblocks - 1) {
+      $a = $rng->randint($mblocks, $mblocks + $ablocks - 3);
+      $hashes[$a]  ->{$msg}=undef;
+      $hashes[$msg]->{$a}  =undef;
+      $b = $rng->randint($mblocks, $mblocks + $ablocks - 2);
+      $b = $mblocks + $ablocks - 2 if $b == $a;
+      $hashes[$b]  ->{$msg}=undef;
+      $hashes[$msg]->{$b}  =undef;
+      $c = $rng->randint($mblocks, $mblocks + $ablocks - 1);
+      $b = $mblocks + $ablocks - 1 if $c == $b or $c == $a;
+      $hashes[$c]  ->{$msg}=undef;
+      $hashes[$msg]->{$c}  =undef;
+    }
+  } else {
+    for my $msg (0 .. $mblocks - 1) {
+      foreach my $aux (floyd($rng, $mblocks, $ablocks, $q)) {
+	$hashes[$aux]->{$msg}=undef;
+	$hashes[$msg]->{$aux}=undef;
+      }
     }
   }
 
@@ -586,11 +526,10 @@ sub checkblock_mapping {
   ++$i;
 
   # select i composite blocks uniformly
-#  @coblocks = fisher_yates_shuffle($rng, $self->{fisher_string} , $i);
   @coblocks = floyd($rng, 0, $coblocks , $i);
 
   if (ASSERT) {
-    die "fisher_yates_shuffle: created empty check block\n!" unless @coblocks;
+    die "checkblock_mapping: created empty check block\n!" unless @coblocks;
   }
 
   print "CHECKblock mapping: " . (join " ", @coblocks) . "\n" if DEBUG;

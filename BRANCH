@@ -1,8 +1,7 @@
 Info for the "Net-OnlineCode-0.04" branch
 
 Preparation for 0.04 release of Net::OnlineCode
-
-I've made three major changes to the code since the 0.03 release:
+'ve made three major changes to the code since the 0.03 release:
 
 * Changing to little-endian byte ordering in the RNG
 * Using "Bones" to avoid a lot of array copies
