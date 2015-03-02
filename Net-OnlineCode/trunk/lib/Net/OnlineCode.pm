@@ -317,12 +317,6 @@ sub _probability_distribution {
 
   my ($nblocks,$epsilon) = @_;	# nblocks = number of *composite* blocks!
 
-  # after code reorganisation, this shouldn't happen:
-  if ($nblocks == 1) {
-    croak "BUG: " .  __PACKAGE__ ." - number of composite blocks = 1\n";
-    return (1, 0, 1);
-  }
-
   print "generating probability distribution from nblocks $nblocks, e $epsilon\n"
     if DEBUG;
 

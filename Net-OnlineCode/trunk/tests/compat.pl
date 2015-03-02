@@ -20,14 +20,3 @@ for my $i (1..10000) {
   print "$r\n";
 }
 
-$rng = Net::OnlineCode::RNG->new($null_seed);
-
-my $str = pack "L*", (0..24);
-
-for my $trial (1..10_000) {
-
-  my @l = Net::OnlineCode::fisher_yates_shuffle($rng,$str,20);
-
-  print join ", ", @l;
-  print "\n";
-}

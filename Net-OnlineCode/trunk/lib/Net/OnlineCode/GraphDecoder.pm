@@ -287,6 +287,7 @@ sub resolve {
   }
 
   my @newly_solved = ();
+  my $solved_count = 0;
   my $mblocks  = $self->{mblocks};
   my $ablocks  = $self->{ablocks};
   my $coblocks = $self->{coblocks};
@@ -345,6 +346,7 @@ sub resolve {
       $self->{top}->[$from - $mblocks] = undef;
       
       push @newly_solved, $bone;
+      ++$solved_count;
       cascade($self, $from);
 
     } elsif ($unknowns == 1) {
@@ -387,6 +389,7 @@ sub resolve {
       print "Marking block $to as solved\n" if DEBUG;
       $self->{solution}->[$to] = $bone;
       push @newly_solved, $bone;
+      ++$solved_count;
 
       if ($to < $mblocks) {
 	print "Solved message block $to completely\n" if DEBUG;
@@ -405,7 +408,7 @@ sub resolve {
     }
 
     return ($self->{done}, @newly_solved)
-      if (@newly_solved and STEPPING);
+      if (STEPPING and $solved_count);
 
   }
 

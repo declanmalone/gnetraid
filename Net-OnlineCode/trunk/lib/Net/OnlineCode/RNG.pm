@@ -142,36 +142,21 @@ sub get_seed {
 sub rand {
   my ($self,$max) = @_;
   $max = $max || 1.0;
-  #$max = abs($max);		# don't allow negative values
-
   $max += 0.0;			# ensure max is a float
 
+  my ($maxint,$r, $ratio, $current) = (0xffffffff);
   while(1) {
-    $self->[CURRENT] = sha1($self->[CURRENT]); # advance to next rand
+    # advance to the next rand
+    $current = $self->[CURRENT] = sha1($self->[CURRENT]);
 
-    # unpack 5 32-bit words from the 160-bit SHA sum. Changed to
-    # unpack using little-endian as this is more common (x86/arm
-    # anyway)
-    my @uints = unpack "V1", $self->[CURRENT];
+    # Unpack first 32-bit little-endian word from SHA1 value
+    $r = unpack "V1", $current;
 
     # We calculate the rand by max * uint/(max 32-bit int).
-    while (@uints>=1) {
-      my $r = shift @uints;
-      #      $r ^= shift @uints;
-      #      $r ^= shift @uints;
-      #      $r ^= shift @uints;
-      #      $r ^= shift @uints;
-      my $maxint = 0xffffffff;
-      # Divide first
-      if ($r < $maxint) {
-	my $ratio  = $r / $maxint;
-	return ($max * $ratio);
-      }
-
-      if ($r < $maxint) {
-	my $product = $r * $max;
-	return $product / $maxint;
-      }
+    # Divide first
+    if ($r < $maxint) {
+      $ratio = $r / $maxint;
+      return $max * $ratio;
     }
   }
 }
