@@ -28,6 +28,7 @@ typedef struct {
   int   *auxiliary;		// 2d array mapping message->auxiliary
 
   int   *xor_scratch;
+  int   *floyd_scratch;
 
 } oc_codec;
 

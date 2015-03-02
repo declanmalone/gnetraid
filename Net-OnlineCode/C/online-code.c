@@ -135,7 +135,7 @@ int *oc_auxiliary_map(oc_codec *codec, oc_rng_sha1 *rng) {
       // printf("msg block %d attaches to %d, %d, %d\n", i, a, b, c);
     }
   } else {
-    SET_INIT(mblocks, ablocks, q);
+    SET_INIT(codec->floyd_scratch, mblocks, ablocks, q);
     for (i=0; i < mblocks; ++i) {
       p = oc_floyd(rng, mblocks, ablocks, q);
       for (j=0; j < q; ++j) {
@@ -174,12 +174,11 @@ int *oc_checkblock_map(oc_codec *codec, int degree, oc_rng_sha1 *rng) {
   int  coblocks = codec->mblocks + codec->ablocks;
   int *p, *q;
 
-  p = codec->xor_scratch;			
+  p = codec->xor_scratch;
 
   // select 'degree' composite blocks ('src' array is assumed to be
   // initialised already)
 
-  SET_INIT(0, coblocks, degree);
   q = oc_floyd(rng, 0, coblocks, degree);
 
   // save degree and list of blocks in our array
@@ -330,6 +329,9 @@ int oc_codec_init(oc_codec *codec, int mblocks, ...) {
   // allocate scratch space for creating check block mapping
   if (NULL == (codec->xor_scratch = calloc(f + 1, sizeof(int))))
     flags |= OC_FATAL_ERROR;
+  if (NULL == (codec->floyd_scratch = calloc(f + 1, sizeof(int))))
+    flags |= OC_FATAL_ERROR;
+  SET_INIT(codec->floyd_scratch, mblocks, ablocks, q);
 
   // Fill in remaining fields
   codec->ablocks  = ablocks;

@@ -103,8 +103,8 @@
 // (unordered list and bit array) and leave refining them or
 // implementing some other option until later.
 
-// declare some static globals so that different methods don't have to
-// include them in local data structures or pass them as arguments.
+// declare some static globals so that macros and functions don't have
+// to include them in local data structures or pass them as arguments.
 
 static int global_start;
 static int global_n, global_k;
@@ -118,19 +118,12 @@ static int global_n, global_k;
 static int *int_list = 0;
 static int items;
 
-void oc_alloc_int_list(int start, int n, int k) {
+void oc_alloc_int_list(int *buf, int start, int n, int k) {
   STASH_GLOBALS(start, n, k);
+  int_list = buf;
 }
 
-// I'll actually allocate the list here so that SET_OUT returns a
-// freshly-allocated array and I avoid a memcpy.
 static void clear_int_list(void) {
-  //printf("Allocating/clearing int_list (size %d)\n", global_k);
-  int_list = malloc(global_k * sizeof(int));
-  if (NULL == int_list) {
-    fprintf(stderr, "clear_int_list: Failed to allocate int_list\n");
-    exit (1);
-  }
   items = 0;
 }
 
@@ -144,10 +137,10 @@ int scan_unordered_list(int x) {
 
 static void append_int_list(int x) {
   //printf("Adding %d (item %d/%d)\n", x, items+1, global_k);
-  if (items == global_k) {
-    fprintf(stderr, "append_int_list: list is already full\n");
-    exit (1);
-  }
+  //  if (items == global_k) {
+  //    fprintf(stderr, "append_int_list: list is already full\n");
+  //    exit (1);
+  //  }
   int_list[items++] = x;
 }
 

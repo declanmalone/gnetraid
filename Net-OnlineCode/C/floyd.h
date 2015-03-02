@@ -17,7 +17,7 @@
 
 // The set implementation has to define four macros:
 //
-// SET_INIT(start,n,k) :  Initialise the set (allocate struct)
+// SET_INIT(buf,start,n,k) :  Initialise the set (allocate struct)
 // SET_CLR()           :  Empty the set
 // SET_GET(x)          :  Test whether element x is in set
 // SET_PUT(x)          :  Put element x into the set
@@ -56,5 +56,10 @@
 //
 // The return value is an array of k ints.
 int *oc_floyd(oc_rng_sha1 *rng, int start, int n, int k);
+
+void oc_alloc_int_list(int *buf, int start, int n, int k);
+static void clear_int_list(void);
+
+
 
 #endif
