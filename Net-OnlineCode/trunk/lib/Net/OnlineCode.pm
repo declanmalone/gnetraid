@@ -405,7 +405,7 @@ sub floyd {
     }
     ++$j;
   }
-  // die "Floyd didn't pick $k elements" if ASSERT and $k != (keys %set);
+  # die "Floyd didn't pick $k elements" if ASSERT and $k != (keys %set);
   return keys %set;
 }
 
