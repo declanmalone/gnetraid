@@ -1,0 +1,25 @@
+Info for the "Net-OnlineCode-0.04" branch
+
+Preparation for 0.04 release of Net::OnlineCode
+
+I've made three major changes to the code since the 0.03 release:
+
+* Changing to little-endian byte ordering in the RNG
+* Using "Bones" to avoid a lot of array copies
+* Replacing Fisher-Yates shuffle with Floyd's algorithm
+
+Although I'm eventually going to replace the pure-Perl implementation
+with a C/XS one, I'm not going to do that yet. I do want to make a new
+release, though, to track the above changes.
+
+I'll also be writing an OCD::Mapper package, which will require the
+0.04 version of the code base.
+
+Besides the changes above, I also have some to-dos before 0.04:
+
+* Tidy up the code and comments
+* Implement the same unrolled floyd as the C code (aux mapping)
+* Write POD section for Net::OnlineCode::Bones
+* See if I can squeeze out any more performance gains on the Raspberry
+  Pi
+
