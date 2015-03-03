@@ -438,14 +438,14 @@ sub auxiliary_mapping {
   if ($q == 3) {
     my ($a,$b,$c);
     for my $msg (0 .. $mblocks - 1) {
-      $a = $mblocks + $rng->randint($ablocks - 3);
+      $a = $mblocks + floor($rng->rand($ablocks - 2));
       $hashes[$a]  ->{$msg}=undef;
       $hashes[$msg]->{$a}  =undef;
-      $b = $mblocks + $rng->randint($ablocks - 2);
+      $b = $mblocks + floor($rng->rand($ablocks - 1));
       $b = $mblocks + $ablocks - 2 if $b == $a;
       $hashes[$b]  ->{$msg}=undef;
       $hashes[$msg]->{$b}  =undef;
-      $c = $mblocks + $rng->randint($ablocks - 1);
+      $c = $mblocks + floor($rng->rand($ablocks));
       $c = $mblocks + $ablocks - 1 if $c == $a or $c == $b;
       $hashes[$c]  ->{$msg}=undef;
       $hashes[$msg]->{$c}  =undef;
