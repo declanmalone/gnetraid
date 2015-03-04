@@ -173,7 +173,6 @@ sub new {
 	       coblocks => $mblocks + $ablocks,
                chblocks => 0, expand_aux=> $args{expand_aux},
 	       e_changed => $e_changed, unique => {},
-	       fisher_string => pack("L*", (0 .. $mblocks + $ablocks -1)),
 	     };
 
   print "expand_aux => $self->{expand_aux}\n" if DEBUG;

@@ -276,12 +276,20 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
       ($done,@decoded) = $decoder->resolve;
       last unless @decoded;
 
+      # resolve returns a Bone object, which can be treated as an
+      # array (see Net::OnlineCode::Bone for details):
+      # $bone -> [0]     always 1
+      # $bone -> [1]     ID of node that was solved
+      # $bone -> [2.. ]  ID of nodes that need to be XORed
+
       # XOR check/aux blocks together to decode message/aux block
-      foreach my $decoded_block (@decoded) {
-        my $block = "\0" x $blocksize;
+      foreach my $bone (@decoded) {
+        my $block        = "\0" x $blocksize;
+        my $nodes        = scalar(@$bone);
+        my $decoded_node = $bone->[1];
 
         # XOR all component blocks
-        foreach my $node ($decoder->xor_list($decoded_block)) {
+        foreach my $node (@{$bone}[2..$nodes - 1)) {
           if ($node < $mblocks) {                 # message block
             fast_xor_strings(\$block, 
               substr($message, $node * $blocksize, $blocksize))
@@ -296,9 +304,9 @@ Net::OnlineCode::Decoder - Rateless Forward Error Correction Decoder
 
         # save newly-decoded message/aux block
         if ($decoded_block < $mblocks) {          # message block
-          substr($message, $decoded_block * $blocksize, $blocksize) = $block;
+          substr($message, $decoded_node * $blocksize, $blocksize) = $block;
         } else {                                  # auxiliary block
-          $aux_blocks[$decoded_block - $mblocks] = $block;
+          $aux_blocks[$decoded_node - $mblocks] = $block;
         }
       }
       last if $done;
