@@ -329,7 +329,7 @@ sub resolve {
       }
 
       die "Aux rule: didn't have one unknown\n"
-	if ($from != $bone->one_unknown($from));
+	if ($from != $bone->known_unsolved($from));
 
       $self->{solution}->[$from] = $bone;
 
@@ -363,7 +363,7 @@ sub resolve {
 
       # pull out the unknown node
       if ($solved) {
-	$to = $bone->one_unknown($self);
+	$to = $bone->unknown_unsolved($self);
       }
 
       if (DEBUG) {

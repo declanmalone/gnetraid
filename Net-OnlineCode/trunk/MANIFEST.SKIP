@@ -18,8 +18,6 @@ LOSSAGE
 ^tests/random\.
 ^tests/.*\.png$
 ^MANIFEST\.old$
-^META\.yml$
-^META\.json$
 ^tests/graph-example-1\.pl$
 ^tests/graph-example-2\.pl$
 ^tests/plot-foo\.txt$

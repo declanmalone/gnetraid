@@ -120,46 +120,42 @@ sub unknowns_range {
   return (1, $bone->[0]); 
 }
 
-# Find a single unknown, shift it to the start of the array and mark
-# all other nodes as known (used in propagation rule)
-sub one_unknown {
+# The following two routines find a single unknown, shift it to the
+# start of the array and mark all other nodes as known (used in
+# propagation rule). They differ only in whether a node number or a
+# graph are passed in. (modelled on C code)
+sub known_unsolved {
 
-  my ($bone, $node_or_graph) = @_;
+  my ($bone, $node) = @_;
 
-  my ($node, $graph);
+  # If given a node number, we just scan the list to find it
 
-#  print "one_unknown: got bone " . $bone->pp . "\n";
-
-  if (ref($node_or_graph)) {
-
-    # If we were given a graph, we look up nodes in it to see if
-    # they're solved
-    $graph = $node_or_graph;
-    for (1 .. $bone->[0]) {
-#      print "Considering node $_\n";
-      if (!$graph->{solution}->[$bone->[$_]]) {
-	@{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
-	$bone->[0] = 1;
-	return $bone->[1];
-      }
+  for (1 .. $bone->[0]) {
+    if ($node == $bone->[$_]) {
+      @{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
+      $bone->[0] = 1;
+      return $bone->[1];
     }
-    die "Bones: Bone has no unsolved nodes\n";
-
-  } else {
-
-    # If we were given a node number, we just scan the list to find it
-    
-    $node = $node_or_graph;
-    for (1 .. $bone->[0]) {
-      if ($node == $bone->[$_]) {
-	@{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
-	$bone->[0] = 1;
-	return $bone->[1];
-      }
-    }
-    die "Bones: Didn't find unsolved node $node\n";
   }
+  die "Bones: Didn't find unsolved node $node\n";
 }
+
+sub unknown_unsolved {
+
+  my ($bone, $graph) = @_;
+
+  # If given a graph, we look up nodes in it to see if they're solved
+
+  for (1 .. $bone->[0]) {
+    if (!$graph->{solution}->[$bone->[$_]]) {
+      @{$bone}[$_,1] = @{$bone}[1,$_] if $_ != 1;
+      $bone->[0] = 1;
+      return $bone->[1];
+    }
+  }
+  die "Bones: Bone has no unsolved nodes\n";
+}
+
 
 # We can use the propagation rule from an aux block to a message
 # block, but if the aux block itself is not solved, we end up with two
