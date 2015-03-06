@@ -1,0 +1,69 @@
+App-OCD-Mapper
+
+This package includes the App::OCD::Mapper module and some scripts
+that use it. The Mapper module calls Net::OnlineCode modules to either
+generate or parse a simple "map" file. Map files contain various
+metadata (input file name, check block file name, codec parameters)
+along with a list of how check, auxiliary or message blocks are
+composed in terms of other blocks (ie, the map).
+
+App::OCD::Mapper basically provides a convenient file format for
+encapsulating data relating to either the encoding or decoding (or
+both) of a file using the Online Code algorithm. 
+
+Map files are intended to decouple the higher level aspects of the
+Online Code algorithm from the low-level block- or network-oriented
+operations.  Several example programs are included that operate on map
+files:
+
+* an encoder program that reads in the map file and an input file and
+  produces a check block file
+* a decoder program that reads in the map file and a check block file
+  to recover the original file
+* a network sender program that reads blocks from the check block file
+  and sends them out on a multicast channel at a given rate
+* a receiver program that receives check blocks from the network,
+  saves them to a check block file, runs the OC decoding algorithm and
+  outputs a decoding map file
+
+INSTALLATION
+
+To install this module, run the following commands:
+
+	perl Build.PL
+	./Build
+	./Build test
+	./Build install
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the
+perldoc command.
+
+    perldoc App::OCD::Mapper
+
+You can also look for information at:
+
+    RT, CPAN's request tracker (report bugs here)
+        http://rt.cpan.org/NoAuth/Bugs.html?Dist=App-OCD-Mapper
+
+    AnnoCPAN, Annotated CPAN documentation
+        http://annocpan.org/dist/App-OCD-Mapper
+
+    CPAN Ratings
+        http://cpanratings.perl.org/d/App-OCD-Mapper
+
+    Search CPAN
+        http://search.cpan.org/dist/App-OCD-Mapper/
+
+
+LICENSE AND COPYRIGHT
+
+Copyright (C) 2015 Declan Malone
+
+This program is free software; you can redistribute it and/or modify it
+under the terms of either: the GNU General Public License as published
+by the Free Software Foundation; or the Artistic License.
+
+See http://dev.perl.org/licenses/ for more information.
+
