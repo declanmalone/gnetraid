@@ -55,3 +55,34 @@ All these files are licensed under version 2 (or, at your discretion,
 any later version) of the GPL. Share and Enjoy!
 
 Declan Malone (aka Ida Black), September 2009.
+
+Addendum
+
+I've also added a 08-fastmatrix directory here. This implements an
+optimised matrix multiplication routine of my own design. I noted that
+the standard way of doing matrix multiplication one dot product at a
+time is a very inefficient use of SIMD. In any implementation that I've
+seen, if the length of the vectors being multiplied together aren't
+the same as the SIMD width, then we waste calculations by needing to
+"wrap around" at the end of the vector. To illustrate, consider a
+dot product that is 5 items long, but we have a 16-wide SIMD architecture.
+The usual algorithms would involve doing 5 multiplications at once and
+wasting the other 16-5 = 11 multiplications.
+
+The algorithm implemented here is designed to make use of any/all
+multiplications by (a) exploiting organisation of the matrices in
+memory, (b) detecting when wrapping around at the end of the current dot
+product has taken place, (c) apportioning some of the calculated values
+to the current dot product (and summing them along with any accumulated
+sum) and some to the next dot product.
+
+The net effect is that the full SIMD pipeline is always 100% busy. I've
+also taken care to eliminate some conditional branches, but have left
+some in for clarity. The changes are rounded off by the addition of a
+SIMD version of GF(2^8) multplication that has unrolling and conditional
+branches eliminated.
+
+This code is also licensed under GPL 2, or any later version if you wish
+it.
+
+
