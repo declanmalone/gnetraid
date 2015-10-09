@@ -1,0 +1,147 @@
+The SIMD implementation here will use the same general outline as that
+which I used for the PS3 (Cell) and ARM (vfp). The idea is to do a "long"
+multiplication of each SIMD element rather than trying to use lookup
+tables, which aren't well supported for SIMD. There is one exception
+to this general statement about table lookups, and that is when the
+table to be looked up is very small (ideally 16 bytes to match the number
+of SIMD 'lanes'). I've looked at the implementation of Intel's isa-l
+library for doing GF(2) calculations and actually they do use a pair
+of small lookup tables in their code (one for multiplication of each
+of the high and low nibbles of one of the operands). However, I'm not a
+fan of this approach for two reasons:
+
+* lookup tables have to be pre-calculated and each 32-byte table
+  can only multiply by a single pre-computed 8-bit value
+* I don't like the idea of having to reload the pre-calculated 
+  tables from memory for each vector multiplication
+
+It may well be that the approach used in the Intel code /is/ the best
+that can be achieved (especially if the lookup tables can be kept in
+L1 cache). However, I'm interested in at least trying out the long
+multiplication method:
+
+* with 32-byte wide SIMD, even a fairly inefficient implementation
+  should yield speed benefits over the equivalent scalar code
+* I think that I can re-use the same optimised matrix multiplication
+  methods that I used in the Cell implementation to fully
+  exploit the full width of the SIMD registers
+* more possibility of writing portable code (GCC vectorisation or
+  OpenMP) that can automatically be compiled to several target
+  architectures.
+* as an interesting challenge to produce something faster than
+  Intel managed
+
+The x86 SIMD architecture
+=========================
+
+The x86 assembly language is nowhere near as nice to work with as
+ARM or PowerPC/Cell. The various SIMD instructions have been bolted
+on to the basic architecture over several generations of CPU. As a
+result, it's nowhere near as elegant as it is on other CPUs. Also,
+we generally have smaller register files. There are also plenty of
+gaps in the instruction set. The newest AVX instruction sets do seem
+to be moving towards rationalising the whole thing and adding more
+(and wider) registers, but not all processors support them. My AMD
+A10 APU, for example, has the original AVX extensions, but nothing 
+more recent than that.
+
+My other implementations on ARM and Cell have relied heavily upon
+using 'select' instructions to compute both sides of a ternary
+assignment, then select between them based on some condition. The
+reason for this is partly because it eliminates conditional jumps
+but also because some SIMD operations simply can't be expressed over
+an entire vector without them.
+
+Looking over the various x64 SIMD extensions, I found that there is
+a _mm_blendv_epi8 intrinsic, which should map to the PLBENDVB
+SSE4.1 assembly instruction. This doesn't work exactly like select in 
+Cell or ARM assembly, but it's close enough.
+
+The PLBENDVB instruction takes a mask composed of 16 bytes (implicitly
+stored in xmm0) and destination and source operands. For each byte of
+the mask, if the msb is set, then each byte of the source
+register is written into the corresponding byte of the destination 
+register. Otherwise (if the msb not set), the corresponding byte
+of the destination register is unchanged.
+
+The algorithm to do GF(2^8) multiplication needs to use this operator
+twice for each bit. The relevant snippet is:
+
+    if (b & mask) { result ^= a; }   # mask begins at 1
+    if (a & 0x80) { a = (a << 1) ^ poly; } else { a <<= 1; }
+    mask <<= 1;
+
+In pseudocode, this should be implementable on x86 using:
+
+    mov    mask, b
+    shl    mask, (8 - bit)       # bit starts at 0, use instead of mask above
+    mov    temp_result, result
+    xor    temp_result, a
+    select result, temp_result, mask
+
+    mov    mask, a
+    shl    a, 1
+    mov    temp_result, a
+    xor    temp_result, poly
+    select a, temp_result, mask
+
+    inc    bit
+
+This code would be iterated over 8 times.
+
+Approaches
+==========
+
+I will try to implement the basic algorithm above in three ways:
+
+* using compiler intrinsics such as _mm_blendv_epi8, _m_pxor and so on
+* using assembly language (either inline in C or as a separate file)
+* using OpenMP to write the code in scalar form, but telling it to convert
+  to SIMD form
+
+I will most likely use the output of the first attempt as a basis for my own
+assembly version. I can foresee a potential problem with needing the mask
+for the select statement to be in xmm0, but perhaps gcc is clever enough to
+reserve that register for it.
+
+Likewise, I'll be interested to see what sort of assembly output the OpenMP
+program produces. If it's good, it would open up some interesting possibilities
+for coding other problems that use SIMD since you wouldn't have to know
+any details of the underlying SIMD architecture at all.
+
+Sum across products
+===================
+
+The above code only multiplies pairs of values in a vector. If all 16
+bytes need to be summed, this can be done with some rotations (shuffles)
+and XORs. The basic idea is to take log_2(16) = 4 steps, each of which:
+
+* rotates the vector by half the current size
+* XORs the old vector into the new vector
+
+After 4 iterations, each element in the new vector should be the XOR sum
+of all values across the original vector.
+
+If summing over fewer than 16 bytes, then appropriate steps need to be taken
+to prevent summing products generate by reading data past the actual boundary.
+For example:
+
+* work with a 16-byte window but insert zero values at the end of the blocks
+  of memory being operated on
+* use an appropriate mask to exclude unused products from the sum
+
+Other options for summing across values are possible, depending on how the
+data being operated on are organised in memory. It may be, for example, that
+the vector multiply routine is called to generate partial sums from across
+several separate dot product calculations, in which case the output vector
+from the multiplication routine can be xored directly into another vector
+containing 16 running totals, one for each dot product.
+
+This section described how to sum across vectors or sum across dot products.
+Neither case is particularly difficult to implement. In practice, though,
+it's important to realise that just because it's possible to do a 16-way
+multiply operation, it doesn't mean that it will be easy to utilise that
+ability fully. Much will depend on the calling program and how it organises
+calls to the multiply routine and lays out the memory which it will 
+operate over.
+
