@@ -485,12 +485,13 @@ use Digest::HMAC_MD5 qw(hmac_md5 hmac_md5_hex);
 my %test_modes = ( map { $_ => undef } qw/enc_only dec_only encdec/ );
 
 sub test_hmac_md5 {
-    my $v = shift;
+    my $v    = shift || 2;
     my $mode = shift || "encdec";
 
     die "test_hmac_md5: unknown mode $mode\n"
 	unless exists $test_modes{$mode};
 
+    my $encoder = (1 == $v) ? \&encode : \&encode_v2;
     my $decoder = (1 == $v) ? \&decode : \&decode_v2;
     
     my $msg_size = 8192;
@@ -499,14 +500,14 @@ sub test_hmac_md5 {
     my $bytes = 128/8;
     my ($orig_hash, $aont, $decoded, $decoded_hash);
 
-    print "Testing HMAC_MD5 with v$v decoder ($mode)\n";
+    print "Testing HMAC_MD5 with v$v codec ($mode)\n";
 
     print "Message size is $msg_size bytes\n";
 
     if ($mode =~ m/enc/) {
 	$orig_hash = md5_hex($msg);
 	print "Original message digest: $orig_hash\n";
-	$aont = encode(
+	$aont = $encoder->(
 	    message => $msg,
 	    e_callback => $callback,
 	    pubkey => "test",
@@ -517,6 +518,10 @@ sub test_hmac_md5 {
 	$aont = $msg . ("\0" x $bytes);
     }
 
+    my $enc_hash = md5_hex($aont);
+    print "Encoded message length: " . (length $aont) . "\n";
+    print "Encoded message digest: $enc_hash\n";
+
     if ($mode =~ m/dec/) {
 	$decoded = $decoder->(
 	    message => $aont,
@@ -526,6 +531,8 @@ sub test_hmac_md5 {
 	
 	$decoded_hash = md5_hex($decoded);
 	print "Recovered message digest: $decoded_hash\n";
+	die "recovered message digest mismatch\n"
+	    if defined($orig_hash) and $orig_hash ne $decoded_hash;
 
 	print "Running decoder 1023 more time(s)...\n";
 	
@@ -536,7 +543,8 @@ sub test_hmac_md5 {
 		pubkey => "test",
 		blocksize => $bytes);
 	    $decoded_hash = md5_hex($decoded);
-	    die if defined($orig_hash) and $orig_hash ne $decoded_hash;
+	    die "recovered message digest mismatch\n"
+		if defined($orig_hash) and $orig_hash ne $decoded_hash;
 	}
 	
 	print "Done HMAC_MD5 test!\n";
@@ -560,14 +568,14 @@ sub test_hmac_md5 {
 
 use Crypt::GCrypt;
 
-
 sub test_aes {
-    my $v = shift;
+    my $v    = shift || 2;
     my $mode = shift || "encdec";
 
     die "test_hmac_md5: unknown mode $mode\n"
 	unless exists $test_modes{$mode};
 
+    my $encoder = (1 == $v) ? \&encode : \&encode_v2;
     my $decoder = (1 == $v) ? \&decode : \&decode_v2;
     
     my $msg_size = 8 * 1024 * 1024;
@@ -638,7 +646,7 @@ sub test_aes {
 	$orig_hash = md5_hex($msg);
 	print "Original message digest: $orig_hash\n";
 
-	$aont = encode(
+	$aont = $encoder->(
 	    message => $msg,
 	    e_callback => $callback,
 	    pubkey => "test" x (1024 / 4),
@@ -650,6 +658,9 @@ sub test_aes {
 	$aont = $msg . ("\0" x $bytes);
     }
 
+    my $enc_hash = md5_hex($aont);
+    print "Encoded message digest: $enc_hash\n";
+
     if ($mode =~ m/dec/) {
 	$decoded = $decoder->(
 	    message => $aont,
@@ -660,6 +671,8 @@ sub test_aes {
 
 	$decoded_hash = md5_hex($decoded);
 	print "Recovered message digest: $decoded_hash\n";
+	die "recovered message digest mismatch\n"
+	    if defined($orig_hash) and $orig_hash ne $decoded_hash;
     } else {
 	print "Skipping decode in $mode mode\n";
     }
@@ -912,14 +925,149 @@ if ("Exhaustive profile test" eq "set equal to enable") {
 
 use Benchmark qw/:all :hireswallclock/;
 
-cmpthese(10, {
-  hmc_v1_enc => 'test_hmac_md5(1,"enc_only")',
-  hmc_v2_enc => 'test_hmac_md5(2,"enc_only")',
-  aes_v1_enc => 'test_aes(1,"enc_only")',
-  aes_v2_enc => 'test_aes(2,"enc_only")',
-  hmc_v1_dec => 'test_hmac_md5(1,"dec_only")',
-  hmc_v2_dec => 'test_hmac_md5(2,"dec_only")',
-  aes_v1_dec => 'test_aes(1,"dec_only")',
-  aes_v2_dec => 'test_aes(2,"dec_only")',
-});
+if (0) {
+    cmpthese(10, {
+	hmc_v1_enc => 'test_hmac_md5(1,"enc_only")',
+	hmc_v2_enc => 'test_hmac_md5(2,"enc_only")',
+	aes_v1_enc => 'test_aes(1,"enc_only")',
+	aes_v2_enc => 'test_aes(2,"enc_only")',
+	hmc_v1_dec => 'test_hmac_md5(1,"dec_only")',
+	hmc_v2_dec => 'test_hmac_md5(2,"dec_only")',
+	aes_v1_dec => 'test_aes(1,"dec_only")',
+	aes_v2_dec => 'test_aes(2,"dec_only")',
+	     });
+}
 
+# At this point, I will implement a v2 encoder, if for no other reason
+# but to save time when running benchmarks...
+
+sub encode_v2 {
+    my %opts = (
+	blocksize => undef,
+	e_callback => undef,
+	message => undef,
+	pubkey  => undef,
+	rndkey  => undef, 	# not usually passed, but good for testing
+	,@_
+    );
+
+    die "Missing parameter 'pubkey'"     unless defined $opts{pubkey};
+    die "Missing parameter 'blocksize'"  unless defined $opts{blocksize};
+    die "Missing parameter 'message'"    unless defined $opts{message};
+    die "Missing parameter 'e_callback'" unless defined $opts{e_callback};
+ 
+    my ($blocksize, $e, $msg, $pub, $rnd) =
+	@opts{qw/blocksize e_callback message pubkey rndkey/};
+
+    if (DEBUG) {
+	print "encoding:\n";
+	print "blocksize: $blocksize\n";
+	print "e: $e\n";
+	print "pub: $pub\n";
+    }
+
+    # if pubkey isn't the same length as blocksize, we can probably do
+    # the following, but it's really up to the user's implementation
+    # of the e_callback:
+    if ($blocksize != length $pub) {
+	warn "upgrading pubkey by encrypting it using supplied function\n"
+	    if DEBUG;
+	$pub = $e->("", $pub);
+	die "Well that failed ..." if length $pub != $blocksize;
+    }
+
+    # We're usually not passed a rndkey, but if we are, we should
+    # allow it to be upgraded, as with the pubkey above
+    if (defined $rnd) {
+	if (length $rnd != $blocksize) {
+	    warn "upgrading rndkey by encrypting it using supplied function\n";
+	    $rnd = &$e->("", $rnd);
+	    die "Well that failed ...\n" if length $rnd != $blocksize;
+	}
+    } else {
+	# generate a random key (poor quality; FIXME later)
+	$rnd = join "", map { chr rand 256 } 1 .. $blocksize;	
+    }
+
+    if (DEBUG) {
+	# Debug: dump random key in readable format
+	print "Encode rnd key: " . (Dump $rnd) . "\n";
+    }
+
+    # Make sure that message is an even number of blocks long
+    die "Make the message a multiple of blocksize\n" 
+	if (length $msg) % $blocksize;
+
+    # pre-allocating the output string is probably slightly faster
+    # than appending all the time (I think)
+    #    my $os = "\0" x length $msg;
+    # Actually, we can do in-place substitution of the input string
+
+    # ---start of new/changed code---
+
+    # use the "u" suffix to indicate where we were using "unions"
+    my $i=0;
+    my $one_string = "\01" . ("\0" x ($blocksize - 1));
+    my $iu = $one_string;
+
+    my $blocks = (length $msg) / $blocksize;
+    my $rndu = $rnd; # the block that will get appended
+
+    # Go and do the algorithm
+    my ($blk,$blk_ru,$blk_pu);
+    my ($safe,$fast);
+    while ($i < $blocks) {
+
+	$blk = substr $msg, $i * $blocksize, $blocksize;
+
+	# XOR this block with the random encryption of itself
+	$blk_ru = $e->($rnd,$iu);
+	fast_xor_strings(\$blk_ru,$blk);
+
+	# save the string version back into the message (completes XOR)
+	substr $msg, $i * $blocksize, $blocksize, $blk_ru;
+
+	# The result of this is also used to further encrypt the
+	# random key that will be appended to the file...  But first,
+	# we must XOR blk_ru with i to get the message part of the
+	# second encryption:
+	fast_xor_strings(\$blk_ru,$iu);
+
+	# then update (XOR) the final block with the result of the
+	# second encryption:
+	$blk_pu=$e->($pub,$blk_ru);
+	die unless $blocksize == length $rndu;
+	die unless $blocksize == length $blk_pu;
+
+	# is failing here when using fast_xor_strings...
+	#fast_xor_strings(\$rndu,$blk_pu);
+	safe_xor_strings(\$rndu,$blk_pu);
+	next;	
+
+	# debug the above problem (XS library bug?)
+	$safe = $fast = $rndu;
+	fast_xor_strings(\$fast,$blk_pu);
+	safe_xor_strings(\$safe,$blk_pu);
+	unless ($safe eq $fast) {
+	    print "i   : " . Dump $i;
+	    print "rndu: " . Dump $rndu;
+	    print "bkpu: " . Dump $blk_pu;
+	    print "safe: " . Dump $safe;
+	    print "fast: " . Dump $fast;
+	    warn "encode_v2: safe/fast mismatch\n" 
+	}
+	$rndu=$safe;
+    } continue {
+	++$i;
+	incr(\$iu,$blocksize);
+    }
+
+    # append the encrypted random key and return
+    return $msg . $rndu;
+
+}
+
+#test_hmac_md5(1,"encdec");
+test_hmac_md5(2,"encdec");
+#test_aes(1);
+test_aes(2);
