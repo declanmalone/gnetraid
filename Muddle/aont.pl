@@ -477,51 +477,73 @@ sub encode {
 use Digest::MD5 qw(md5_hex);
 use Digest::HMAC_MD5 qw(hmac_md5 hmac_md5_hex);
 
+# For the two main algorithm test subs (test_hmac_md5 and test_aes),
+# we will want to allow individual testing of encoder or decoder, or
+# both together. In the decoder-only test, we just generate random
+# data to work on.
+
+my %test_modes = ( map { $_ => undef } qw/enc_only dec_only encdec/ );
+
 sub test_hmac_md5 {
     my $v = shift;
+    my $mode = shift || "encdec";
+
+    die "test_hmac_md5: unknown mode $mode\n"
+	unless exists $test_modes{$mode};
 
     my $decoder = (1 == $v) ? \&decode : \&decode_v2;
-
+    
     my $msg_size = 8192;
     my $msg = "\0" x $msg_size;
     my $callback = sub { hmac_md5($_[1],$_[0]) };
     my $bytes = 128/8;
     my ($orig_hash, $aont, $decoded, $decoded_hash);
 
-    print "Testing HMAC_MD5 with v$v decoder\n";
+    print "Testing HMAC_MD5 with v$v decoder ($mode)\n";
 
     print "Message size is $msg_size bytes\n";
-    $orig_hash = md5_hex($msg);
-    print "Original message digest: $orig_hash\n";
 
-    $aont = encode(
-	message => $msg,
-	e_callback => $callback,
-	pubkey => "test",
-	blocksize => $bytes);
+    if ($mode =~ m/enc/) {
+	$orig_hash = md5_hex($msg);
+	print "Original message digest: $orig_hash\n";
+	$aont = encode(
+	    message => $msg,
+	    e_callback => $callback,
+	    pubkey => "test",
+	    blocksize => $bytes);
+    } else {
+	print "Original message digest: none (random decode)\n";
+	# just add an extra block of data
+	$aont = $msg . ("\0" x $bytes);
+    }
 
-    $decoded = $decoder->(
-	message => $aont,
-	e_callback => $callback,
-	pubkey => "test",
-	blocksize => $bytes);
-
-    $decoded_hash = md5_hex($decoded);
-    print "Recovered message digest: $decoded_hash\n";
-
-    print "Running decoder 1023 more time(s)...\n";
-
-    for (1..1023) {
+    if ($mode =~ m/dec/) {
 	$decoded = $decoder->(
 	    message => $aont,
 	    e_callback => $callback,
 	    pubkey => "test",
 	    blocksize => $bytes);
+	
 	$decoded_hash = md5_hex($decoded);
-	die unless $orig_hash eq $decoded_hash;
-    }
+	print "Recovered message digest: $decoded_hash\n";
 
-    print "Done HMAC_MD5 test!\n";
+	print "Running decoder 1023 more time(s)...\n";
+	
+	for (1..1023) {
+	    $decoded = $decoder->(
+		message => $aont,
+		e_callback => $callback,
+		pubkey => "test",
+		blocksize => $bytes);
+	    $decoded_hash = md5_hex($decoded);
+	    die if defined($orig_hash) and $orig_hash ne $decoded_hash;
+	}
+	
+	print "Done HMAC_MD5 test!\n";
+    } else {
+	print "Skipping decode in $mode mode\n";
+    }
+    
 }
 
 # I was trying to get things working with various different encryption
@@ -538,23 +560,25 @@ sub test_hmac_md5 {
 
 use Crypt::GCrypt;
 
+
 sub test_aes {
     my $v = shift;
+    my $mode = shift || "encdec";
+
+    die "test_hmac_md5: unknown mode $mode\n"
+	unless exists $test_modes{$mode};
 
     my $decoder = (1 == $v) ? \&decode : \&decode_v2;
-
+    
     my $msg_size = 8 * 1024 * 1024;
     my $msg = "\0" x $msg_size;
     my $callback;
     my $bytes = 1024;
     my ($orig_hash, $aont, $decoded, $decoded_hash);
 
-    print "Testing AES on an 8Mb block with v$v decoder\n";
+    print "Testing AES on an 8Mb block with v$v decoder ($mode)\n";
 
-    print "Message size is $msg_size bytes\n";
-    $orig_hash = md5_hex($msg);
-    print "Original message digest: $orig_hash\n";
-
+    # same cipher/callback used in encode/decode
     my $cipher = Crypt::GCrypt->new(
 	type => 'cipher',
 	algorithm => 'aes',
@@ -595,8 +619,8 @@ sub test_aes {
 	return $output;
     };
 
-    if (1) {
-	# test callback on sample blocks
+    if (0) {
+	# test callback on sample blocks (to debug above)
 	my $short_key = "\0" x $cipher->keylen;
 	my $sample_block = "\0" x $bytes;
 	$callback->($short_key,$sample_block);
@@ -606,22 +630,39 @@ sub test_aes {
 	$callback->($sample_key,$sample_data);
     }
 
-    $aont = encode(
-	message => $msg,
-	e_callback => $callback,
-	pubkey => "test" x (1024 / 4),
-	# pubkey => "AES keys >= 20-chars",   # FIXME
-	blocksize => $bytes);
+    if ($mode =~ m/enc/) {
 
-    $decoded = $decoder->(
-	message => $aont,
-	e_callback => $callback,
-	pubkey => "test" x (1024 / 4),
-	# pubkey => "AES keys >= 20-chars",
-	blocksize => $bytes);
+	print "Doing encode...\n";
+	
+	print "Message size is $msg_size bytes\n";
+	$orig_hash = md5_hex($msg);
+	print "Original message digest: $orig_hash\n";
 
-    $decoded_hash = md5_hex($decoded);
-    print "Recovered message digest: $decoded_hash\n";
+	$aont = encode(
+	    message => $msg,
+	    e_callback => $callback,
+	    pubkey => "test" x (1024 / 4),
+	    # pubkey => "AES keys >= 20-chars",   # FIXME
+	    blocksize => $bytes);
+    } else {
+	print "Skipping encode (random decode)\n";
+	# just add an extra block of data
+	$aont = $msg . ("\0" x $bytes);
+    }
+
+    if ($mode =~ m/dec/) {
+	$decoded = $decoder->(
+	    message => $aont,
+	    e_callback => $callback,
+	    pubkey => "test" x (1024 / 4),
+	    # pubkey => "AES keys >= 20-chars",
+	    blocksize => $bytes);
+
+	$decoded_hash = md5_hex($decoded);
+	print "Recovered message digest: $decoded_hash\n";
+    } else {
+	print "Skipping decode in $mode mode\n";
+    }
 }
 
 ## Version 2
@@ -804,11 +845,11 @@ sub test_incr {
     die "00ff + 0001 != 0100\n" unless $wff eq $w100;
 }
 
-test_incr();
+#test_incr();
 #test_hmac_md5(1);
 #test_hmac_md5(2);
 #test_aes(1);
-test_aes(2);
+#test_aes(2);
 
 # Benchmarks after writing v2 decoder (8MB of data)
 #
@@ -843,3 +884,42 @@ test_aes(2);
 # get more accurate timing/profiling information here.
 #
 # I will do that by adding options to the two test routines.
+
+
+# the decode-only tests generate dummy input data
+if ("Exhaustive profile test" eq "set equal to enable") {
+    test_hmac_md5(1,"enc_only");
+    test_hmac_md5(2,"enc_only");
+    test_aes(1,"enc_only");
+    test_aes(2,"enc_only");
+    test_hmac_md5(1,"dec_only");
+    test_hmac_md5(2,"dec_only");
+    test_aes(1,"dec_only");
+    test_aes(2,"dec_only");
+}
+
+# By doing all the above in the same run of the program, we can look
+# at the profile data to compare the inclusive time of each line...
+#
+# aont.pl: NYTProf total runtime 147s (of 244s)
+#
+#    V1    | Encode | Decode        V2    | Encode | Decode      
+#  --------+--------+--------     --------+--------+--------     
+#  HMAC_MD5| 58.1ms | 73.6s       HMAC_MD5| 57.6ms | 25.0s
+#  AES     | 15.6s  | 16.5s       AES     | 15.7s  | 484ms
+#
+# Next, test without the overheads of the profiler ...
+
+use Benchmark qw/:all :hireswallclock/;
+
+cmpthese(10, {
+  hmc_v1_enc => 'test_hmac_md5(1,"enc_only")',
+  hmc_v2_enc => 'test_hmac_md5(2,"enc_only")',
+  aes_v1_enc => 'test_aes(1,"enc_only")',
+  aes_v2_enc => 'test_aes(2,"enc_only")',
+  hmc_v1_dec => 'test_hmac_md5(1,"dec_only")',
+  hmc_v2_dec => 'test_hmac_md5(2,"dec_only")',
+  aes_v1_dec => 'test_aes(1,"dec_only")',
+  aes_v2_dec => 'test_aes(2,"dec_only")',
+});
+
