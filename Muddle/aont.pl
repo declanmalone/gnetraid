@@ -482,11 +482,11 @@ use Digest::HMAC_MD5 qw(hmac_md5 hmac_md5_hex);
 # both together. In the decoder-only test, we just generate random
 # data to work on.
 
-my %test_modes = ( map { $_ => undef } qw/enc_only dec_only encdec/ );
+my %test_modes = ( map { $_ => undef } qw/enc_only dec_only enc_dec/ );
 
 sub test_hmac_md5 {
     my $v    = shift || 2;
-    my $mode = shift || "encdec";
+    my $mode = shift || "enc_dec";
 
     die "test_hmac_md5: unknown mode $mode\n"
 	unless exists $test_modes{$mode};
@@ -570,7 +570,7 @@ use Crypt::GCrypt;
 
 sub test_aes {
     my $v    = shift || 2;
-    my $mode = shift || "encdec";
+    my $mode = shift || "enc_dec";
 
     die "test_hmac_md5: unknown mode $mode\n"
 	unless exists $test_modes{$mode};
@@ -584,7 +584,7 @@ sub test_aes {
     my $bytes = 1024;
     my ($orig_hash, $aont, $decoded, $decoded_hash);
 
-    print "Testing AES on an 8Mb block with v$v decoder ($mode)\n";
+    print "Testing AES on an 8Mb block with v$v codec ($mode)\n";
 
     # same cipher/callback used in encode/decode
     my $cipher = Crypt::GCrypt->new(
@@ -796,7 +796,7 @@ sub decode_v2 {
 
     # Pre-XOR (and remove) the final block into the random key 
     my $rndu = substr $msg,-$blocksize,$blocksize,"";
-
+    
     while ($i < $blocks) {
 
 	my $blku = substr $msg, $i * $blocksize, $blocksize;
@@ -986,7 +986,8 @@ sub encode_v2 {
 	}
     } else {
 	# generate a random key (poor quality; FIXME later)
-	$rnd = join "", map { chr rand 256 } 1 .. $blocksize;	
+	$rnd = join "", map { chr rand 256 } 1 .. $blocksize;
+	#warn "rnd is of type " . ref($rnd) . "\n"; # regular scalar
     }
 
     if (DEBUG) {
@@ -1011,11 +1012,19 @@ sub encode_v2 {
     my $iu = $one_string;
 
     my $blocks = (length $msg) / $blocksize;
-    my $rndu = $rnd; # the block that will get appended
 
+    # For some reason, either of the following change fix the problem
+    # I had with fast_xor_strings (final fixup included at end of sub)
+
+    #my $rndu = $rnd; # the block that will get appended
+    #my $rndu = "\0" x $blocksize; # the block that will get appended
+    my $rndu = "" . $rnd; # the block that will get appended
+
+    # so the reason is that $rndu has to be explicitly a string!
+    
     # Go and do the algorithm
     my ($blk,$blk_ru,$blk_pu);
-    my ($safe,$fast);
+    my ($safe,$fast,$tmp);
     while ($i < $blocks) {
 
 	$blk = substr $msg, $i * $blocksize, $blocksize;
@@ -1039,21 +1048,53 @@ sub encode_v2 {
 	die unless $blocksize == length $rndu;
 	die unless $blocksize == length $blk_pu;
 
-	# is failing here when using fast_xor_strings...
-	#fast_xor_strings(\$rndu,$blk_pu);
+	# was failing here when using fast_xor_strings...
+	# current fix involves not pre-XOR'ing rndu with rnd
+	fast_xor_strings(\$rndu,$blk_pu);
+	next;
+
+	# use the 100% safe alternative
 	safe_xor_strings(\$rndu,$blk_pu);
 	next;	
 
-	# debug the above problem (XS library bug?)
+	# work-around?: no...
+	$tmp = $rndu;
+	fast_xor_strings(\$rndu,$blk_pu);
+	while ($tmp eq $rndu) {	# did nothing?
+	    $rndu = $tmp;	# go back and try again
+	    safe_xor_strings(\$rndu,$blk_pu);
+	}
+	next;
+
+	# or else fall through to debug the problem
+
+	# problem is not in aligned_word_xor (called from xs)
+	# (eliminated by swapping over to bytewise_xor)
+
+	# doesn't *appear* to be the xs itself... although running
+	# under debugger prints a message from the xs:
+	# fast_xor_strings: arg 1 should be a reference to a SCALAR!
+	# (which, of course they all are and a test shows this as OK)
+	# (this message *only* appears when run under a debugger)
+
+	# The problem does not appear running on an ARM board
+	# (might be something to do with AMD chips/firmware/etc.)
+
+	# happens with both hmac/aes calls (and I think they both use
+	# different C libraries underneath)
+
 	$safe = $fast = $rndu;
-	fast_xor_strings(\$fast,$blk_pu);
+	# with the below ordering, we fail below; change the order
+	# around and later we fail to decode properly
+	$tmp = fast_xor_strings(\$fast,$blk_pu);
 	safe_xor_strings(\$safe,$blk_pu);
 	unless ($safe eq $fast) {
 	    print "i   : " . Dump $i;
 	    print "rndu: " . Dump $rndu;
 	    print "bkpu: " . Dump $blk_pu;
+	    # one of the following ends up the same as rndu (no XOR)
 	    print "safe: " . Dump $safe;
-	    print "fast: " . Dump $fast;
+	    print "fast: " . Dump $fast; 
 	    warn "encode_v2: safe/fast mismatch\n" 
 	}
 	$rndu=$safe;
@@ -1063,11 +1104,28 @@ sub encode_v2 {
     }
 
     # append the encrypted random key and return
+#    fast_xor_strings(\$rndu, $rnd); # fixup if we didn't pre-XOR
     return $msg . $rndu;
 
 }
 
-#test_hmac_md5(1,"encdec");
-test_hmac_md5(2,"encdec");
+#test_hmac_md5(1,"enc_dec");
+#for (1..10) {
+#    test_hmac_md5(2,"enc_only");
+#}
 #test_aes(1);
-test_aes(2);
+#for (1..10) {
+#    test_aes(2,"enc_only");
+#}
+
+#test_hmac_md5(2,"enc_dec");
+#test_aes(2,"enc_dec");
+
+if ("Test v2 only" eq "Test v2 only") {
+    cmpthese(10, {
+	hmc_v2_enc => 'test_hmac_md5(2,"enc_only")',
+	aes_v2_enc => 'test_aes(2,"enc_only")',
+	hmc_v2_dec => 'test_hmac_md5(2,"dec_only")',
+	aes_v2_dec => 'test_aes(2,"dec_only")',
+	     });
+}

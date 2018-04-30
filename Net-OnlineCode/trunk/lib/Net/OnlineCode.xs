@@ -60,6 +60,7 @@ CODE:
       }
 
       // call C library routine
+      //bytewise_xor(dest_ptr, source_ptr, dest_size);
       aligned_word_xor(dest_ptr, source_ptr, dest_size);
     }
   }
