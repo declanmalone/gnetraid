@@ -1,5 +1,14 @@
 Revision history for Perl extension Math::FastGF2.
 
+0.05  Aug 2019
+        - New constructor for Cauchy Matrix generated from a list
+	  of x1,x2,...xn,y1,..yk values
+        - New, slightly more efficient Matrix inversion method
+	  for Cauchy matrices (also based on same list as above)
+	- New $matrix->print method
+	- Profiling-driven speed improvements and some code cleanup
+	- See Changes-0.5 for more details
+
 0.04  Mon Aug 17 21:00:00 2009
 	- Add copy/flip-related Matrix code
         - More tests on getvals/setvals

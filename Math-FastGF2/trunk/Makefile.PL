@@ -58,6 +58,7 @@ WriteMakefile(
 # OBJECT            => 'FastGF2.o', # link all the C files too
 # OBJECT            => '$(O_FILES)', # link all the C files too
  EXE_FILES          => ['bin/benchmark-Math-FastGF2.pl',
+			'bin/benchmark-Math-FastGF2-Matrix-invert.pl',
 			'bin/shamir-combine.pl',
 			'bin/shamir-split.pl'],
 );

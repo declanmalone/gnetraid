@@ -17,10 +17,15 @@ require Exporter;
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = (  );
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 require XSLoader;
 XSLoader::load('Math::FastGF2', $VERSION);
+
+use constant {
+    ROWWISE => 1,
+    COLWISE => 2,
+};
 
 our @orgs=("undefined", "rowwise", "colwise");
 
@@ -69,11 +74,9 @@ sub new {
 
   return undef if $errors;
 
-  #carp "Calling C Matrix allocator with rows=$o{rows}, ".
-  #  "cols=$o{cols}, width=$o{width}, org=$org";
   return alloc_c($class,$o{rows},$o{cols},$o{width},$org);
-
 }
+
 
 sub new_identity {
   my $proto  = shift;
@@ -566,6 +569,165 @@ sub zero {
   $self->setvals(0,0,"\0" x ($self->ROWS * $self->COLS * $self->WIDTH));
 
 }
+
+#
+# New method to calculate inverse Cauchy matrix given list:
+#
+# xylist = [ x_1, ... x_n, y_1, ... y_k ]
+#
+# See Wikipedia page on Cauchy matrices:
+#
+# https://en.wikipedia.org/wiki/Cauchy_matrix
+#
+# A better page:
+#
+# https://proofwiki.org/wiki/Inverse_of_Cauchy_Matrix
+
+sub inverse_cauchy_from_xys {
+
+    # parameter names were based on Crypt::IDA::ida_key_to_matrix
+    my $proto  = shift;
+    my $class  = ref($proto) || $proto;
+    my $parent = ref($proto) && $proto;
+    my %o = (
+	size      => undef,	# was "quorum"
+	width     => undef,
+	#shares    => undef,	# was "shares"
+	xvals     => undef,	# was "sharelist"
+	width     => undef,
+	xylist    => undef,	# was "key" 
+	@_
+    );
+
+    # Our "key" is in x's, y's format. The last "quorum" values are y's
+    # To create a square matrix, we only take the x values specified
+    # in the xvals listref
+    my $k   = $o{size}     || die "size parameter required\n";
+    my $w   = $o{width}    || die "width parameter required\n";
+    my $key = $o{xylist}   || die "xylist parameter required\n";
+    die "xvals parameter required\n" unless defined $o{xvals};
+
+    # Note: no check done below to ensure that xvals are unique
+    my @x   = map {$key->[$_]} @{$o{xvals}};
+    my @y   = splice @$key, -$k;
+    push @$key, @y; 	# splice is destructive; undo damage
+
+    #    warn "xlist: [" . (join ", ", @x) . "]\n";
+    #    warn "ylist: [" . (join ", ", @y) . "]\n";
+    die if @x - @y;		# is it square?
+    die if @$key < 2 * $k;	# is n >= k?
+    die if @x != $k;		# did user supply k xvals?
+
+    my $self = $class->new(rows => $k, cols => $k, width => $w);
+    die unless ref $self;
+
+    # Using the proof wiki page as a guide...
+    #
+    # Not sure if i represents rows or columns, but I'll go with rows
+    # for now. I can transpose the matrix later to find out if either
+    # version matches.
+
+    # rename k as n so we can use it as a loop counter (and go -1
+    # because we're using zero-based indexes)
+    my ($i, $j, $n, $bits) = (0,0, $k-1, $w * 8);
+
+
+    if ($n < 3) {
+	# unoptimised version
+	for $i (0 .. $n) {
+	    for $j (0 .. $n) {
+		
+		my $top = 1;	# multiplicative identity
+		map {
+		    $top = gf2_mul($bits, $top, $x[$j] ^ $y[$_]);
+		    $top = gf2_mul($bits, $top, $x[$_] ^ $y[$i]);
+		} (0 .. $n);
+		
+		my $bot = $x[$j] ^ $y[$i];
+		
+		map { $bot = gf2_mul($bits, $bot, $x[$j] ^ $x[$_]) }
+		grep { $_ != $j } (0 .. $n); # $_ is our $k
+		
+		map { $bot = gf2_mul($bits, $bot, $y[$i] ^ $y[$_]) }
+		grep { $_ != $i } (0 .. $n); # $_ is our $k
+		
+		$top = gf2_mul($bits, $top, gf2_inv($bits, $bot));
+		
+		$self->setval($i,$j,$top);
+	    }
+	}
+    } else {
+	# The above two big product loops are ripe for optimisation
+	# Instead of calculating:
+	# * product of row except for ... (n-1 multiplications)
+	# * product of col except for ... (n-1 multiplications)
+	# You can memoise full row/col products and multiply them
+	# by inverses of the things you want to exclude.
+	# Total cost should go from an order of n^3 to ~n^2
+	# This should be hugely noticeable for large n, but should
+	# probably also even have a positive effect for n>3 assuming
+	# a word size of 1 byte and gf2_inv that is as cheap (or cheaper)
+	# than a multiplication.
+
+	my @jmemo = ();
+	for $j (0..$n) {
+	    my ($sum,$xj) = (1, $x[$j]);
+	    map { $sum = gf2_mul($bits, $sum, $xj ^ $x[$_]) } 
+	    grep { $_ != $j} (0..$n);
+	    push @jmemo, $sum;
+	}
+	my @imemo = ();
+	for $i (0..$n) {
+	    my ($sum,$yi) = (1, $y[$i]);
+	    map { $sum = gf2_mul($bits, $sum, $yi ^ $y[$_]) }
+	    grep {$_ != $i} (0..$n);
+	    push @imemo, $sum;
+	}
+	for $i (0 .. $n) {
+	    for $j (0 .. $n) {
+
+		# As it turns out, we don't need to do inverse because
+		# the bits skipped over eval to 0. So the memoised
+		# values are completely invariant per row or column.
+		
+		# We can save one multiplication by 1 below:
+		my $top = gf2_mul($bits, $x[$j] ^ $y[0], $x[0] ^ $y[$i]);
+		map {
+		    $top = gf2_mul($bits, $top, $x[$j] ^ $y[$_]);
+		    $top = gf2_mul($bits, $top, $x[$_] ^ $y[$i]);
+		} (1 .. $n);
+	
+		my $bot = $x[$j] ^ $y[$i];
+		$bot = gf2_mul($bits, $bot, $jmemo[$j]);
+		$bot = gf2_mul($bits, $bot, $imemo[$i]);
+		
+		$top = gf2_mul($bits, $top, gf2_inv($bits, $bot));
+		
+		$self->setval($i,$j,$top);
+	    }
+	}
+    }
+    return $self;
+}
+
+sub print {
+    my $self = shift;
+    #die ref $self;
+    my $rows  = $self->ROWS;
+    my $cols  = $self->COLS;
+    my $w     = $self->WIDTH;
+    $w <<= 1;
+
+    for my $row (0.. $rows -1) {
+	print "| ";
+	for my $col (0.. $cols -1) {
+	    my $f =" {%0${w}x} ";
+	    printf $f, $self->getval($row,$col);
+	}
+	print "|\n";
+    }
+}
+
 
 # Generic routine for copying some matrix elements into a new matrix
 #
