@@ -212,21 +212,26 @@ sub offset_to_rowcol {
   my $self=shift;
   my $offset=shift;
 
-  if ($offset % $self->WIDTH) {
+  # XS calls are expensive, so do them only once
+  my ($WIDTH, $ROWS, $COLS) = 
+      map { $self->$_ } qw{WIDTH ROWS COLS};
+
+  $offset /= $WIDTH;
+  if (int($offset) != $offset) {
     carp "offset must be a multiple of WIDTH in offset_to_rowcol";
     return undef;
   }
-  $offset /= $self->WIDTH;
-  if ($offset < 0 or $offset >= $self->ROWS * $self->COLS) {
+  if ($offset < 0 or $offset >= $ROWS * $COLS) {
     carp "Offset out of range in offset_to_rowcol";
     return undef;
   }
-  if ($self->ORG eq "rowwise") {
-    return ((int ($offset / $self->COLS)),
-	    ($offset % $self->COLS) );
+  if (ROWWISE == $self->ORGNUM) {
+      my $row = int ($offset / $COLS);
+      return ( ($row), 
+	       ($offset - $row * $COLS) ); # = $offset % $cols
   } else {
-    return (($offset % $self->ROWS),
-	    (int ($offset / $self->ROWS)));
+    return (($offset % $ROWS),
+	    (int ($offset / $ROWS)));
   }
 }
 
@@ -259,7 +264,9 @@ sub getvals {
   my $order = shift || 0;
   my $want_list = wantarray;
 
-  #carp "Asked to read ROW=$row, COL=$col, len=$bytes (words)";
+  # XS calls are expensive, so do them only once
+  my ($WIDTH, $ROWS, $COLS) = 
+      map { $self->$_ } qw{WIDTH ROWS COLS};
 
   unless ($class) {
     carp "getvals only operates on an object instance";
@@ -277,13 +284,13 @@ sub getvals {
     carp "order ($order) != 0 (native), 1 (little-endian) or 2 (big-endian)";
     return undef;
   }
-  my $width=$self->WIDTH;
-  my $msize=$self->ROWS * $self->COLS;
-  if ($row < 0 or $row >= $self->ROWS) {
+  my $width=$WIDTH;
+  my $msize=$ROWS * $COLS;
+  if ($row < 0 or $row >= $ROWS) {
     carp "starting row out of range";
     return undef;
   }
-  if ($col < 0 or $row >= $self->ROWS) {
+  if ($col < 0 or $row >= $ROWS) {
     carp "starting row out of range";
     return undef;
   }
@@ -293,9 +300,9 @@ sub getvals {
   return $s unless $want_list;
 
   # Since the get_raw_values_c call swaps byte order, we don't do it here
-  if ($self->WIDTH == 1) {
+  if ($WIDTH == 1) {
     return unpack "C*", $s;
-  } elsif ($self->WIDTH == 2) {
+  } elsif ($WIDTH == 2) {
     return unpack "S*", $s
   } else {
     return unpack "L*", $s;
@@ -312,7 +319,9 @@ sub setvals {
   my ($str,$words);
   $order=0 unless defined($order);
 
-  #carp "Asked to write ROW=$row, COL=$col";
+  # XS calls are expensive, so do them only once
+  my ($WIDTH, $ROWS, $COLS) = 
+      map { $self->$_ } qw{WIDTH ROWS COLS};
 
   unless ($class) {
     carp "setvals only operates on an object instance";
@@ -326,11 +335,11 @@ sub setvals {
     carp "order != 0 (native), 1 (little-endian) or 2 (big-endian)";
     return undef;
   }
-  if ($row < 0 or $row >= $self->ROWS) {
+  if ($row < 0 or $row >= $ROWS) {
     carp "starting row out of range";
     return undef;
   }
-  if ($col < 0 or $row >= $self->ROWS) {
+  if ($col < 0 or $row >= $ROWS) {
     carp "starting row out of range";
     return undef;
   }
@@ -341,9 +350,9 @@ sub setvals {
       carp "setvals: values must be either a string or reference to a list";
       return undef;
     }
-    if ($self->WIDTH == 1) {
+    if ($WIDTH == 1) {
       $str=pack "C*", @$vals;
-    } elsif ($self->WIDTH == 2) {
+    } elsif ($WIDTH == 2) {
       $str=pack "S*", @$vals;
     } else {
       $str=pack "L*", @$vals;
@@ -351,13 +360,13 @@ sub setvals {
   } else {
     # treat vals as a string
     $str="$vals";
-    $words=(length $str) / $self->WIDTH;
+    $words=(length $str) / $WIDTH;
   }
 
-  my $msize=$self->ROWS * $self->COLS;
-  if ( (($self->ORG eq "rowwise") and
-	($words + $self->COLS * $row + $col > $msize)) or
-       ($words + $self->ROWS * $col + $row > $msize)) {
+  my $msize=$ROWS * $COLS;
+  if ( ((ROWWISE == $self->ORGNUM) and
+	($words + $COLS * $row + $col > $msize)) or
+       ($words + $ROWS * $col + $row > $msize)) {
     carp "string length exceeds matrix size";
     return undef;
   }
