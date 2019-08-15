@@ -79,7 +79,7 @@ print "RNG seed: ". $rng->as_hex() . "\n";
 # not the probability table)
 
 my $o=Net::OnlineCode->
-  new(mblocks=>$mblocks);
+  new(mblocks=>$mblocks, e=> 0.01, q => 3);
 
 my $e = $o->get_e;
 my $q = $o->get_q;
@@ -87,7 +87,7 @@ my $coblocks = $o->get_coblocks;
 my $ablocks  = $o->get_ablocks;
 
 print "mblocks = $mblocks\n";
-print "ablocks = $ablocks\n";
+print "ablocks = $ablocks (expecting ", (0.55 * $q * $e * $mblocks), ")\n"; 
 print "e = $e\n";
 print "q = $q\n";
 
@@ -119,6 +119,8 @@ my $promise_2_total = 0;
 # promise 3:
 my $expected_check_count_2 = int ( 0.5 + ((1 + 3 * $e) * $mblocks));
 my $promise_3_total = 0;
+print "p3: expect decoding in $expected_check_count_2 blocks\n";
+print "(e/2)^(q+1) = ", (($e/2) ** ($q+1)), "\n";
 
 # calculate the average number of check blocks
 my $average = 0;

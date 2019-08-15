@@ -79,7 +79,7 @@ sub new {
 	      q           => 3,
 	      mblocks     => undef,
 	      expand_aux  => 0,
-	      e_warning   => 0,
+	      e_warning   => 1,
 
 	      # We don't use or store any RNG parameter that's been
 	      # passed into the constructor.
@@ -112,6 +112,7 @@ sub new {
     if ($args{e_warning}) {
       print "E CHANGED!!\nWas: $e\n";
       print "Gave F value of $f\n";
+      print "> $mblocks + $ablocks\n";
     }
 
     # use a binary search to find a new epsilon such that
@@ -236,7 +237,9 @@ sub get_P {			# P == probability distribution
 sub _count_auxiliary {
   my ($q, $e, $n) = @_;
 
-  my $count = int(ceil(0.55 * $q * $e * $n));
+  # should we round up or round down? Let's go with down
+  #my $count = int(ceil(0.55 * $q * $e * $n));
+  my $count = int(0.55 * $q * $e * $n);
   my $delta = 0.55 * $e;
 
   warn "failure probability " . ($delta ** $q) . "\n" if DEBUG;
@@ -248,7 +251,7 @@ sub _count_auxiliary {
   # thing to do rather than ignoring the user's q value.
   if ($count < $q) {
     $count = $q;
-    # warn "updated _count_auxiliary output value to $q\n";
+    warn "updated _count_auxiliary output value to $q\n";
   }
   return $count;
 }
@@ -259,8 +262,10 @@ sub _max_degree {
 
   my $epsilon = shift;
 
-  my $quotient = (2 * log ($epsilon / 2)) /
-    (log (1 - $epsilon / 2));
+  my $fast_quotient = (2 * log ($epsilon / 2)) / (log (1 - $epsilon / 2));
+  my $quotient = (log ( $epsilon * $epsilon / 4) / log (1 - $epsilon / 2));
+  my $diff = $fast_quotient - $quotient;
+  die "fast quotient calculation incorrect (difference $diff)\n" if $diff;
 
   my $delta = 0.55 * $epsilon;
   #$quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
