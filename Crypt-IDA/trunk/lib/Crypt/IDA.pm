@@ -31,6 +31,12 @@ our @EXPORT = qw( );
 
 our $VERSION = '0.01';
 
+# not exported from Matrix class
+use constant {
+    ROWWISE => 1,
+    COLWISE => 2,
+};
+
 # hard-coding module names is supposedly not good style, but at least
 # I'm up-front about breaking that "rule":
 our $classname="Crypt::IDA";
@@ -225,6 +231,14 @@ sub ida_process_streams {
   $outorder=0        unless defined($outorder);
   $bytes_to_read = 0 unless defined($bytes_to_read);
 
+  # XS calls are expensive, so do them only once
+  my ($IWIDTH, $IROWS, $ICOLS, $IORGNUM) = 
+      map { $in->$_ } qw{WIDTH ROWS COLS ORGNUM};
+  my ($OWIDTH, $OROWS, $OCOLS, $OORGNUM) = 
+      map { $out->$_ } qw{WIDTH ROWS COLS ORGNUM};
+  my ($XWIDTH, $XROWS, $XCOLS, $XORGNUM) = 
+      map { $xform->$_ } qw{WIDTH ROWS COLS ORGNUM};
+  
   my $bytes_read=0;
   my ($IR, $OW);		# input read, output write pointers
   my ($ILEN, $OLEN);
@@ -232,9 +246,9 @@ sub ida_process_streams {
   my ($want_in_size, $want_out_size);
 
   my ($eof, $rc, $str, $max_fill, $max_empty);
-  my $width=$in->WIDTH;
+  my $width=$IWIDTH;
   my $bits=$width << 3;
-  my $rows=$in->ROWS;
+  my $rows=$IROWS;
 
   my $nfillers  = scalar(@$fillers);
   my $nemptiers = scalar(@$emptiers);
@@ -244,21 +258,23 @@ sub ida_process_streams {
   my ($i, $k);
   my ($start_in_col,$start_out_col);
 
+
+  
   #warn "-------------------------------------\n";
   #warn "Asked to process $bytes_to_read bytes\n";
   #warn "Input cols is " .$in->COLS. ", Output cols is " . $out->COLS . "\n";
   #warn "Inorder is $inorder, Outorder is $outorder\n";
   #warn "There are $nfillers fillers, $nemptiers emptiers\n";
 
-  if ($bytes_to_read % ($width * $xform->COLS)) {
+  if ($bytes_to_read % ($width * $XCOLS)) {
     carp "process_streams: bytes to read not a multiple of COLS * WIDTH";
     return undef;
   }
-  unless ($nfillers == 1 or $nfillers==$in->ROWS) {
+  unless ($nfillers == 1 or $nfillers==$IROWS) {
     carp "Fillers must be 1 or number of input rows";
     return undef;
   }
-  unless ($nemptiers == 1 or $nemptiers == $out->ROWS) {
+  unless ($nemptiers == 1 or $nemptiers == $OROWS) {
     carp "Emptiers must be 1 or number of output rows";
     return undef;
   }
@@ -266,20 +282,20 @@ sub ida_process_streams {
 
   ($IFmin, $OFmax, $IR, $OW) = (0,0,0,0);
   if ($nfillers == 1) {
-    if ($in->ORG ne "colwise" and $in->ROWS != 1) {
+    if ($IORGNUM != COLWISE and $IROWS != 1) {
       carp "Need a 'colwise' input matrix with a single filler";
       return undef;
     }
-    $ILEN=$rows * $in->COLS * $width;
+    $ILEN=$rows * $ICOLS * $width;
     $idown=$width;
-    $iright=$in->ROWS * $width;
+    $iright=$IROWS * $width;
     $want_in_size = $width * $rows;
   } else {
-    if ($in->ORG ne "rowwise" and $in->ROWS != 1) {
+    if ($IORGNUM != ROWWISE and $IROWS != 1) {
       carp "Need a 'rowwise' input matrix with multiple fillers";
       return undef;
     }
-    $ILEN=$in->COLS * $width;
+    $ILEN=$ICOLS * $width;
     $idown=$ILEN;
     $iright=$width;
     $want_in_size = $width;
@@ -291,20 +307,20 @@ sub ida_process_streams {
     $fillers->[$i]->{"PART"} = ""; # partial word
   }
   if ($nemptiers == 1) {
-    if ($out->ORG ne "colwise" and $out->ROWS != 1) {
+    if ($OORGNUM != COLWISE and $OROWS != 1) {
       carp "Need a 'colwise' output matrix with a single emptier";
       return undef;
     }
-    $OLEN=$out->ROWS * $out->COLS * $width;
+    $OLEN=$OROWS * $OCOLS * $width;
     $odown=$width;
-    $oright=$out->ROWS * $width;
-    $want_out_size = $width * $out->ROWS;
+    $oright=$OROWS * $width;
+    $want_out_size = $width * $OROWS;
   } else {
-    if ($out->ORG ne "rowwise" and $out->ROWS != 1) {
+    if ($OORGNUM != ROWWISE and $OROWS != 1) {
       carp "Need a 'rowwise' output matrix with multiple emptiers";
       return undef;
     }
-    $OLEN   = $out->COLS * $width;
+    $OLEN   = $OCOLS * $width;
     $odown  = $OLEN;
     $oright = $width;
     $want_out_size = $width;
@@ -504,16 +520,16 @@ sub ida_process_streams {
       $start_out_col = $cc;
       $k=int ($IFmin  / $want_in_size);
       #warn "k=$k, start_in_col=$start_in_col, start_out_col=$start_out_col\n";
-      if ($k + $start_in_col > $in->COLS) {
-	$k = $in->COLS - $start_in_col;
+      if ($k + $start_in_col > $ICOLS) {
+	$k = $ICOLS - $start_in_col;
       }
-      if ($k + $start_out_col > $out->COLS) {
-	$k = $out->COLS - $start_out_col;
+      if ($k + $start_out_col > $OCOLS) {
+	$k = $OCOLS - $start_out_col;
       }
       #warn "k is now $k\n";
       Math::FastGF2::Matrix::multiply_submatrix_c
 	  ($xform, $in, $out,
-	   0, 0, $xform->ROWS,
+	   0, 0, $XROWS,
 	   $start_in_col, $start_out_col, $k);
       $IFmin -= $want_in_size * $k;
       $OFmax += $want_out_size * $k;

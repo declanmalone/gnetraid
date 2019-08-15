@@ -1,5 +1,20 @@
 Revision history for Perl extension Crypt::IDA.
 
+
+0.02  2019
+        - New "dumb" or "close to the metal" interfaces
+	  * avoids needing to use filler/emptier callbacks
+	  * user handles input/output matrices themselves
+	  * less error checking
+        - New C program: rabin-ida-helper
+	  * intended to offload bulk matrix multiplications
+	  * replaces calls to Math::FastGF2::Matrix::multiply_submatrix_c
+	  * runs as a child process
+	  * mini command interpreter to read config from stdin
+	  * range of I/O stream options (file, fifo or socket, pipe
+	    or fd provided by parent)
+	  * progress reporting
+
 0.01  Sat Jul 25 00:55:39 2009
 	- original version; created by h2xs 1.23 with options
 		-X -b 5.8.8 -n Crypt::IDA
