@@ -214,6 +214,19 @@ sub empty_to_file {
 # own input/output matrices, there's so little error-checking of
 # parameters here that it's probably best not to mention its
 # existence/availability.
+
+# the routine uses various tracking variables for each filler/emptier
+# handle
+use constant {
+    CALLBACK => 0,
+    IW       => 1,
+    ENDING   => 2,
+    BF       => 3,
+    PART     => 4,
+    OR       => 6,
+    SKIP     => 7,
+};
+
 sub ida_process_streams {
   my ($self, $class);
   if ($_[0] eq $classname or ref($_[0]) eq $classname) {
@@ -279,7 +292,19 @@ sub ida_process_streams {
     return undef;
   }
 
-
+  # Previously, I stashed vars inside the supplied fill/empty
+  # callbacks, assuming that we might need them again if we were to be
+  # called a second time. However, since the only way that this
+  # routine can end is with an error or eof, neither is a condition
+  # that we can continue on from.
+  #
+  # As a result, I'm changing to:
+  # * only storing these vars locally
+  # * storing them in an list of lists (rather than list of hashes)
+  # (see constant definitions above)
+  #
+  my (@fillvars,@emptyvars);
+  
   ($IFmin, $OFmax, $IR, $OW) = (0,0,0,0);
   if ($nfillers == 1) {
     if ($IORGNUM != COLWISE and $IROWS != 1) {
@@ -305,6 +330,12 @@ sub ida_process_streams {
     $fillers->[$i]->{"END"}  = $i * $idown + $ILEN - 1;
     $fillers->[$i]->{"BF"}   = 0;
     $fillers->[$i]->{"PART"} = ""; # partial word
+    # Set up per-filler variables
+    my @varlist = ();
+    my $cb = $fillers->[$i]->{SUB};
+    @varlist[CALLBACK,IW,ENDING,BF,PART] = (
+	$cb, $i * $idown, $i * $idown + $ILEN - 1, 0, "" );
+    push @fillvars, \@varlist;
   }
   if ($nemptiers == 1) {
     if ($OORGNUM != COLWISE and $OROWS != 1) {
@@ -326,10 +357,12 @@ sub ida_process_streams {
     $want_out_size = $width;
   }
   for my $i (0 .. $nemptiers - 1) {
-    $emptiers->[$i]->{"OR"}   = $i * $odown;
-    $emptiers->[$i]->{"END"}  = $i * $odown + $OLEN - 1;
-    $emptiers->[$i]->{"BF"}   = 0;
-    $emptiers->[$i]->{"SKIP"} = 0;
+    # Set up per-emptier variables
+    my @varlist = ();
+    my $cb = $emptiers->[$i]->{SUB};
+    @varlist[CALLBACK,OR,ENDING,BF,SKIP] = (
+	$cb, $i * $odown, $i * $odown + $OLEN - 1, 0, 0);
+    push @emptyvars, \@varlist;
   }
 
   do {
@@ -338,23 +371,23 @@ sub ida_process_streams {
     while (!$eof and ($IFmin < $want_in_size)) {
       #warn "Seems like we need input\n";
       for ($i = 0, $IFmin=$ILEN; $i < $nfillers ; ++$i) {
-	#warn "IR is $IR, filler ${i}'s IW is " . $fillers->[$i]->{"IW"}. "\n";
-	$max_fill = $ILEN - $fillers->[$i]->{"BF"};
-	if ($fillers->[$i]->{"IW"} >= $IR + $i * $idown) {
-	  if ($fillers->[$i]->{"IW"} + $max_fill >
-	      $fillers->[$i]->{"END"}) {
-	    $max_fill = $fillers->[$i]->{"END"} -
-	      $fillers->[$i]->{"IW"} + 1;
+	#warn "IR is $IR, filler ${i}'s IW is " . $fillvars[$i]->[IW]. "\n";
+	$max_fill = $ILEN - $fillvars[$i]->[BF];
+	if ($fillvars[$i]->[IW] >= $IR + $i * $idown) {
+	  if ($fillvars[$i]->[IW] + $max_fill >
+	      $fillvars[$i]->[ENDING]) {
+	    $max_fill = $fillvars[$i]->[ENDING] -
+	      $fillvars[$i]->[IW] + 1;
 	  }
 	} else {
-	  if ($fillers->[$i]->{"IW"} + $max_fill >=
+	  if ($fillvars[$i]->[IW] + $max_fill >=
 	      $IR + $i * $idown) {
-	    $max_fill = $IR  + $i * $idown - $fillers->[$i]->{"IW"};
+	    $max_fill = $IR  + $i * $idown - $fillvars[$i]->[IW];
 	  }
 	}
 
 	#warn "Before adjusting maxfill: $max_fill (bytes read $bytes_read)\n";
-	#warn "BF on filler $i is ". $fillers->[$i]->{"BF"} . "\n";
+	#warn "BF on filler $i is ". $fillvars[$i]->[BF] . "\n";
 	if ($bytes_to_read and
 	    ($bytes_read  + $max_fill > $bytes_to_read)) {
 	  $max_fill = $bytes_to_read - $bytes_read;
@@ -366,10 +399,10 @@ sub ida_process_streams {
 
 	# Subtract the length of any bytes from partial word read in
 	# the last time around.
-	$max_fill-=length $fillers->[$i]->{"PART"};
+	$max_fill-=length $fillvars[$i]->[PART];
 	die "max fill: $max_fill < 0\n" unless $max_fill >= 0;
 
-	$str=$fillers->[$i]->{"SUB"}->($max_fill);
+	$str=$fillvars[$i]->[CALLBACK]->($max_fill);
 
 	#warn "Got input '$str' on row $i, length ". length($str). "\n";
 
@@ -390,8 +423,8 @@ sub ida_process_streams {
 	  #warn "Got string '$str' from filler $i\n";
 	  #warn "length of str is " . (length($str)) . "\n";
 
-	  my $aligned=$fillers->[$i]->{"PART"} . $str;
-	  $fillers->[$i]->{"PART"}=
+	  my $aligned=$fillvars[$i]->[PART] . $str;
+	  $fillvars[$i]->[PART]=
 	    substr $aligned,
 	      (length($aligned) - (length($aligned) % $width)),
 		(length($aligned) % $width),
@@ -399,7 +432,7 @@ sub ida_process_streams {
 	  die "Alignment problem with filler $i\n"
 	    if length($aligned) % $width;
 	  die "Alignment problem with fill pointer $i\n"
-	    if $fillers->[$i]->{"IW"} % $width;
+	    if $fillvars[$i]->[IW] % $width;
 
 	  #next unless length $aligned;
 
@@ -407,7 +440,7 @@ sub ida_process_streams {
 
 	  $in->
 	    setvals($in->
-		    offset_to_rowcol($fillers->[$i]->{"IW"}),
+		    offset_to_rowcol($fillvars[$i]->[IW]),
 		    $aligned,
 		    $inorder);
 
@@ -415,14 +448,14 @@ sub ida_process_streams {
 	  # pretend we didn't see any bytes from partial words
 	  my $saw_bytes=(length $aligned) - (length($aligned) % $width) ;
 	  $bytes_read += $saw_bytes;
-	  $fillers->[$i]->{"BF"}  += $saw_bytes;
-	  $fillers->[$i]->{"IW"}  += $saw_bytes;
-	  if ($fillers->[$i]->{"IW"} > $fillers->[$i]->{"END"}) {
-	    $fillers->[$i]->{"IW"}  -= $ILEN;
+	  $fillvars[$i]->[BF]  += $saw_bytes;
+	  $fillvars[$i]->[IW]  += $saw_bytes;
+	  if ($fillvars[$i]->[IW] > $fillvars[$i]->[ENDING]) {
+	    $fillvars[$i]->[IW]  -= $ILEN;
 	  }
 	}
-	if ($fillers->[$i]->{"BF"} < $IFmin) {
-	  $IFmin = $fillers->[$i]->{"BF"};
+	if ($fillvars[$i]->[BF] < $IFmin) {
+	  $IFmin = $fillvars[$i]->[BF];
 	}
       }
       if ($eof) {
@@ -446,19 +479,19 @@ sub ida_process_streams {
 
 	for ($i=0, $OFmax=0; $i < $nemptiers; ++$i) {
 
-	  $max_empty = $emptiers->[$i]->{"BF"};
-	  if ($emptiers->[$i]->{"OR"} >= $OW + $i * $odown)  {
-	    if ($emptiers->[$i]->{"BF"} + $want_out_size > $OLEN) {
-	      $max_empty = $emptiers->[$i]->{"END"} -
-		$emptiers->[$i]->{"OR"} + 1;
+	  $max_empty = $emptyvars[$i]->[BF];
+	  if ($emptyvars[$i]->[OR] >= $OW + $i * $odown)  {
+	    if ($emptyvars[$i]->[BF] + $want_out_size > $OLEN) {
+	      $max_empty = $emptyvars[$i]->[ENDING] -
+		$emptyvars[$i]->[OR] + 1;
 	      #warn "Stopping overflow, max_empty is now $max_empty\n";
 	    }
 	  } else {
-	    if ($emptiers->[$i]->{"OR"} + $want_out_size >
+	    if ($emptyvars[$i]->[OR] + $want_out_size >
 		$OW + $i * $odown) {
 	      #warn "Stopping tail overwrite, max_empty is now $max_empty\n";
 	      $max_empty =
-		$OW + $i * $odown - $emptiers->[$i]->{"OR"};
+		$OW + $i * $odown - $emptyvars[$i]->[OR];
 		# printf ("Stopping tail overwrite, max_empty is now %Ld\n", 
 		#   (long long) max_fill_or_empty);  */
 	    }
@@ -470,16 +503,16 @@ sub ida_process_streams {
 
 	  # call handler to empty some data
 	  #warn "Emptying row $i, col ".
-	  #  ($emptiers->[$i]->{"OR"} % ( $out->COLS * $width)) .
+	  #  ($emptyvars[$i]->[OR] % ( $out->COLS * $width)) .
 	  #    " with $max_empty bytes\n";
 
 	  die "Alignment problem with OR emptier $i" if
-	    $emptiers->[$i]->{"OR"} % $width;
+	    $emptyvars[$i]->[OR] % $width;
 	  ($rr,$cc)=$out->
-	    offset_to_rowcol($emptiers->[$i]->{"OR"});
+	    offset_to_rowcol($emptyvars[$i]->[OR]);
 
 	  #warn "got (row,col) ($rr,$cc) from OR#$i offset ".
-	  #  $emptiers->[$i]->{"OR"}. "\n";
+	  #  $emptyvars[$i]->[OR]. "\n";
 
 	  # When emptying, we have to check whether the emptier
 	  # emptied full words. If it emptied part of a word, we have
@@ -492,22 +525,22 @@ sub ida_process_streams {
 	    getvals($rr,$cc,
 		    $max_empty / $width,
 		    $outorder);
-	  #substr $str, 0, $emptiers->[$i]->{"SKIP"}, "";
-	  $rc=$emptiers->[$i]->{"SUB"}->($str);
+	  #substr $str, 0, $emptyvars[$i]->[SKIP], "";
+	  $rc=$emptyvars[$i]->[CALLBACK]->($str);
 
 	  unless (defined($rc)) {
 	    carp "ERROR: write error $!\n";
 	    return undef;
 	  }
-	  #$emptiers->[$i]->{"SKIP"} = $rc % $width;
+	  #$emptyvars[$i]->[SKIP] = $rc % $width;
 	  #$rc -= $rc % $width;
-	  $emptiers->[$i]->{"BF"}   -= $rc;
-	  $emptiers->[$i]->{"OR"}   += $rc;
-	  if ($emptiers->[$i]->{"OR"} > $emptiers->[$i]->{"END"}) {
-	    $emptiers->[$i]->{"OR"} -= $OLEN;
+	  $emptyvars[$i]->[BF]   -= $rc;
+	  $emptyvars[$i]->[OR]   += $rc;
+	  if ($emptyvars[$i]->[OR] > $emptyvars[$i]->[ENDING]) {
+	    $emptyvars[$i]->[OR] -= $OLEN;
 	  }
-	  if ($emptiers->[$i]->{"BF"} > $OFmax) {
-	    $OFmax = $emptiers->[$i]->{"BF"};
+	  if ($emptyvars[$i]->[BF] > $OFmax) {
+	    $OFmax = $emptyvars[$i]->[BF];
 	  }
 	}
       }
@@ -534,11 +567,11 @@ sub ida_process_streams {
       $IFmin -= $want_in_size * $k;
       $OFmax += $want_out_size * $k;
       $IR+=$iright * $k;
-      if ($IR > $fillers->[0]->{"END"}) {
+      if ($IR > $fillvars[0]->[ENDING]) {
 	$IR=0;
       }
       $OW+=$oright * $k;
-      if ($OW > $emptiers->[0]->{"END"}) {
+      if ($OW > $emptyvars[0]->[ENDING]) {
 	$OW=0;
       }
       # printf ("Moving to next column: IFmin, OFmax are (%lld, %lld)\n",
@@ -552,10 +585,10 @@ sub ida_process_streams {
 
       if ($k) {
 	for ($i=0;  $i < $nfillers; ++$i) {
-	  $fillers->[$i]->{"BF"}  -= $k * $want_in_size;
+	  $fillvars[$i]->[BF]  -= $k * $want_in_size;
 	}
 	for ($i=0; $i < $nemptiers; ++$i) {
-	  $emptiers->[$i]->{"BF"} += $k * $want_out_size;
+	  $emptyvars[$i]->[BF] += $k * $want_out_size;
 	}
       }
 
