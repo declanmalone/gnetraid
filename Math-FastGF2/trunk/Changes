@@ -8,6 +8,7 @@ Revision history for Perl extension Math::FastGF2.
 	  Cauchy matrices (called as constructor given above x1..yk)
 	- New constructor for Vandermonde matrix (x1..xn)
 	- New $matrix->print method (pretty!)
+	- Don't warn if modules "use"d twice
 	- Profiling-driven speed improvements and some code cleanup
 	  * One of my main reasons to revisit the code.
 	  * See Changes-0.5 for more details.
