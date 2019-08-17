@@ -3,6 +3,7 @@ package Crypt::IDA::ShareFile;
 use 5.008008;
 use strict;
 use warnings;
+no warnings qw(redefine);
 
 use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION);
 

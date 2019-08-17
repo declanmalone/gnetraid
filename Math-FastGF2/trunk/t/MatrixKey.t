@@ -20,7 +20,7 @@ BEGIN {
 my $key = [ 1,2,3,4,5,6,7,8 ];
 
 # This will represent a key for a (3,5) scheme. I'm mixing option
-# names for ida_key_to_matrix and the new inverse_cauchy_from_xys
+# names for ida_key_to_matrix and the new new_inverse_cauchy
 my @opts = (			# we can re-use to get inverse matrix
     quorum => 3,		# 
     size   => 3,		# was "quorum"
@@ -46,15 +46,15 @@ ok(ref $mat_from_key, "create matrix from key?");
 ok(ref $inv_from_key, "create inverse matrix from key?");
 ok($inv_from_key->eq($inv3), "both old inverse paths agree?");
 
-# Implement new inverse_cauchy_from_xys; it will take args similar to
+# Implement new new_inverse_cauchy; it will take args similar to
 # the ida_key_to_matrix call above. (for now)
-ok(Math::FastGF2::Matrix->can("inverse_cauchy_from_xys"),
-   "has method inverse_cauchy_from_xys?");
+ok(Math::FastGF2::Matrix->can("new_inverse_cauchy"),
+   "has method new_inverse_cauchy?");
 
 my $inv_cauchy;
 ok($inv_cauchy = Math::FastGF2::Matrix
-   ->inverse_cauchy_from_xys(@opts, "xvals" => [0..2]),
-   "method inverse_cauchy_from_xys returns something?");
+   ->new_inverse_cauchy(@opts, "xvals" => [0..2]),
+   "method new_inverse_cauchy returns something?");
 
 ok($inv_from_key->eq($inv_cauchy), "New routine gets same result?");
 
@@ -77,7 +77,7 @@ print "Inverse of Inverse Cauchy from Key:\n"; $inv_back->print;
     size   => 4,
     shares => 4,
     sharelist => [0..3],	# for ida_key_to_matrix
-    xvals => [0..3],		# for inverse_cauchy_from_xys
+    xvals => [0..3],		# for new_inverse_cauchy
     width  => 1,
     key    => $key,
     xylist => $key,				
@@ -92,8 +92,8 @@ ok(ref $inv4_key, "create inverse matrix from key?");
 
 my $inv4_cauchy;
 ok($inv4_cauchy = Math::FastGF2::Matrix
-   ->inverse_cauchy_from_xys(@opts, "xvals" => [0..3]),
-   "method inverse_cauchy_from_xys returns something?");
+   ->new_inverse_cauchy(@opts, "xvals" => [0..3]),
+   "method new_inverse_cauchy returns something?");
 
 ok($inv4_key->eq($inv4_cauchy), "New routine gets same result?");
 
@@ -108,10 +108,53 @@ print "Got Inverse:\n";      $inv4_cauchy->print;
 print "Original (uninverted):\n"; $mat4_key->print;
 print "Inverse of Inverse Cauchy from Key:\n"; $inv4_back->print;
 
+# Test new Cauchy matrix constructor
+ok(Math::FastGF2::Matrix->can("new_cauchy"),
+   "has method new_cauchy?");
 
-# Benchmarking... compare manual inversion using old code with new
-# inverse_cauchy_from_xys code. (comment out below lines to enable)
+# The routine will have two ways of specifying the x's and y's:
+#
+# As two separate listref options, "xvals" and "yvals"
+#
+# As a combined xylist, but then also need to specify at least one
+# of the following: "rows" "cols"
+#
+# To test these, we'll just plug in all valid combinations and check
+# that we get and object back and that it has the right dimensions
+
+# 7 rows and 3 columns
+my @xvals = (1..7);
+my @yvals = (8,9,10);
+my $cauchy;
+my $rows = scalar(@xvals);
+my $cols = scalar(@yvals);
+my @xyvals = (@xvals, @yvals);
+
+# A: pass xvals, yvals separately
+$cauchy = Math::FastGF2::Matrix->
+    new_cauchy(xvals => \@xvals, yvals => \@yvals, width => 1);
+ok(ref $cauchy,  "New Cauchy matrix from xvals, yvals?");
+ok($cauchy->ROWS == $rows, "Has $rows rows?");
+ok($cauchy->COLS == $cols, "Has $cols cols?");
+
+# B: pass xyvals and rows
+$cauchy = Math::FastGF2::Matrix->
+    new_cauchy(xyvals => \@xyvals, rows => $rows, width => 1);
+ok(ref $cauchy,  "New Cauchy matrix from xyvals, rows?");
+ok($cauchy->ROWS == $rows, "Has $rows rows?");
+ok($cauchy->COLS == $cols, "Has $cols cols?");
+
+# C: pass xyvals and cols
+$cauchy = Math::FastGF2::Matrix->
+    new_cauchy(xyvals => \@xyvals, cols => $cols, width => 1);
+ok(ref $cauchy,  "New Cauchy matrix from xyvals, cols?");
+ok($cauchy->ROWS == $rows, "Has $rows rows?");
+ok($cauchy->COLS == $cols, "Has $cols cols?");
+
 
 done_testing;
 exit;
+
+
+
 

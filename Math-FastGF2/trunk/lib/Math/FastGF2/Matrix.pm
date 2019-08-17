@@ -4,6 +4,8 @@ package Math::FastGF2::Matrix;
 use 5.006000;
 use strict;
 use warnings;
+no warnings qw(redefine);
+
 use Carp;
 
 use Math::FastGF2 ":ops";
@@ -579,10 +581,92 @@ sub zero {
 
 }
 
+
+# Create a new Cauchy matrix
+# (was being done in Crypt::IDA before, but it's more relevant here)
+sub new_cauchy {
+    my $proto  = shift;
+    my $class  = ref($proto) || $proto;
+    my $parent = ref($proto) && $proto;
+    my %o = (
+	org       => "rowwise",
+	width     => undef,
+	xvals     => undef,	# was "sharelist"
+	yvals     => undef,
+	xyvals    => undef,	# was "key"
+	rows      => undef,
+	cols      => undef,
+	@_
+    );
+
+    my $w   = $o{width}    || die "width parameter required\n";
+
+    # any of these could be undefined
+    my ($rows, $cols, $xvals, $yvals);
+    $rows  = $o{rows};
+    $cols  = $o{cols};
+    $xvals = $o{xvals};
+    $yvals = $o{yvals};
+
+    if (defined $o{xyvals}) {
+	my $xyvals =  $o{xyvals};
+	die "Can't pass both xyvals and xvals\n" if defined $xvals;
+	die "Can't pass both xyvals and yvals\n" if defined $yvals;
+
+	if (defined $rows and !defined $cols) {
+	    $cols = @$xyvals - $rows;
+	    # warn "Rows was $rows. Set 'cols' to $cols\n";
+	} elsif (defined $cols and !defined $rows) {
+	    $rows = @$xyvals - $cols;
+	    # warn "Cols was $cols. Set 'rows' to $rows\n";
+	} else {
+	    die "Passing xyvals requires rows and/or cols\n";
+	}
+
+	# case where both are defined is handled later
+
+	# break up into two lists
+	$xvals = [@$xyvals[0.. $rows - 1]];
+	$yvals = [@$xyvals[$rows .. $rows + $cols - 1]];
+	# warn "Set up xvals with " . (@$xvals+0) . " elements\n";
+	# warn "Set up yvals with " . (@$yvals+0) . " elements\n";
+    } else {
+	# if user sets cols/rows explicitly, don't overwrite
+	$rows = scalar(@$xvals) if defined $xvals and !defined $rows;
+	$cols = scalar(@$yvals) if defined $yvals and !defined $cols;
+    }
+
+    die "Must have either xyvals + rows/cols or xvals + yvals\n"
+	unless defined $xvals and defined $yvals;
+    die "Rows/xvals are inconsistent\n" unless @$xvals == $rows;
+    die "Cols/yvals are inconsistent\n" unless @$yvals == $cols;
+    die "Must have rows >= cols\n" unless $rows >= $cols;
+
+    # Note: no check done to ensure that x,y values are unique
+    my @x   = @$xvals;
+    my @y   = @$yvals;
+
+    my $self = $class->new(rows => $rows, cols => $cols, width => $w,
+			   org => $o{org});
+    die unless ref $self;
+
+    # ported from IDA::ida_key_to_matrix
+    $w <<= 3; 			# bits <- bytes
+    for my $row (0..$rows - 1 ) {
+	for my $col (0 .. $cols - 1) {
+	    my $xi  = $x[$row];
+	    my $yj  = $y[$col];
+	    $self->setval($row, $col, gf2_inv($w, $xi ^ $yj));
+	}
+    }
+    return $self;
+}
+
+
 #
 # New method to calculate inverse Cauchy matrix given list:
 #
-# xylist = [ x_1, ... x_n, y_1, ... y_k ]
+# xyvals = [ x_1, ... x_n, y_1, ... y_k ]
 #
 # See Wikipedia page on Cauchy matrices:
 #
@@ -592,7 +676,7 @@ sub zero {
 #
 # https://proofwiki.org/wiki/Inverse_of_Cauchy_Matrix
 
-sub inverse_cauchy_from_xys {
+sub new_inverse_cauchy {
 
     # parameter names were based on Crypt::IDA::ida_key_to_matrix
     my $proto  = shift;
@@ -1049,6 +1133,60 @@ C<$w> and organisation C<$org>:
 
 As with the C<new> constructor, the C<org> parameter is optional and
 default to "rowwise".
+
+=head2 new_cauchy
+
+Create a Cauchy matrix from a set of x and y values:
+
+ my @xvals = (1..7);        # all values must be distinct across
+ my @yvals = (8..10);       # the combined list
+ 
+ # Passing separate x and y lists (rows/cols inferred)
+ $i=Math::FastGF2::Matrix->
+          new_cauchy(width => 1, org => "rowwise",
+                     xvals => \@xvals, yvals => \@yvals
+          );
+
+ # Passing combined list and at least one of rows/cols
+ $i=Math::FastGF2::Matrix->
+          new_cauchy(width => 1, org => "rowwise",
+                     xyvals => [@xvals, @yvals],
+                     rows => scalar(@xvals),
+                     cols => scalar(@yvals),
+          );
+
+Cauchy matrices have the useful property that for a matrix of n rows
+and k columns, all subsets of k rows are linearly independent with
+respect to each other. Thus this submatrix is invertible. This has
+applications in constructing error-correcting codes. See the
+L<Crypt::IDA> manual page for details.
+
+=head2 new_inverse_cauchy
+
+Creates an inverse Cauchy matrix from a set of y values and an subset
+of x values:
+
+ my @xvals = (20..27);        # all values must be distinct across
+ my @yvals = (28..30);        # the combined list
+ 
+ $i=Math::FastGF2::Matrix->
+          new_cauchy(width => 1, org => "rowwise",
+                     xylist => [ @xvals, @yvals ],
+                     size => 3,       # size of y list
+                     xvals => [0..3], # indexes into x list
+ );
+
+Note that xvals in this case is a set of indices into the C<@xvals>
+array. Effectively, it selects 'size' rows from the Cauchy matrix
+described by C<[ @xvals, @yvals ]> and inverts that matrix.
+
+This uses an algorithm described in volume 1 of Knuth's I<"The Art of
+Computer Programming">, which should run faster than the regular
+Gaussian elimination method implemented by the C<invert> method.
+
+=head2 new_vandermonde
+
+
 
 =head2 copy
 

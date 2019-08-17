@@ -3,9 +3,11 @@ package Crypt::IDA;
 use 5.008008;
 use strict;
 use warnings;
+no warnings qw(redefine);
 
 use Carp;
 use Fcntl qw(:DEFAULT :seek);
+
 use Math::FastGF2 qw(:ops);
 use Math::FastGF2::Matrix;
 

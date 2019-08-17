@@ -3,6 +3,7 @@ package Math::FastGF2;
 use 5.006000;
 use strict;
 use warnings;
+no warnings qw(redefine);
 
 use vars qw(@ISA @EXPORT @EXPORT_OK %EXPORT_TAGS $VERSION);
 
