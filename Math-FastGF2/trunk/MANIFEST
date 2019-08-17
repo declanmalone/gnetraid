@@ -12,6 +12,7 @@ perlsubs.c
 bin/shamir-split.pl
 bin/shamir-combine.pl
 t/Cauchy.t
+t/Vandermonde.t
 t/Math-FastGF2.t
 t/Matrix.t
 t/multest.pl

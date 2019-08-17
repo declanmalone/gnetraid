@@ -796,6 +796,45 @@ sub new_inverse_cauchy {
     return $self;
 }
 
+sub new_vandermonde {
+    my $proto  = shift;
+    my $class  = ref($proto) || $proto;
+    my $parent = ref($proto) && $proto;
+    my %o = (
+	org        => "rowwise",
+	cols       => undef,
+	width      => undef,
+	xvals     => undef,  
+	@_
+    );
+
+    # pull out variables
+    my ($org,$cols,$width,$xvals) = 
+	@o{qw(org cols width xvals)}; # hash slice
+
+    die "xvals must be a listref\n" unless ref($xvals) eq "ARRAY";
+    die "need cols > 0" unless defined $cols and $cols >0;
+
+    my $rows = @$xvals;
+
+    my $self = $class->new(
+	org => $org, width => $width, rows => $rows, cols => $cols);
+    die unless ref($self);
+
+    # populate all the rows
+    my $w = $width << 3;
+    for my $row (0 .. $rows -1) {
+	$self->setval($row,0,1);
+	my $x = 1;
+	for my $col (1 .. $cols -1) {
+	    $x = gf2_mul($w,$x,$xvals->[$row]);
+	    $self->setval($row,$col,$x);
+	}
+    }
+    
+    $self;    
+}    
+
 sub print {
     my $self = shift;
     #die ref $self;
@@ -1170,15 +1209,16 @@ of x values:
  my @yvals = (28..30);        # the combined list
  
  $i=Math::FastGF2::Matrix->
-          new_cauchy(width => 1, org => "rowwise",
-                     xylist => [ @xvals, @yvals ],
-                     size => 3,       # size of y list
-                     xvals => [0..3], # indexes into x list
+      new_inverse_cauchy(width => 1, org => "rowwise",
+                         xylist => [ @xvals, @yvals ],
+                         size => 3,       # size of y list
+                         xvals => [0..3], # indexes into x list
  );
 
-Note that xvals in this case is a set of indices into the C<@xvals>
-array. Effectively, it selects 'size' rows from the Cauchy matrix
-described by C<[ @xvals, @yvals ]> and inverts that matrix.
+Note that the xvals parameter in this case is a set of indices into
+the C<@xvals> array. Effectively, it selects 'size' rows from the
+Cauchy matrix described by C<[ @xvals, @yvals ]> and inverts that
+matrix.
 
 This uses an algorithm described in volume 1 of Knuth's I<"The Art of
 Computer Programming">, which should run faster than the regular
@@ -1186,7 +1226,27 @@ Gaussian elimination method implemented by the C<invert> method.
 
 =head2 new_vandermonde
 
+Create a Vandermonde matrix from a list of x values
 
+ $i=Math::FastGF2::Matrix->
+      new_vandermonde(width => 1, org => "rowwise",
+                      xvals => [ 0..6 ],  # 7 rows
+                      cols   => 3,
+ );
+
+For each x_i value, creates a row of the form:
+
+        |     0    1    2          cols-1  |
+        |   x    x    x   ...    x         |
+        |    i    i    i          i        |
+
+If all the x_i values in the list are distinct, then, like the Cauchy
+matrix above, taking any 'cols' subset of rows from the matrix gives
+you an invertible matrix. This is the form of matrix generally used
+for Reed-Solomon error-correcting codes.
+
+To create the inverse of some cols x cols submatrix, just use the
+standard C<invert> method on it.
 
 =head2 copy
 
@@ -1411,7 +1471,7 @@ new matrix or undef in the case of an error.
 =head2 Solve
 
 Treat matrix as a set of simultaneous equations and attempt to solve
-it:
+it using Gaussian elimination:
 
  $solution=$m->solve;
 

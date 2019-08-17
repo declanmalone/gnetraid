@@ -14,3 +14,4 @@ MYMETA.yml
 ^pm_to_blib
 ~$
 ^Makefile(.old)?
+^Math-FastGF2.*.tar.gz
