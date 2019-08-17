@@ -1,6 +1,6 @@
 Revision history for Perl extension Math::FastGF2.
 
-0.05  Aug 2019
+0.05  Sat 17 Aug 2019
         - 10th anniversary special release!!!
         - New constructor for Cauchy Matrix generated from a list
 	  of x1,x2,...xn,y1,..yk values (moved from Crypt::IDA)
