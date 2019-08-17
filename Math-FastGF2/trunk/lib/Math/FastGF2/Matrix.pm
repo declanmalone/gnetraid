@@ -599,12 +599,14 @@ sub inverse_cauchy_from_xys {
     my $class  = ref($proto) || $proto;
     my $parent = ref($proto) && $proto;
     my %o = (
+	org       => "rowwise",
 	size      => undef,	# was "quorum"
 	width     => undef,
 	#shares    => undef,	# was "shares"
 	xvals     => undef,	# was "sharelist"
 	width     => undef,
-	xylist    => undef,	# was "key" 
+	xylist    => undef,	# was "key"
+	
 	@_
     );
 
@@ -627,19 +629,15 @@ sub inverse_cauchy_from_xys {
     die if @$key < 2 * $k;	# is n >= k?
     die if @x != $k;		# did user supply k xvals?
 
-    my $self = $class->new(rows => $k, cols => $k, width => $w);
+    my $self = $class->new(rows => $k, cols => $k, width => $w,
+			   org => $o{org});
     die unless ref $self;
 
     # Using the proof wiki page as a guide...
     #
-    # Not sure if i represents rows or columns, but I'll go with rows
-    # for now. I can transpose the matrix later to find out if either
-    # version matches.
-
-    # rename k as n so we can use it as a loop counter (and go -1
+    # rename k to n so we can use it as a loop counter (and go -1
     # because we're using zero-based indexes)
     my ($i, $j, $n, $bits) = (0,0, $k-1, $w * 8);
-
 
     if ($n < 3) {
 	# unoptimised version
@@ -670,9 +668,8 @@ sub inverse_cauchy_from_xys {
 	# Instead of calculating:
 	# * product of row except for ... (n-1 multiplications)
 	# * product of col except for ... (n-1 multiplications)
-	# You can memoise full row/col products and multiply them
-	# by inverses of the things you want to exclude.
-	# Total cost should go from an order of n^3 to ~n^2
+	# You can memoise full row/col products 
+	# 
 	# This should be hugely noticeable for large n, but should
 	# probably also even have a positive effect for n>3 assuming
 	# a word size of 1 byte and gf2_inv that is as cheap (or cheaper)
@@ -695,10 +692,6 @@ sub inverse_cauchy_from_xys {
 	for $i (0 .. $n) {
 	    for $j (0 .. $n) {
 
-		# As it turns out, we don't need to do inverse because
-		# the bits skipped over eval to 0. So the memoised
-		# values are completely invariant per row or column.
-		
 		# We can save one multiplication by 1 below:
 		my $top = gf2_mul($bits, $x[$j] ^ $y[0], $x[0] ^ $y[$i]);
 		map {

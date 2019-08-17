@@ -1,13 +1,16 @@
 Revision history for Perl extension Math::FastGF2.
 
 0.05  Aug 2019
+        - 10th anniversary special release!!!
         - New constructor for Cauchy Matrix generated from a list
-	  of x1,x2,...xn,y1,..yk values
-        - New, slightly more efficient Matrix inversion method
-	  for Cauchy matrices (also based on same list as above)
-	- New $matrix->print method
+	  of x1,x2,...xn,y1,..yk values (moved from Crypt::IDA)
+	- New, slightly more efficient Matrix inversion method for
+	  Cauchy matrices (called as constructor given above x1..yk)
+	- New constructor for Vandermonde matrix (x1..xn)
+	- New $matrix->print method (pretty!)
 	- Profiling-driven speed improvements and some code cleanup
-	- See Changes-0.5 for more details
+	  * One of my main reasons to revisit the code.
+	  * See Changes-0.5 for more details.
 
 0.04  Mon Aug 17 21:00:00 2009
 	- Add copy/flip-related Matrix code
