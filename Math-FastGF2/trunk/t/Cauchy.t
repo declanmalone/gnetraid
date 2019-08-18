@@ -8,9 +8,15 @@ use Data::Dumper;
 use Test::More;
 BEGIN {
     use_ok('Math::FastGF2::Matrix', ':all');
-    use_ok('Crypt::IDA', ':all') 
-	or BAIL_OUT "Skipping tests that require Crypt::IDA";	
+    eval { require Crypt::IDA };
+    if ($@) {
+	ok(1, "Skipping tests that require Crypt::IDA\n");
+	done_testing;
+	exit;
+    }
 };
+
+use Crypt::IDA qw(:all);
 
 # I'll be adding a new matrix inversion routine that relies on
 # knowing the "key" that was used to set up the matrix in the

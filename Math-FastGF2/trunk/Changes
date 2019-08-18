@@ -1,5 +1,10 @@
 Revision history for Perl extension Math::FastGF2.
 
+0.06  Sun 18 Aug 2019
+
+        - Fix Cauchy.t to pass tests if Crypt::IDA is not available
+          (problem discovered via CPAN testers)
+
 0.05  Sat 17 Aug 2019
         - 10th anniversary special release!!!
         - New constructor for Cauchy Matrix generated from a list

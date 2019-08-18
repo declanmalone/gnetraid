@@ -16,7 +16,7 @@ require Exporter;
 	       );
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 @EXPORT = (  );
-$VERSION = '0.05';
+$VERSION = '0.06';
 
 require XSLoader;
 XSLoader::load('Math::FastGF2', $VERSION);
