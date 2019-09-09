@@ -734,7 +734,7 @@ sub ida_check_key {
   foreach my $v (@$key) {
     return 1 if $v >= 256 ** $w;
     return 1 if exists($values{$v}); # failure; duplicate value
-    $values{$v}=1;
+    $values{$v}=undef;
   }
   return 0;			# success; all values distinct
 };
