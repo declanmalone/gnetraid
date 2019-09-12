@@ -156,10 +156,8 @@ for $str ("A", "BC", "DEF", "GHIJ", "KLMNO", "PQRSTU") {  # 6 x
 	  for $order (1,2) {                              # 2 x
 	    for $b (1,3,7) {                              # 3 = 
 
-	      # split ...
-	      my $len=length $str;	# length before null padding
-
 	      # Keep this code for now, until fully ported.
+	      my $len=length $str;	# length before null padding
 	      while ($l % ($k * $w)) {
 		  ++$l;		# length after null padding
 	      }

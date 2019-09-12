@@ -15,7 +15,7 @@ use Class::Tiny qw/sw/,
     # * It's meaningless when combining
     # * It's either implied or overridden when splitting
     k => undef, w => 1,
-    mode => undef, bufsize => 8185,
+    mode => undef, bufsize => 16350,
     inorder => 0, outorder => 0, # passed to getvals/setvals
 
     # Simplify transform/key specification. Either provide a transform
@@ -195,6 +195,7 @@ sub fill_substream {
 sub split_stream {
     my ($self,$cols) = @_;
     my $sw = $self->{sw};
+
     my ($rok,$pok,$wok,$bundle) = $sw->can_advance;
     if (defined $cols) {
 	die "Can't split $cols columns (max is $pok)" if $cols > $pok;
@@ -209,14 +210,16 @@ sub split_stream {
     my $in    = $self->{imat};
     my $out   = $self->{omat};
     my $rel_col = $sw->{processed} % $sw->{window};
+    my $k     = $self->{k};
+    my $w     = $self->{w};
 
     Math::FastGF2::Matrix::multiply_submatrix_c(
 	$xform, $in, $out,
-	0, 0, $self->k,
+	0, 0, $k,
 	$rel_col, $rel_col, $first);
     Math::FastGF2::Matrix::multiply_submatrix_c(
 	$xform, $in, $out,
-	0, 0, $self->k,
+	0, 0, $k,
 	0, 0, $second) if defined $second;
 
     $sw->advance_process($cols);
@@ -281,13 +284,14 @@ sub empty_stream {
 sub empty_substream {
     my ($self, $row, $cols) = @_;
     my $sw = $self->{sw};
-    my ($rok,$pok,$wok,$bundle) = $sw->can_advance;
-    my $avail = $bundle->[$row];
+
+    my $avail = $sw->can_empty_substream($row);
     if (defined $cols) {
 	die "Can't empty $cols columns (max is $avail)" if $cols > $avail;
     } else {
 	$cols = $avail;
     }
+
 
     my $hash = $sw->{bundle}->[$row];
     my ($head,$tail) = ($hash->{head}, $hash->{tail});

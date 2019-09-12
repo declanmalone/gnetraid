@@ -24,8 +24,8 @@ use Class::Tiny qw(bundle yts), {
     window => undef,
 
     # convenience
-    splitting => sub { shift->{mode} eq 'split' ? 1 : 0 },
-    combining => sub { shift->{mode} eq 'combine' ? 1 : 0 },
+    splitting => sub { $_[0]->{mode} eq 'split' ? 1 : 0 },
+    combining => sub { $_[0]->{mode} eq 'combine' ? 1 : 0 },
 
     # optional callbacks (not all combinations make sense)
     cb_error => undef,
@@ -40,7 +40,7 @@ sub BUILD {
 	die "$req attribute required" unless defined $self->$req;
     }
     die "Bad mode!" unless
-	$self->mode eq 'split' or $self->mode eq 'combine';
+	$self->{mode} eq 'split' or $self->{mode} eq 'combine';
     for my $plus ( qw(rows window) ) {
 	die "$plus attribute must be > 0" unless $self->$plus > 0;
     }
@@ -54,7 +54,7 @@ sub BUILD {
 
     # Couldn't set up bundle in Class::Tiny call
     my @bundle;
-    for (1 .. $self->rows) {
+    for (1 .. $self->{rows}) {
 	push @bundle, { head => 0, tail => 0 }
     }
     $self->{bundle} = \@bundle;
@@ -76,20 +76,20 @@ sub _error {
 sub advance_read {
     my ($self,$cols) = @_;
 
-    die "Use advance_read_substream instead" if $self->combining;
-    my ($head,$tail) = ($self->read_head, $self->read_tail);
+    die "Use advance_read_substream instead" if $self->{combining};
+    my ($head,$tail) = ($self->{read_head}, $self->{read_tail});
 
     # Note that read_head can be up to two windows ahead of
     # write_tail, but never more than one window from read_tail.
-    die "Would exceed read window" if $head + $cols - $tail > $self->window;
+    die "Would exceed read window" if $head + $cols - $tail > $self->{window};
     $self->{read_head} += $cols;
 }
 
 sub advance_write {
     my ($self,$cols) = @_;
 
-    die "Use advance_write_substream instead" if $self->splitting;
-    my ($head,$tail) = ($self->write_head, $self->write_tail);
+    die "Use advance_write_substream instead" if $self->{splitting};
+    my ($head,$tail) = ($self->{write_head}, $self->{write_tail});
 
     # Advance tail, but not past head.
     die "Write tail would overtake head" if $tail + $cols > $head;
@@ -111,21 +111,21 @@ sub _advance_rw_substream {
     my ($self,$which,$row,$cols) = @_;
     my ($ptr, $parent, $cb);
     if ($which eq "read") {
-	die "No read substreams!" if $self->splitting;
+	die "No read substreams!" if $self->{splitting};
 	($ptr, $parent, $cb) = ("head", "read_head", "cb_read_bundle")
     } elsif ($which eq "write") {
-	die "No write substreams!" if $self->combining;
+	die "No write substreams!" if $self->{combining};
 	($ptr, $parent, $cb) = ("tail", "write_tail", "cb_wrote_bundle");
     } else {
 	die "_advance_some_substream: $which?";
     }
-    die "Row out of range" if $row >= $self->rows;
+    die "Row out of range" if $row >= $self->{rows};
 
-    my $hash    = $self->bundle->[$row];
+    my $hash    = $self->{bundle}->[$row];
     my $old_val = $hash->{$ptr};
     if ($which eq "read") {
 	die "Read would overflow input buffer"
-	    if $old_val + $cols - $hash->{tail} > $self->window;
+	    if $old_val + $cols - $hash->{tail} > $self->{window};
     } else {
 	die "Write tail would overtake head"
 	    if $old_val + $cols > $hash->{head};
@@ -170,20 +170,25 @@ sub can_advance {
     my ($read_ok, $process_ok, $write_ok, @bundle_ok);
 
     # reads fill and writes empty the buffers
-    $read_ok  = $self->window - ($self->read_head - $self->read_tail);
-    $write_ok = ($self->write_head - $self->write_tail);
+    $read_ok  = $self->{window} - ($self->{read_head} - $self->{read_tail});
+    $write_ok = ($self->{write_head} - $self->{write_tail});
 
     # processing limited by available input/free output space
-    my $read_ready = $self->read_head - $self->read_tail;
-    my $write_free = $self->window - $write_ok;
+    my $read_ready = $self->{read_head} - $self->{read_tail};
+    my $write_free = $self->{window} - $write_ok;
     $process_ok = $read_ready < $write_free ? $read_ready : $write_free;
 
     # bundled substreams (could be read or write)
-    for my $row (0 .. $self->rows - 1) {
-	my $rowptr = $self->{bundle}->[$row];
-	push @bundle_ok, ($self->combining) ?
-	    $self->window - ($rowptr->{head} - $rowptr->{tail}) :
-	    $rowptr->{head} - $rowptr->{tail};
+    if ($self->{combining}) {
+	for my $row (0 .. $self->{rows} - 1) {
+	    my $rowptr = $self->{bundle}->[$row];
+	    push @bundle_ok, $self->window - ($rowptr->{head} - $rowptr->{tail});
+	}
+    } else {
+	for my $row (0 .. $self->{rows} - 1) {
+	    my $rowptr = $self->{bundle}->[$row];
+	    push @bundle_ok, $rowptr->{head} - $rowptr->{tail};
+	}
     }
     return ($read_ok,$process_ok,$write_ok,\@bundle_ok);
 }
@@ -196,8 +201,8 @@ sub can_fill {
 
 sub can_empty {
     my $self = shift;
-    die "use can_empty_substream instead" if $self->splitting;
-    $self->write_head - $self->write_tail;
+    die "use can_empty_substream instead" if $self->{splitting};
+    $self->{write_head} - $self->{write_tail};
 }
 
 sub can_fill_substream {
@@ -211,7 +216,7 @@ sub can_fill_substream {
 sub can_empty_substream {
     my ($self,$row) = @_;
     die "must specify a row" unless defined $row;
-    die "use can_empty instead" if $self->combining;
+    die "use can_empty instead" if $self->{combining};
     my $rowptr = $self->{bundle}->[$row];
     $rowptr->{head} - $rowptr->{tail};
 }    
@@ -261,7 +266,7 @@ sub advance_process {
 # reads/writes if it straddles the end of a buffer
 sub destraddle {
     my ($self, $pointer, $cols) = @_;
-    my $window    = $self->window;
+    my $window    = $self->{window};
     my $rel_start = $pointer % $window;
     my $rel_end   = $rel_start + $cols;
 
