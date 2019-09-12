@@ -210,7 +210,8 @@ sub ne {
   return !values_eq_c($self,$other);
 }
 
-sub offset_to_rowcol {
+
+sub _offset_to_rowcol_disabled {
   my $self=shift;
   my $offset=shift;
 

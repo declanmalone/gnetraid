@@ -141,7 +141,13 @@ mat_setvals_str (Self, row, col, Str, byteorder)
   SV *Str
   int byteorder
 
+void
+mat_offset_to_rowcol (Self, offset, OUTLIST row, OUTLIST col)
+  SV *Self
+  int offset
+  int row
+  int col
+
 MODULE = Math::FastGF2  PACKAGE = Math::FastGF2::Matrix::FillSub  PREFIX = cbk__
 
 PROTOTYPES: ENABLE
-

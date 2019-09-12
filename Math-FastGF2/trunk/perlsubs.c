@@ -514,4 +514,29 @@ void mat_setvals_str (SV *Self, int row, int col,
   return;
 }
 
+
 /* new code to implement previous offset_to_rowcol */
+void mat_offset_to_rowcol (SV *Self, int offset, int *row, int *col) {
+
+  gf2_matrix_t *self  = (gf2_matrix_t*) SvIV(SvRV(Self));
+  int width = self->width;
+  int cols  = self->cols;
+  int rows  = self->rows;
+
+  int errors = 0;
+  if (offset % width) errors++; else offset /= width;;
+  if ((offset < 0) || (offset >= rows * cols)) errors++;
+  if (errors) {
+    *row = *col = &PL_sv_undef;
+    return;
+  }
+
+  if (self->organisation == 1) { // ROWWISE
+    *row = offset / cols;
+    *col = offset - *row * cols;
+  } else {
+    *row = offset % rows;
+    *col = offset / rows;
+  }
+  return;
+}
