@@ -16,7 +16,7 @@ use Class::Tiny qw/sw/,
     # * It's either implied or overridden when splitting
     k => undef, w => 1,
     mode => undef, bufsize => 16350,
-    inorder => 0, outorder => 0, # passed to getvals/setvals
+    inorder => 0, outorder => 0, # passed to getvals_str/setvals_str
 
     # Simplify transform/key specification. Either provide a transform
     # matrix or a key with optional sharelist. Don't support sharelist
@@ -34,7 +34,7 @@ sub BUILD {
     for my $req ( qw(k w mode bufsize inorder outorder) ) {
 	die "$req attribute required" unless defined $self->$req;
     }
-    die "Bad mode!" unless $self->mode =~ /^(split|combine)$/;
+    die "Bad mode!" unless $self->{mode} =~ /^(split|combine)$/;
     for my $plus ( qw(k w bufsize) ) {
 	die "$plus attribute strictly positive" unless $self->$plus > 0;
     }
@@ -45,7 +45,7 @@ sub BUILD {
     die "w must be 1, 2 or 4" unless $self->w =~ /^[124]$/;
 
     # bump bufsize until it's a multiple of k
-    $self->{bufsize}++ while $self->bufsize % $self->k;
+    $self->{bufsize}++ while $self->{bufsize} % $self->k;
 
     # I have eliminated n being passed in as a parameter, but we need
     # to calculate it (or its apparent value) from the other
@@ -56,10 +56,10 @@ sub BUILD {
 
     # The two ways of specifying the transform matrix are mutually
     # exclusive
-    if (defined($self->xform)) {
+    if (defined($self->{xform})) {
 	die "Cannot use xform with key or sharelist"
-	    if defined($self->key) or defined($self->sharelist);
-	$xform_rows = $self->xform->ROWS; # apparent value
+	    if defined($self->{key}) or defined($self->{sharelist});
+	$xform_rows = $self->{xform}->ROWS; # apparent value
     } else {
 	# The new_cauchy and new_inverse_cauchy methods in
 	# Math::FastGF2::Matrix can do a lot of parameter checking for
@@ -70,7 +70,7 @@ sub BUILD {
 	# the caller gets error messages higher up the call stack
 	# (with parameter names/error messages that make more sense).
 
-	if (defined $self->key) {
+	if (defined $self->{key}) {
 	    # break up list into yvals, xvals
 	    my @key   = @{$self->{key}};
 	    my @yvals = splice @key, -$k;
@@ -78,7 +78,7 @@ sub BUILD {
 	    # apply sharelist, moving to new @xvals list
 	    my @xvals;
 	    if (defined $self->{sharelist}) {
-		push @xvals, $key[$_] foreach @{$self->sharelist};
+		push @xvals, $key[$_] foreach @{$self->{sharelist}};
 	    } else {
 		@xvals = @key;
 		# $self->{sharelist} = [ 0 .. $xvals - 1 ];
@@ -139,7 +139,6 @@ sub BUILD {
 sub splitter { shift->new(mode => 'split', @_) }
 sub combiner { shift->new(mode => 'combine', @_) }
 
-# methods supporting split...
 sub fill_stream {
     my ($self,$str) = @_;
     my $k    = $self->{k};
@@ -155,15 +154,16 @@ sub fill_stream {
     my $mat = $self->{imat};
 
     # need to split string if we straddled matrix boundary
-    my ($first,$second) = $sw->destraddle($sw->read_head,$cols);
+    my ($first,$second) = $sw->destraddle($sw->{read_head},$cols);
     $str2 = substr $str, $first * $k * $w if defined $second;
 
     my $rel_col = $sw->{read_head} % $sw->{window};
-    $mat->setvals(0, $rel_col, $str, $self->{inorder});
-    $mat->setvals(0, 0, $str2, $self->{inorder}) if defined $second;
+    $mat->setvals_str(0, $rel_col, $str, $self->{inorder});
+    $mat->setvals_str(0, 0, $str2, $self->{inorder}) if defined $second;
 
     $sw->advance_read($cols);
 }
+
 sub fill_substream {
     my ($self,$row,$str) = @_;
     my $k    = $self->{k};
@@ -186,8 +186,8 @@ sub fill_substream {
     $str2 = substr $str, $first * $w if defined $second;
 
     my $rel_col = $hash->{head} % $sw->{window};
-    $mat->setvals($row, $rel_col, $str, $self->{inorder});
-    $mat->setvals($row, 0, $str2, $self->{inorder}) if defined $second;
+    $mat->setvals_str($row, $rel_col, $str, $self->{inorder});
+    $mat->setvals_str($row, 0, $str2, $self->{inorder}) if defined $second;
 
     $sw->advance_read_substream($row,$cols);
 }
@@ -272,10 +272,10 @@ sub empty_stream {
     my $mat = $self->{omat};
     my $order = $self->{outorder};
 
-    my ($first,$second) = $sw->destraddle($sw->read_tail,$cols);
-    my $rel_col = $sw->write_tail % $sw->{window};
-    $str = $mat->getvals(0,$rel_col,$first  * $w * $k,$order);
-    $str.= $mat->getvals(0,0,       $second * $w * $k,$order) if defined($second);
+    my ($first,$second) = $sw->destraddle($sw->{read_tail},$cols);
+    my $rel_col = $sw->{write_tail} % $sw->{window};
+    $str = $mat->getvals_str(0,$rel_col,$first  * $w * $k,$order);
+    $str.= $mat->getvals_str(0,0,       $second * $w * $k,$order) if defined($second);
     $sw->advance_write($cols);
 
     $str;
@@ -292,7 +292,6 @@ sub empty_substream {
 	$cols = $avail;
     }
 
-
     my $hash = $sw->{bundle}->[$row];
     my ($head,$tail) = ($hash->{head}, $hash->{tail});
 
@@ -303,8 +302,8 @@ sub empty_substream {
     my $order = $self->{outorder};
     my ($first,$second) = $sw->destraddle($tail,$cols);
     my $rel_col = $tail % $sw->{window};
-    $str = $mat->getvals($row,$rel_col,$first,$order);
-    $str.= $mat->getvals($row,0,$second,$order) if defined($second);
+    $str = $mat->getvals_str($row,$rel_col,$first,$order);
+    $str.= $mat->getvals_str($row,0,$second,$order) if defined($second);
 
     $sw->advance_write_substream($row,$cols);
     $str;

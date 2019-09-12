@@ -441,7 +441,7 @@ sub ida_process_streams {
 	  #warn "Adding string '$aligned' to input buffer\n";
 
 	  $in->
-	    setvals($in->
+	    setvals_str($in->
 		    offset_to_rowcol($fillvars[$i]->[IW]),
 		    $aligned,
 		    $inorder);
@@ -524,7 +524,7 @@ sub ida_process_streams {
 	  # at the start of the output string.
 
 	  $str=$out->
-	    getvals($rr,$cc,
+	    getvals_str($rr,$cc,
 		    $max_empty / $width,
 		    $outorder);
 	  #substr $str, 0, $emptyvars[$i]->[SKIP], "";

@@ -125,6 +125,22 @@ mat_set_raw_values_c (Self, row, col, words, byteorder, Str)
   int byteorder
   SV *Str
 
+SV*
+mat_getvals_str (Self, row, col, words, byteorder)
+  SV *Self
+  int row
+  int col
+  int words
+  int byteorder
+
+void
+mat_setvals_str (Self, row, col, Str, byteorder) 
+  SV *Self
+  int row
+  int col
+  SV *Str
+  int byteorder
+
 MODULE = Math::FastGF2  PACKAGE = Math::FastGF2::Matrix::FillSub  PREFIX = cbk__
 
 PROTOTYPES: ENABLE

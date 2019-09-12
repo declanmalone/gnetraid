@@ -8,7 +8,7 @@ use v5.20;
 
 # Sliding Window algorithm to support cleaner IDA split/combine code
 
-use Class::Tiny qw(bundle yts), {
+use Class::Tiny qw(bundle yts splitting combining), {
     # our 5 pointers (not really meant to be passed to new)
     read_head => 0,		# first to be advanced
     read_tail => 0,		# } peri-
@@ -22,10 +22,6 @@ use Class::Tiny qw(bundle yts), {
     mode => undef,		# 'split' or 'combine'
     rows => undef,		# how many substreams in bundle?
     window => undef,
-
-    # convenience
-    splitting => sub { $_[0]->{mode} eq 'split' ? 1 : 0 },
-    combining => sub { $_[0]->{mode} eq 'combine' ? 1 : 0 },
 
     # optional callbacks (not all combinations make sense)
     cb_error => undef,
@@ -58,6 +54,10 @@ sub BUILD {
 	push @bundle, { head => 0, tail => 0 }
     }
     $self->{bundle} = \@bundle;
+
+    $self->splitting($self->{mode} eq 'split'   ? 1 : 0 );
+    $self->combining($self->{mode} eq 'combine' ? 1 : 0 );
+
 }
 
 # 
@@ -66,7 +66,7 @@ sub _error {
     my $cb = $self->{cb_error};
     return @msg unless defined $cb;
     $cb->(@msg);
-    return undef;
+    undef;
 }
 
 # For clarity, I won't combine advance_read and advance_write into a
@@ -182,7 +182,7 @@ sub can_advance {
     if ($self->{combining}) {
 	for my $row (0 .. $self->{rows} - 1) {
 	    my $rowptr = $self->{bundle}->[$row];
-	    push @bundle_ok, $self->window - ($rowptr->{head} - $rowptr->{tail});
+	    push @bundle_ok, $self->{window} - ($rowptr->{head} - $rowptr->{tail});
 	}
     } else {
 	for my $row (0 .. $self->{rows} - 1) {
@@ -190,13 +190,13 @@ sub can_advance {
 	    push @bundle_ok, $rowptr->{head} - $rowptr->{tail};
 	}
     }
-    return ($read_ok,$process_ok,$write_ok,\@bundle_ok);
+    ($read_ok,$process_ok,$write_ok,\@bundle_ok);
 }
 
 sub can_fill {
     my $self = shift;
-    die "use can_fill_substream instead" if $self->combining;
-    $self->window - ($self->read_head - $self->read_tail);
+    die "use can_fill_substream instead" if $self->{combining};
+    $self->{window} - ($self->{read_head} - $self->{read_tail});
 }
 
 sub can_empty {
@@ -208,9 +208,9 @@ sub can_empty {
 sub can_fill_substream {
     my ($self,$row) = @_;
     die "must specify a row" unless defined $row;
-    die "use can_fill instead" if $self->splitting;
+    die "use can_fill instead" if $self->{splitting};
     my $rowptr = $self->{bundle}->[$row];
-    $self->window - ($rowptr->{head} - $rowptr->{tail})
+    $self->{window} - ($rowptr->{head} - $rowptr->{tail})
 }
 
 sub can_empty_substream {
@@ -228,10 +228,10 @@ sub advance_process {
     my ($self,$cols) = @_;
 
     die "Not enough data in input buffer"
-	if $self->read_tail + $cols > $self->read_head;
+	if $self->{read_tail} + $cols > $self->{read_head};
 
-    my $written    = ($self->write_head - $self->write_tail);
-    my $write_free = $self->window - $written;
+    my $written    = ($self->{write_head} - $self->write_tail);
+    my $write_free = $self->{window} - $written;
     die "Not enough space in output buffer" if $cols > $write_free;
 
     $self->{read_tail}  += $cols; # actually, all three can be
@@ -241,16 +241,16 @@ sub advance_process {
     # Substreams could be on left/right, so different pointers get
     # advanced within them. Also implications for new "yet to start"?
     my ($new_yts,$new_val) = (0);
-    if ($self->combining) {
-	$new_val = $self->read_tail; 
-	for my $r (0 .. $self->rows -1) {
+    if ($self->{combining}) {
+	$new_val = $self->{read_tail}; 
+	for my $r (0 .. $self->{rows} -1) {
 	    my $new_subtail = $self->{bundle}->[$r]->{tail} += $cols;
 	    die "Internal error" unless $new_subtail == $new_val;
 	    #$new_yts++ if $self->{bundle}->[$r]->{tail} == $new_val;
 	}
     } else {
-	$new_val = $self->write_head;
-	for my $r (0 .. $self->rows -1) {
+	$new_val = $self->{write_head};
+	for my $r (0 .. $self->{rows} -1) {
 	    my $new_subhead = $self->{bundle}->[$r]->{head} += $cols;
 	    die "Internal error" unless $new_subhead == $new_val;
 	    #$new_yts++ if $self->{bundle}->[$r]->{tail} == $new_val;
