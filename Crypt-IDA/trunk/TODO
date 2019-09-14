@@ -1,5 +1,47 @@
 TODO items
 
+This file isn't included in the distro. Just keeping it here for my
+own reference.
+
+- New, simplified internal handling of main split/combine loops
+  * differentiate the two instead of having one generic loop
+  * eliminate expensive calls to offset_to_rowcol
+  * aim for speed and clarity
+- Suppress warnings about redefined methods in recent perl
+  versions
+- Deprecate call that constructs matrix based on "key"
+  * Code moved to Math::FastGF2::Matrix (old call still works)
+  * Also added method to create Cauchy inverse matrix there
+X New "dumb" or "close to the metal" interfaces [deferred]
+  * avoids needing to use filler/emptier callbacks
+  * user handles filling/emptying matrices themselves
+  * less error checking overheads
+  * (above simplified internal routines satisfy this for now)
+  * better support for non-blocking I/O
+X New C program: rabin-ida-helper [deferred]
+  * intended to offload bulk matrix multiplications
+  * replaces calls to Math::FastGF2::Matrix::multiply_submatrix_c
+  * runs as a child process
+  * mini command interpreter to read config from stdin
+  * range of I/O stream options (file, fifo or socket, pipe
+    or fd provided by parent)
+  * progress reporting (assumes we're working inside an event
+    loop or multi-process context)
+X More flexible/featureful sharefile headers [deferred]
+  * optional field: cheating prevention (so silo can't present
+    an invalid share without being detected; based on
+    cryptographic accumulators and other ideas)
+  * optional field: (share of) hash of combined file
+  * optional field: (share of) Cauchy "key"
+  * allow implementor to decide if silos are trusted (above
+    fields can be replicated) or not (fields are shared and
+    might have extra safeguards when combining)
+X Use Unix extended attributes to store some metadata [deferred]
+  * an implementation detail
+  * alternative to storing some metadata in headers
+
+
+
 * investigate bug calculating chunk sizes when width parameter != 1
   (this is clearly evident when called from ida_split script, but
   may not always arise when calling sf_split method)
