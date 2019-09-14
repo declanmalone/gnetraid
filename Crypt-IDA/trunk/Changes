@@ -2,45 +2,15 @@ Revision history for Perl extension Crypt::IDA.
 
 
 0.02  2019
-        - 10th Year Anniversary Edition! (following Math-FastGF2)
-	- Generally speaking, no difference in functionality
-        - New, simplified internal handling of main split/combine loops
-	  * differentiate the two instead of having one generic loop
-	  * eliminate expensive calls to offset_to_rowcol
-	  * aim for speed and clarity
-	- Suppress warnings about redefined methods in recent perl
-          versions
-	- Deprecate call that constructs matrix based on "key"
-	  * Code moved to Math::FastGF2::Matrix (old call still works)
-	  * Also added method to create Cauchy inverse matrix there
-        X New "dumb" or "close to the metal" interfaces [deferred]
-	  * avoids needing to use filler/emptier callbacks
-	  * user handles filling/emptying matrices themselves
-	  * less error checking overheads
-	  * (above simplified internal routines satisfy this for now)
-	  * better support for non-blocking I/O
-        X New C program: rabin-ida-helper [deferred]
-	  * intended to offload bulk matrix multiplications
-	  * replaces calls to Math::FastGF2::Matrix::multiply_submatrix_c
-	  * runs as a child process
-	  * mini command interpreter to read config from stdin
-	  * range of I/O stream options (file, fifo or socket, pipe
-	    or fd provided by parent)
-	  * progress reporting (assumes we're working inside an event
-            loop or multi-process context)
-	X More flexible/featureful sharefile headers [deferred]
-	  * optional field: cheating prevention (so silo can't present
-	    an invalid share without being detected; based on
-	    cryptographic accumulators and other ideas)
-	  * optional field: (share of) hash of combined file
-          * optional field: (share of) Cauchy "key"
-	  * allow implementor to decide if silos are trusted (above
-            fields can be replicated) or not (fields are shared and
-            might have extra safeguards when combining)
-	X Use Unix extended attributes to store some metadata [deferred]
-	  * an implementation detail
-	  * alternative to storing some metadata in headers
+  - 10th Year Anniversary Edition! (following Math-FastGF2)
+  - Generally speaking, no changes to original functionality
+  - Document new features in Math::FastGF2 of interest here
+  - Improved performance of internal ida_process_streams routine
+  - New Crypt::IDA::Algorithm class, an alternative to using Crypt::IDA
+  - New Crypt::IDA::SlidingWindow class (used by ::Algorithm)
+
 0.01  Sat Jul 25 00:55:39 2009
-	- original version; created by h2xs 1.23 with options
-		-X -b 5.8.8 -n Crypt::IDA
+  - original version; created by h2xs 1.23 with options
+    -X -b 5.8.8 -n Crypt::IDA
+
 
