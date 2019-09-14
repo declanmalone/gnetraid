@@ -15,7 +15,7 @@ use Class::Tiny qw/sw/,
     # * It's meaningless when combining
     # * It's either implied or overridden when splitting
     k => undef, w => 1,
-    mode => undef, bufsize => 16350,
+    mode => undef, bufsize => 16384,
     inorder => 0, outorder => 0, # passed to getvals_str/setvals_str
 
     # Simplify transform/key specification. Either provide a transform
@@ -44,8 +44,8 @@ sub BUILD {
     }
     die "w must be 1, 2 or 4" unless $self->w =~ /^[124]$/;
 
-    # bump bufsize until it's a multiple of k
-    $self->{bufsize}++ while $self->{bufsize} % $self->k;
+    # bump bufsize until it's a multiple of k (no: it's # of cols!)
+    # $self->{bufsize}++ while $self->{bufsize} % $self->k;
 
     # I have eliminated n being passed in as a parameter, but we need
     # to calculate it (or its apparent value) from the other
@@ -129,7 +129,7 @@ sub BUILD {
 
     # sliding window
     $self->{sw} = Crypt::IDA::SlidingWindow->new(
-	mode => $self->{mode}, window => $self->{bufsize} / $k,
+	mode => $self->{mode}, window => $self->{bufsize},
 	rows => $self->{mode} eq 'split' ? $xform_rows : $k
     );
 
@@ -332,14 +332,15 @@ Crypt::IDA::Algorithm - Expose methods useful for writing custom IDA loops
  $signed .= "\0" while length($signed) % 3;
  
  # Turn the signed ticket into three shares
- my $s = Crypt::IDA::Algorithm->splitter(k=>3, n=>3, key=>[1..6]);
+ my $s = Crypt::IDA::Algorithm->splitter(k=>3, key=>[1..6]);
  $s->fill_stream($signed);
  $s->split_stream;
  my @tickets = map { $s->empty_substream($_) } (0..2);
  
  # At the party, Tom, Dick and Harry present shares to be combined
- my $c = Crypt::IDA::Algorithm->combiner(k=>3, key=>[1..6]);
- $c->fill_substream($_, $tickets[$_]) foreach (0..2); # same order
+ my $c = Crypt::IDA::Algorithm->combiner(k=>3, key=>[1..6],
+					 sharelist=>[0..2]);
+ $c->fill_substream($_, $tickets[$_]) foreach (0..2);
  $c->combine_streams;
  my $got = $c->empty_stream;
  
@@ -347,6 +348,7 @@ Crypt::IDA::Algorithm - Expose methods useful for writing custom IDA loops
  $got =~ /^(.*):(.*)\0*$/;
  my ($msg, $sig) = ($1,$2);
  die "Fake!\n" unless $sig eq hmac_sha1_hex($msg,$secret);
+ print "Welcome! $msg!\n";
 
 =head1 DESCRIPTION
 
@@ -357,8 +359,8 @@ integrate with an external event loop. It does this by:
 
 =over
 
-=item * Eliminating the use of external empty/fill callbacks to do I/O
-(caller handles I/O instead)
+=item * Decoupling processing from I/O (caller handles I/O and passes
+data to this module as strings)
 
 =item * Eliminating the inner loop (caller decides when/how to loop, if needed)
 
@@ -368,7 +370,17 @@ became available or space became available in the output buffer)
 
 =back
 
-The internal organisation of the code is also improved. The main
+=head2 NOTICE
+
+This code has been tested to make sure that it replicates the
+behaviour of the original C<Crypt::IDA> implementation. However, I
+have not yet implemented any callback functionality that would make it
+easier to integrate with an external event loop. I will add callbacks
+in a later release.
+
+=head1 CODE ORGANISATION
+
+The internal organisation of the code has been improved. The main
 C<Crypt::IDA> loops (C<ida_split> and C<ida_combine>) both call a
 generic internal C<ida_process_streams> loop. It has very complicated
 logic to enable it to handle different matrix layouts and circular
@@ -414,7 +426,8 @@ as follows:
    |    =     |   =      |      |   =      |    =     |
    | COLWISE  +>---------+      +>---------+ COLWISE  |
    |          | ROWWISE  |      | ROWWISE  |          |
-   +----------+----------+      +----------+----------+
+   +----------+>---------+      +>---------+----------+
+              |    :     |      |    :     | 
 
             SPLIT                       COMBINE
 
@@ -425,7 +438,8 @@ the input and output buffers are created with the same number of
 columns (the "window size") in each.
 
 Progress is made using the usual input -> process -> output idiom with
-the help of a "sliding window" class that tracks three types of pointer:
+the help of a "sliding window" class (C<Crypt::IDA::SlidingWindow>)
+that tracks three types of pointer:
 
 =over
 
@@ -465,4 +479,88 @@ inbuilt checks for EOF on the input stream(s). EOF checking on input
 calling program.
 
 =head1 CONSTRUCTORS
+
+As with C<Crypt::IDA>, the constructors here can take either a
+I<transform matrix> or a I<key> parameter. See C<Crypt::IDA> for
+details. The list of required parameters and parameter defaults is
+slighly different, though:
+
+=over
+
+=item * 'width' defaults to 1 (byte) and is renamed 'w'
+
+=item * 'shares' (n) is not passed in (see below)
+
+=item * no option ('random') relating to creation of random key
+        (caller must supply a matrix or a key)
+
+=item * no options relating to I/O ('filler(s)', 'emptier(s)')
+
+=item * no option ('bytes') relating to stream size
+
+=back
+
+=head2 Crypt::IDA::Algorithm->splitter()
+
+The full list of options available when creating a new splitter is as follows:
+
+ my $splitter = Crypt::IDA::Algorithm->splitter(
+    # Required:
+    k     => 4,                  # Quorum value (4 shares needed to combine)
+    xform => new_cauchy(...),    # Supply either a matrix ...
+    key   => [ @xvals, @yvals ], # ... or a key (scalar (@yvals) == k)
+ 
+    # Optional sharelist, only with 'key' parameter:
+    sharelist => [0,1],          # use xvals[0], xvals[1] to create two shares
+ 
+    # Defaults provided:
+    w => 1,                      # field width == 1 byte
+    bufsize  => 16384,           # columns in in/out matrices
+    inorder  => 0,               # no byte-swapping ...
+    outorder => 0,               # ie, native byte order
+ );
+
+The 'n' value (number of shares) is not passed in explicitly. Instead
+it is calculated from the other parameters:
+
+=over
+
+=item * from the number of rows in a supplied 'xform' matrix
+
+=item * from the number of C<@xvals> in the key, after the k C<@yvals>
+        are accounted for
+
+=item * from the number of elements in 'sharelist' (if both 'key' and
+        'sharelist' were provided)
+
+=back
+
+
+=head2 Crypt::IDA::Algorithm->combiner()
+
+The full list of options available when creating a new combiner is as follows:
+
+ my $combiner = Crypt::IDA::Algorithm->combiner(
+    # Required:
+    k => 4,                      # Quorum value (4 shares needed to combine)
+ 
+    # Supply either a matrix ...
+    xform => new_inverse_cauchy(...),
+  
+    # ... or a key (sharelist required and must have k elements)
+    key   => [ @xvals, @yvals ],  # scalar (@yvals) == k
+    sharelist => [0..3],          # use xvals[0..3] to create inverse xform
+ 
+    # defaults provided:
+    w => 1,                      # field width == 1 byte
+    bufsize  => 16384,           # columns in in/out matrices
+    inorder  => 0,               # no byte-swapping ...
+    outorder => 0,               # ie, native byte order
+ );
+
+=head1 CALLBACKS
+
+None currently implemented.
+
+=head1 INTEGRATION WITH EVENT LOOPS
 
