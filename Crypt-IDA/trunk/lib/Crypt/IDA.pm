@@ -31,7 +31,7 @@ our %EXPORT_TAGS = ( 'default' => [ @export_default ],
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw( );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # not exported from Matrix class
 use constant {
@@ -1663,6 +1663,13 @@ reference to a list of $k + $n distinct elements.
 Takes a reference to a list of $k + $n elements and checks that the
 list is a valid key. Returns 0 to indicate that the key is valid.
 
+Note that version 0.05 of Math::FastGF2 added two new constructors,
+C<new_cauchy> and C<new_inverse_cauchy>, to create Cauchy form
+transform matrices and their inverse from a given "key". These
+routines can be used as an alternative to using C<ida_generate_key> to
+randomly generate a key as above, or in conjunction with it. More on
+keys follows in the next section.
+
 =head1 KEY MANAGEMENT
 
 The C<ida_split> routine takes a secret and creates several "shares"
@@ -1812,6 +1819,10 @@ Erasure Codes. As with Rabin's scheme, any k of the shares may be
 presented to C<ida_combine> (along with the appropriate inverse matrix
 calculated from k rows of the split transform matrix) to reconstruct
 the original file.
+
+Note that version 0.05 of Math::FastGF2 added a new C<new_vandermonde>
+constructor methods to help with performing Reed-Solomon encoding.
+
 
 =head2 Writing Custom Callbacks
 
@@ -1963,9 +1974,6 @@ future versions:
 
 =over
 
-=item * Add support for producing Reed-Solomon Erasure Codes using the
-method described earlier.
-
 =item * Update the matrix processing code so that it can detect when
 padding of input is required and handle it by itself. The changes
 required to implement this can be made in such a way as to preserve
@@ -1992,7 +2000,7 @@ Declan Malone, E<lt>idablack@sourceforge.netE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2009 by Declan Malone
+Copyright (C) 2009-2019 by Declan Malone
 
 This package is free software; you can redistribute it and/or modify
 it under the terms of version 2 (or, at your discretion, any later
