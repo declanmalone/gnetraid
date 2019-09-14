@@ -284,3 +284,192 @@ sub destraddle {
 1;
 
 __END__
+=pod
+
+=head1 NAME
+
+Crypt::IDA::SlidingWindow - Abstract Sliding Window class
+
+
+=head1 SYNOPSIS
+
+  use Crypt::IDA::SlidingWindow
+
+  my $sw = Crypt::IDA::SlidingWindow->new(
+    mode => 'split', rows => 4, window => 16384 );
+
+  # accessors (can also use $sw->{variable} form)
+  my $read_head = $sw->read_head;
+  my $window    = $sw->window;   #...
+
+  # Testing what can advance
+  my ($read_ok, $process_ok, $write_ok, @bundle_ok)
+    = $sw->can_advance;
+  my $read_ok = $sw->can_fill;
+  my $read_ok = $sw->can_fill_substream($row);
+  my $process_ok = $sw->process_ok;
+  my $write_ok = $sw->can_empty;
+  my $write_ok = $sw->can_empty_substream($row);
+
+  # advance pointers after ...
+  $sw->advance_read($cols);                # filling input stream
+  $sw->advance_read_substream($row,$cols); # filling input substream
+  $sw->advance_process($cols);             # processing
+  $sw->advance_write($cols);               # emptying output stream
+  $sw->advance_write_substream($row,$cols);# emptying output substream
+
+=head1 WARNING
+
+This class is not meant to be called directly. Its functionality can
+be accessed via method calls in C<Crypt::IDA::Algorithm>. It's also
+possible that it may change in future:
+
+=over
+
+=item * the underlying object may change from {} to [] for more
+        efficiency
+
+=item * likewise, I might replace it with an XS library
+
+=item * the callback feature might change or disappear (moved to
+        C<Crypt::IDA::Algorithm>)
+
+=back
+
+
+=head1 DESCRIPTION
+
+This class implements a I<Sliding Window> algorithm to support
+cleaner IDA split/combine code. It manages access to the input and
+output matrix buffers to prevent them from overflowing.
+
+The abstraction assumes that:
+
+=over
+
+=item * all pointers refer to matrix I<columns> rather than bytes
+
+=item * input and output matrices have the same number of columns
+
+=item * pointers are linear (always increasing), rather than circular
+
+=item * we're doing IDA-like split/combine operations with one matrix handling a "bundle" of substreams:
+
+=over
+
+=item * When splitting, single stream on input, bundle of substreams on output
+
+=item * When combining, bundle of substreams on input, single stream on output
+
+=back
+
+=back
+
+The class manages three types of pointer:
+
+=over
+
+=item * a 'read' ('fill') pointer tracking input into the input matrix
+
+=item * a 'processed' pointer tracking transformation of input into output
+
+=item * a 'write' ('empty') pointer tracking data being removed from the output matrix
+
+=back
+
+These should be self-explanatory.
+
+=head2 Converting from Linear to Circular Reads/Writes
+
+Internally, all the pointers are linear, but it's possible to convert
+them to circular pointers within the input or output matrices. Simply:
+
+=over
+
+=item * calculate C<pointer % window_size>
+
+=item * multiply that value by the size in bytes of a matrix column
+
+=back
+
+This class also provides a convenience method C<destraddle> that takes
+a pointer and a number of columns to increase it by and checks whether
+that range would cross the end of the matrix boundary. It returns:
+
+=over
+
+=item * the same I<columns> parameter, if the range is contiguous
+within the matrix
+
+=item * two I<columns> values representing contiguous ranges at the end and start of the matrix, respectively, otherwise
+
+=back
+
+For example:
+
+ # Read a row of bytes from a matrix, handling wrap-around
+ my ($first,$second) = $sw->destraddle($tail,$cols);
+ my $rel_col = $tail % $sw->{window};
+ $str = $mat->getvals($row,$rel_col,$first ,$order);
+ $str.= $mat->getvals($row,0,       $second,$order) if defined($second);
+
+
+=head2 Substream Bundles
+
+This class maintains an extra set of head and tail pointers for each
+substream, in addition to the main head/tail pointer. It's assumed
+that substreams can advance at different rates from each other.
+
+The code for C<advance_read_substream> and C<advance_write_substream>
+checks whether advancing that substream can advance the parent
+read/writer, and does so automatically. Callers can check the return
+value of the method calls, with 1 indicating that the parent pointer
+advanced.
+
+When the parent pointer advances, it indicates either:
+
+=over
+
+=item * when combining, all input substreams got some input, so more
+        processing can be done (providing there is output space)
+
+=item * when splitting, all output substreams flushed some share data,
+        so more processing can be done (providing there's more input
+        data).
+
+=back
+
+In the current version of the code, it's also possible to pass a
+callback to receive notification whenever a bundle of substreams makes
+progress in this way:
+
+ # when splitting, get callback when all output substreams advance
+ $sw->cb_write_bundle(sub {...});
+ 
+ # when splitting, get callback when all input substreams advance
+ $sw->cb_read_bundle(sub {...}
+
+This might change in future.
+
+=head1 AUTHOR
+
+Declan Malone, E<lt>idablack@sourceforge.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2019 Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of version 2 (or, at your discretion, any later
+version) of the "GNU General Public License" ("GPL").
+
+Please refer to the file "GNU_GPL.txt" in this distribution for
+details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut
