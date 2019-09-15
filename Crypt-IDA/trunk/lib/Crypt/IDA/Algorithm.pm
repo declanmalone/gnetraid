@@ -497,7 +497,7 @@ slighly different, though:
 =item * 'shares' (n) is not passed in (see below)
 
 =item * no option ('random') relating to creation of random key
-        (caller must supply a matrix or a key)
+        (caller I<must> supply a matrix or a key)
 
 =item * no options relating to I/O ('filler(s)', 'emptier(s)')
 
@@ -565,7 +565,64 @@ The full list of options available when creating a new combiner is as follows:
 
 =head1 CALLBACKS
 
-None currently implemented.
+None currently implemented in this class, but see
+C<Crypt::IDA::SlidingWindow>.
 
 =head1 INTEGRATION WITH EVENT LOOPS
 
+As this package stands, there's nothing actually stopping it from
+being used within an event loop. If the input and output is over
+network sockets, for example, all the major event loops have features
+for handling this in a non-blocking way. Most will have an equivalent
+of an "on_read" callback that can be used to receive new data, which
+can then be passed to this class for transformation, then the output
+can be sent to another non-blocking socket (or sockets). So long as
+the output is non-blocking, then the IDA output matrix can always be
+flushed, so split/combine operations only block for as long as the
+calculations take.
+
+While I imagine that the above way of calling this class will be
+typical, I also suspect that other people might have their own idea of
+how this code should be called (or encapsulated) within their own
+particular event framework. As with Perl, there's definitely more than
+one way to do event-driven programming.
+
+It seems that the easiest way to support arbitrary event loops is by
+providing callbacks for when various "interesting" things happen
+within the algorithm, such as an input matrix becoming full, or space
+becoming available within the output matrix. This kind of approach is a
+natural fit, since it's the dominant style of event-driven programming.
+
+However, without untangling what the most common use cases are, it's
+not really possible to determine in advance exactly I<which> callbacks
+I should implement. I don't want to add unnecessary complexity or a
+bunch of incompatible callbacks. As a result, I'm not going to tackle
+that problem in this release.
+
+As the code stands, there is I<partial> support for using callbacks.
+The C<SlidingWindow> object (accessed via C<{sw}>) can be set up to
+trigger a C<cb_write_bundle> or C<cb_read_bundle> callback when the
+slowest stream in a substream advances.
+
+=head1 AUTHOR
+
+Declan Malone, E<lt>idablack@sourceforge.netE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2019 Declan Malone
+
+This package is free software; you can redistribute it and/or modify
+it under the terms of version 2 (or, at your discretion, any later
+version) of the "GNU General Public License" ("GPL").
+
+Please refer to the file "GNU_GPL.txt" in this distribution for
+details.
+
+=head1 DISCLAIMER
+
+This package is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut
