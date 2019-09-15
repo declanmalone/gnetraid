@@ -126,6 +126,8 @@ sub BUILD {
     }
     $self->{imat} = $in;
     $self->{omat} = $out;
+    die "error" unless $xform_rows;
+    $self->{xform_rows} = $xform_rows;
 
     # sliding window
     $self->{sw} = Crypt::IDA::SlidingWindow->new(
@@ -210,16 +212,16 @@ sub split_stream {
     my $in    = $self->{imat};
     my $out   = $self->{omat};
     my $rel_col = $sw->{processed} % $sw->{window};
-    my $k     = $self->{k};
+    my $n     = $self->{xform_rows};
     my $w     = $self->{w};
 
     Math::FastGF2::Matrix::multiply_submatrix_c(
 	$xform, $in, $out,
-	0, 0, $k,
+	0, 0, $n,
 	$rel_col, $rel_col, $first);
     Math::FastGF2::Matrix::multiply_submatrix_c(
 	$xform, $in, $out,
-	0, 0, $k,
+	0, 0, $n,
 	0, 0, $second) if defined $second;
 
     $sw->advance_process($cols);
@@ -239,7 +241,7 @@ sub combine_streams {
     my ($first,$second) = $sw->destraddle($sw->{processed},$cols);
 
     my $xform = $self->{xform};
-    my $rows  = $sw->{rows};
+    my $rows  = $self->{xform_rows};
     my $in    = $self->{imat};
     my $out   = $self->{omat};
     my $rel_col = $sw->{processed} % $sw->{window};
@@ -274,8 +276,10 @@ sub empty_stream {
 
     my ($first,$second) = $sw->destraddle($sw->{read_tail},$cols);
     my $rel_col = $sw->{write_tail} % $sw->{window};
-    $str = $mat->getvals_str(0,$rel_col,$first  * $w * $k,$order);
-    $str.= $mat->getvals_str(0,0,       $second * $w * $k,$order) if defined($second);
+
+    $str = $mat->getvals_str(0,$rel_col,$first  * $k,$order);
+    $str.= $mat->getvals_str(0,0,       $second * $k,$order) 
+	if defined($second);
     $sw->advance_write($cols);
 
     $str;
@@ -302,8 +306,9 @@ sub empty_substream {
     my $order = $self->{outorder};
     my ($first,$second) = $sw->destraddle($tail,$cols);
     my $rel_col = $tail % $sw->{window};
-    $str = $mat->getvals_str($row,$rel_col,$first,$order);
-    $str.= $mat->getvals_str($row,0,$second,$order) if defined($second);
+    $str = $mat->getvals_str($row,$rel_col,$first, $order);
+    $str.= $mat->getvals_str($row,0,       $second,$order)
+	if defined($second);
 
     $sw->advance_write_substream($row,$cols);
     $str;
