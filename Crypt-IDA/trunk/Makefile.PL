@@ -7,7 +7,7 @@ WriteMakefile(
     VERSION_FROM      => 'lib/Crypt/IDA.pm', # finds $VERSION
     PREREQ_PM         => {
 	'Math::FastGF2' => 0.07,
-	'Class::Tiny' => 1.006,
+	'Class::Tiny' => 0,
     },
     ($] >= 5.005 ?     ## New keywords supported since 5.005
      (ABSTRACT_FROM  => 'lib/Crypt/IDA.pm',
