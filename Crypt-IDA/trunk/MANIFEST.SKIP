@@ -1,5 +1,6 @@
 TODO
-.*~$
+^.*~$
 Makefile
 .gitignore
-MYMETA.*$
+^MYMETA.*$
+^.*tar(.?gz)?$

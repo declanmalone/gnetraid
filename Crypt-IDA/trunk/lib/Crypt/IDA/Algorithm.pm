@@ -3,8 +3,6 @@ package Crypt::IDA::Algorithm;
 use strict;
 use warnings;
 
-use v5.20;
-
 use Math::FastGF2::Matrix;
 use Crypt::IDA;
 use Crypt::IDA::SlidingWindow;

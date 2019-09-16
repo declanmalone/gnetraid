@@ -8,18 +8,18 @@ use lib "$Bin/../lib";
 
 BEGIN {
     use Test::More;
-    use_ok ('Digest::HMAC_SHA1', qw/hmac_sha1_hex/);
     eval { require Digest::HMAC_SHA1 };
     if ($@) {
 	diag("party.t skipped: Can't run without Digest::HMAC_SHA1");
 	done_testing;
-	exit(1);
+	exit;
     }
 }
 
+use_ok ('Digest::HMAC_SHA1', qw/hmac_sha1_hex/);
 use_ok('Crypt::IDA::Algorithm');
 
-use v5.20;
+#use v5.20;
 
 # Example from top of Crypt::IDA::Algorithm page turned into a test
 

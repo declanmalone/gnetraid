@@ -4,8 +4,6 @@ package Crypt::IDA::SlidingWindow;
 #
 # See LICENSE
 
-use v5.20;
-
 # Sliding Window algorithm to support cleaner IDA split/combine code
 
 use Class::Tiny qw(bundle yts splitting combining), {
@@ -23,7 +21,7 @@ use Class::Tiny qw(bundle yts splitting combining), {
     rows => undef,		# how many substreams in bundle?
     window => undef,
 
-    # optional callbacks (not all combinations make sense)
+    # optional callbacks (might move to Algorithm?)
     cb_error => undef,
     cb_read_bundle => undef,
     cb_wrote_bundle => undef,
