@@ -1855,7 +1855,7 @@ OFF_T ida_split(int nshares,int* share_list) {
   struct gf2_streambuf_control *empty_closures;
 
   /* how many columns to allocate for buffers? */
-  int buffer_cols=1;
+  int buffer_cols=8192;
 
   int   i;
   int   fd;
@@ -1880,7 +1880,7 @@ OFF_T ida_split(int nshares,int* share_list) {
   }
 
   /* set up input matrix as COLWISE, output as ROWWISE */
-  input=gf2_matrix_alloc (NULL, nshares, buffer_cols, 
+  input=gf2_matrix_alloc (NULL, codec.k, buffer_cols, // was nshares
 			  codec.sec_level, COLWISE);
   if (input == NULL)
     fatal ("ENOMEM allocating input matrix");
@@ -2091,10 +2091,17 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
     return 0;
   }
 
-  if ((in->rows != xform->cols) || (in->rows != out->rows)) {
-    printf("ERROR: incompatible matrix sizes gf2_process_streams\n");
+#ifndef BUGGED
+  if ((out->rows != xform->rows) || (in->cols != out->cols)) {
+    printf("ERROR: incompatible matrix sizes gf2_process_streams; ");
+    printf(" in rows is %d", in->rows);
+    printf(" out rows is %d", out->rows);
+    printf(" xform cols is %d", xform->cols);
+    printf(" in cols is %d", in->cols);
+    printf(" out cols is %d\n", out->cols);
     return 0;
   }
+#endif
 
   width=in->width;
   if ((out->width != width) || (xform->width != width)) {
@@ -2118,7 +2125,7 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
   }
 
   if (bytes_to_read % (width * xform->cols)) {
-    printf("ERROR: number of bytes to read should be a multiple of k * s\n");
+    printf("ERROR: number of bytes to read should be a full column\n");
     return 0;
   }
 
@@ -2186,7 +2193,7 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
 	go through each gf2_streambuf_control struct and request more
 	input. Save IFMin as the (new) minimum fill level among them.
       */
-      printf("Need input: IFmin is %Ld\n", (long long) IFmin);
+      // printf("Need input: IFmin is %Ld\n", (long long) IFmin);
 
       for (i = 0, IFmin=ILEN; i < fillers; ++i) {
 	max_fill_or_empty=ILEN - fill_ctl[i].BF;
@@ -2202,14 +2209,14 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
 	      fill_ctl[i].hp.IW;
 	}
 
-	printf ("Before maxfill adjustment: " OFF_T_FMT "\n",max_fill_or_empty); 
+	// printf ("Before maxfill adjustment: " OFF_T_FMT "\n",max_fill_or_empty); 
 	if (bytes_to_read && 
 	    (bytes_read + fill_ctl[i].BF + max_fill_or_empty > 
 	     bytes_to_read))
 	  max_fill_or_empty=
 	    bytes_to_read - fill_ctl[i].BF - bytes_read;
 
-	printf ("Calling fill handler with maxfill " OFF_T_FMT "\n",max_fill_or_empty); 
+	// printf ("Calling fill handler with maxfill " OFF_T_FMT "\n",max_fill_or_empty); 
 	/* call handler */
 	rc=(*(fill_ctl[i].handler.fp))
 	  ( &(fill_ctl[i].handler), fill_ctl[i].hp.IW, max_fill_or_empty);
@@ -2250,13 +2257,13 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
 
     }
 
-    printf("After input: IFmin is %Ld\n", (long long) IFmin); 
+    // printf("After input: IFmin is %Ld\n", (long long) IFmin); 
     
 
     do {			/* loop to flush output */
 
-       printf ("Checking for output space; OFmax is %Ld\n",
-	 (long long) OFmax); 
+       // printf ("Checking for output space; OFmax is %Ld\n",
+//	 (long long) OFmax); 
  
       /* Do we have enough space in oputput buffer to allow us to process */
       /* a chunk? If not, empty some until we do.                         */
@@ -2308,8 +2315,8 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
 	The actual processing ... produce one column of output from
 	one column of input
       */
-      printf ("On to processing: IFmin, OFmax are (%Ld,%Ld)\n",
-	 (long long) IFmin, (long long) OFmax);
+      // printf ("On to processing: IFmin, OFmax are (%Ld,%Ld)\n",
+//	 (long long) IFmin, (long long) OFmax);
 
       for (k=0;			/* kolumns processed */
 	   (IFmin >= want_in_size) && (OFmax + want_out_size <= OLEN);
@@ -2355,7 +2362,7 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
 	  (long long) IFmin, (long long) OFmax); */
       }
 
-       printf ("Finished processing chunk of k=%d columns\n",k);
+       // printf ("Finished processing chunk of k=%d columns\n",k);
 
       /* we've been updating IFmin and OFmax, but not the real BF
 	 variables in the gf2_streambuf_control structures. We do that
@@ -2371,16 +2378,16 @@ gf2_process_streams(gf2_matrix_t *xform, char *poly,
       }
 
       /* If we're at eof here, keep looping until all output is flushed... */
-      printf ("Finished post-processing chunks: eof, IFmin, OFmax are (%d,%lld,%lld)\n",
-	 eof, (long long) IFmin, (long long) OFmax); 
+      // printf ("Finished post-processing chunks: eof, IFmin, OFmax are (%d,%lld,%lld)\n",
+//	 eof, (long long) IFmin, (long long) OFmax); 
 
     } while (eof && OFmax);
 
 
   } while (!eof);
 
-  printf ("Finished processing; returning " OFF_T_FMT " bytes read\n", 
-	  bytes_read);
+  // printf ("Finished processing; returning " OFF_T_FMT " bytes read\n", 
+// 	  bytes_read);
   
   return bytes_read;
 
