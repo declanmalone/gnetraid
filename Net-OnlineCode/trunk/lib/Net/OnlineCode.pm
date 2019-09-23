@@ -262,12 +262,14 @@ sub _max_degree {
 
   my $epsilon = shift;
 
-  my $fast_quotient = (2 * log ($epsilon / 2)) / (log (1 - $epsilon / 2));
+  # The fast way of calculating quotient has some variation:
+  #  my $fast_quotient = (2 * log ($epsilon / 2)) / (log (1 - $epsilon / 2));
+  #  my $diff = $fast_quotient - $quotient;
+  #  die "fast quotient calculation incorrect (difference $diff)\n" if $diff;
   my $quotient = (log ( $epsilon * $epsilon / 4) / log (1 - $epsilon / 2));
-  my $diff = $fast_quotient - $quotient;
-  die "fast quotient calculation incorrect (difference $diff)\n" if $diff;
 
-  my $delta = 0.55 * $epsilon;
+  # another way of calculating the quotient
+  #  my $delta = 0.55 * $epsilon;
   #$quotient = (log ($epsilon) + log($delta)) / (log (1 - $epsilon));
 
   return int(ceil($quotient));
