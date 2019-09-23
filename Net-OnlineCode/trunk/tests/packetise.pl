@@ -30,7 +30,7 @@ usage unless @ARGV;
 
 my ($opt, $blksiz, $seed, $packets);
 $blksiz  =  1_024;
-$packets = 31_000;
+$packets = 32_768;
 while ($ARGV[0] =~ /^-/) {
     $opt = shift @ARGV;
     if ($opt eq "-d") {
