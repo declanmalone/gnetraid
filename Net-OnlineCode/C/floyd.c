@@ -127,7 +127,7 @@ static void clear_int_list(void) {
   items = 0;
 }
 
-int scan_unordered_list(int x) {
+inline int scan_unordered_list(int x) {
   int    *p = int_list;
   int count = items;
   while (count--)
@@ -135,7 +135,7 @@ int scan_unordered_list(int x) {
   return 0;
 }
 
-static void append_int_list(int x) {
+inline static void append_int_list(int x) {
   //printf("Adding %d (item %d/%d)\n", x, items+1, global_k);
   //  if (items == global_k) {
   //    fprintf(stderr, "append_int_list: list is already full\n");
@@ -156,9 +156,46 @@ static int *return_int_list(void) {
 
 // The high-level algorithm, modified to use zero-based arrays
 int *oc_floyd(oc_rng_sha1 *rng, int start, int n, int k) {
-  int j, t;
+  int j, t, t0, t1, t2;
   SET_CLR();			// initialize set S to empty
   j =  n-k;
+
+  // Unroll first few iterations
+  if (1) {
+    t0 = RandInt(0,j);		//   T := RandInt(1, J)
+    SET_PUT(t0 + start);	//     insert T in s
+
+    if (++j >= n)
+      return SET_OUT();
+
+    t1 = RandInt(0,j);		//   T := RandInt(1, J)
+    if (t1 != t0)		//   if T is not in S then
+      SET_PUT(t1 + start);	//     insert T in s
+    else			//   else
+      SET_PUT(j + start);	//     insert J in S
+
+    if (++j >= n)
+      return SET_OUT();
+
+    t2 = RandInt(0,j);		//   T := RandInt(1, J)
+    if ((t2 != t0) && (t2 != t1)) // if T is not in S then
+      SET_PUT(t2 + start);      //     insert T in s
+    else			//   else
+      SET_PUT(j + start);	//     insert J in S
+
+    if (++j >= n)
+      return SET_OUT();
+
+    t = RandInt(0,j);		//   T := RandInt(1, J)
+    if ((t!=t0)&&(t!=t1)&&(t!=t2)) //if T is not in S then
+      SET_PUT(t + start);       //     insert T in s
+    else			//   else
+      SET_PUT(j + start);	//     insert J in S
+
+    if (++j >= n)
+      return SET_OUT();
+  }
+
   //  printf("oc_floyd: going to choose %d elements\n", k);
   while (j < n) {		// for J := N-K + 1 to N do
     t = RandInt(0,j);		//   T := RandInt(1, J)
@@ -171,3 +208,5 @@ int *oc_floyd(oc_rng_sha1 *rng, int start, int n, int k) {
 
   return SET_OUT();
 }
+
+// Use a hash table (Bloom Filters(?)) for set inclusion?

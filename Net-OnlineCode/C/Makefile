@@ -7,10 +7,11 @@ CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST -DNDEBUG
 CLIBS = -L.
 
 # Uncomment for gconv (line-by-line) profiling
-# PROF = -fprofile-arcs -ftest-coverage
+#PROF = -fprofile-arcs -ftest-coverage
 # Uncomment for gprof (call graph only) profiling
-# PROF = -pg
-PROF = -pg
+#PROF = -pg
+
+PROF = -fprofile-arcs -ftest-coverage -pg
 
 # External libraries
 # '-lm' for maths (ceil, floor, log, etc.)
