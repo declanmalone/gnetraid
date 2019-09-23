@@ -1,7 +1,7 @@
 
 OBJECTS = online-code.o rng_sha1.o graph.o decoder.o encoder.o \
           floyd.o bones.o
-PROGS   = probdist mindecoder compat codec
+PROGS   = probdist mindecoder compat codec packetise
 
 CARGS = -O2 -DSET_METHOD=SET_UNORDERED_LIST -DNDEBUG
 CLIBS = -L.
@@ -48,6 +48,9 @@ graph.o       : structs.h graph.h online-code.h structs.h
 rng_sha1.o    : structs.h rng_sha1.h
 online-code.o : structs.h online-code.h rng_sha1.h floyd.h
 
+
+packetise: packetise.o libonline-code.a
+	$(CC) -o packetise $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)
 
 codec: codec.o libonline-code.a
 	$(CC) -o codec $(PROF) $(CLIBS) $< -lonline-code $(OTHERLIBS)
