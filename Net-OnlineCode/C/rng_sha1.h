@@ -8,6 +8,7 @@
 
 #define OC_RNG_BITS 160
 #define OC_RNG_BYTES 20
+#define OC_RNG_RANDS_PER_SUM 5
 
 // file to read random byte from (assumes Unix-like system)
 #define OC_RANDOM_SOURCE "/dev/urandom"
@@ -16,7 +17,10 @@ typedef struct {
 
   char seed[OC_RNG_BYTES];
   char current[OC_RNG_BYTES];
-  
+
+  // New version only does SHA after using up all 5 32-bit "random" bits.
+  unsigned short subprt;	/* 0..4, then do another SHA1 */
+
   int reserved; // possible internal use
 } oc_rng_sha1;
 

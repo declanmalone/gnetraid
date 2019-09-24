@@ -52,6 +52,7 @@ void oc_rng_init(oc_rng_sha1 *rng) {
   memset(rng->current, 0, OC_RNG_BYTES);
 
   rng->reserved = 0;
+  rng->subprt   = 0;
 
 }
 
@@ -68,6 +69,7 @@ void oc_rng_init_seed(oc_rng_sha1 *rng, const char *seed) {
   memcpy(rng->current, seed, OC_RNG_BYTES);
 
   rng->reserved = 0;
+  rng->subprt   = 0;
 
 }
 
@@ -87,7 +89,8 @@ void oc_rng_init_random(oc_rng_sha1 *rng) {
 
   memcpy(rng->current, rng->seed, OC_RNG_BYTES);
 
-  rng->reserved=0;
+  rng->reserved = 0;
+  rng->subprt   = 0;
 
 }
 
@@ -96,9 +99,12 @@ void oc_rng_advance(oc_rng_sha1 *rng) {
 
   assert((void*) rng != 0);
 
-  // use rng->current as both input and output (works fine according
-  // to run of compat program)
-  SHA1(rng->current,OC_RNG_BYTES,rng->current);
+  if (++(rng->subprt) >= OC_RNG_RANDS_PER_SUM) {
+    // use rng->current as both input and output (works fine according
+    // to run of compat program)
+    SHA1(rng->current,OC_RNG_BYTES,rng->current);
+    rng->subprt = 0;
+  }
 }
 
 // Generate a random seed/uuid by reading from /dev/urandom.  This
@@ -150,7 +156,8 @@ double oc_rng_rand(oc_rng_sha1 *rng, double max) {
   while(1) {
     oc_rng_advance(rng);
 
-    EXTRACT_NATIVE_U32(sha_word, rng->current);
+    // extract the correct 32-bit word from the 160-bit hash
+    EXTRACT_NATIVE_U32(sha_word, rng->current + (rng->subprt) * 4);
 
     assert(sha_word <= 0xffffffffl);
 
