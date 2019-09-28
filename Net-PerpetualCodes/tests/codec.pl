@@ -91,12 +91,17 @@ for (0 .. $gen-1) {
 # How many bits does q represent?
 my $qbits = log($q) / log(2);
 
-# Make it easier to work with full bytes/words
+# Make working with full bytes/words a requirement:
 die "Alpha times bits(field) must be a multiple of 8 bits\n" 
     if $alpha * $qbits % 8;
 
+# Meaning that we can do this:
+my $zero_code  = "\0" x ($alpha * $qbits >> 3);
+my $zero_block = "\0" x $blocksize; # independent of alpha, gen, q
+
+
 # Implement the algorithm over F2 first
-if ($q == 256) {  }
+if ($q == 256) { ...  }
 
 
 
@@ -243,13 +248,6 @@ sub pivot_f2 {
 
     my ($i, $code, $sym) = @_;
 
-    if ($filled[$i] == 0) {
-	$filled[$i] = 1;
-	$coding[$i] = $code;
-	$symbol[$i] = $sym;
-	return --$remain
-    }
-
     # Use three "optimisations" here
     #
     # 1. break infinite loop
@@ -261,7 +259,7 @@ sub pivot_f2 {
     # B + C = x1
     # C + A = x2
     #
-    # Now if we receive A + D = x3, the pivot routine will get stuck
+    # Then if we receive A + D = x3, the pivot routine will get stuck
     # in an infinite loop because we can never cancel A (or B, or
     # C). Cycle detection is possible, but adds complexity. Instead,
     # use a loop counter and bail if it exceeds a set value. [2015]
@@ -286,21 +284,80 @@ sub pivot_f2 {
     # number of trailing zero elements of the array row and the
     # element being pivoted. If the element being pivoted has more
     # trailing zeros than the row it's being pivoted into, we swap
-    # them, then continue to pivot the row that was pushed out.
+    # them, then continue to pivot the row that was evicted.
     #    
+    # Other:
+    #
     # Also, we can do a peephole optimisation by writing C routines
     # for checking whether a coding vector has become zero and for
     # counting the number of leading and trailing zero bits it has.
     # Also for shifting a string left some number of bits.
     # 
 
-    my $tries = 1;
-    while (1) {
-	
+    # First pass of implementation won't implement memoisation. Note
+    # that even if we fail to pivot, all changes that are carried out
+    # are elementary row operations, so we don't need to undo them.
+    # The only impact is that we're doing unnecessary row updates.
 
+    my $tries = 0;
+    while (++$tries < $gen * 2) {
+	# We can get here if the original i slot was empty, or if we
+	# substituted in another row and advanced i accordingly,
+	# finding a subsequent empty i' slot.
+	if ($filled[$i] == 0) {
+	    $filled[$i] = 1;
+	    $coding[$i] = $code;
+	    $symbol[$i] = $sym;
+	    return --$remain
+	}
+
+	# My inline C routines for vec_clz and vec_ctz can go off the
+	# ends of the array, so before calling them, I must make sure
+	# that it's not all zeroes.
+	my ($ctz_row, $ctz_code, $clz_code);
+	if ($code ne $zero_code) {
+	    # decide whether to swap with already pivoted row
+	    my $ctz_row  = vec_ctz($coding[$i]);
+	    my $ctz_code = vec_ctz($code);
+	    if ($ctz_code > $ctz_row) {
+		($code, $coding[$i]) = ($coding[$i], $code);
+		($sym,  $symbol[$i]) = ($symbol[$i], $sym);
+	    }
+	    # ... and fall through ...
+	} else {
+	    # if we get here, it means that we've received a
+	    # duplicate, so we can do a self-check to make sure that
+	    # the new value and the previously-solved value agree.
+	    die "Inconsistent value calculated for row $i\n"
+		unless $sym eq $symbol[$i];
+
+	    # In any case, we don't need to do any more work now
+	    return $remain;
+	}
+
+	# Substitute the existing code vector and symbol into the ones
+	# we're trying to insert
+	fast_xor_strings(\$code, $coding[$i]);
+	fast_xor_strings(\$sym,  $symbol[$i]);
+
+	# The implicit '1' before the aperture has been cancelled, so
+	# if the aperture has also gone to zero, we expect the symbol
+	# to also be cancelled (another self-check).
+	if ($code eq $zero_code) {
+	    die "failed: zero code vector => zero symbol\n"
+		unless $sym eq $zero_block;
+	    return $remain;
+	}
+
+	# update the coding vector and i
+	$clz_code = vec_clz($code);
+	vec_shl($code, $clz_code + 1);
+	$i += $clz_code + 1;
+	$i -= $gen if $i >= $gen;
     }
 
-    
+    carp "Baled out trying to pivot element after $tries tries\n";
+    return $remain;
 }
 
 sub solve_f2 {
@@ -359,11 +416,12 @@ void vec_shl(SV *sv, unsigned b) {
     char *s;
     unsigned full_bytes;
 
+    if (b == 0) return;
+
     s = SvPV(sv, len);
     full_bytes = b >> 3;
 
-
-    // handle case of moving full bytes separately
+    // shifting by full bytes is easy
     if (b & 7 == 0) {
         int c = len - full_bytes;
         while (c--) {
@@ -374,6 +432,20 @@ void vec_shl(SV *sv, unsigned b) {
         return;
     }
 
+    // or else combine bits from two bytes
+    int c = len - full_bytes - 1;
+    char l,r;
+    b &= 7;
+    while (c--) {
+        l = s[full_bytes]     <<      b;
+        r = s[full_bytes +1 ] >> (8 - b);
+        *(s++) = l | r;
+    }
+    // final byte to shift should be at end of vector
+    l = s[full_bytes]  << b;
+    *(s++) = l;
+    // zero-pad the rest
+    while (full_bytes--) { *(s++) = (char) 0; }
 }
 
 const static unsigned char exp_table[];
