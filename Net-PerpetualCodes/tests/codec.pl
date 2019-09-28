@@ -61,6 +61,12 @@ if ($test_what eq "vec_mul") {
     exit 0;
 }
 
+sub solve_f2;
+if ($test_what eq "solve_f2") {
+    solve_f2;
+    exit;
+}
+
 
 die "Field must be 2 or 256\n" if ($q != 2 and $q != 256);
 
@@ -337,6 +343,9 @@ sub pivot_f2 {
 
 	# Substitute the existing code vector and symbol into the ones
 	# we're trying to insert
+	#
+	# Note: I see that recent versions of perl let you do xors
+	# (as well as and, or, and bitwise not) on strings directly.
 	fast_xor_strings(\$code, $coding[$i]);
 	fast_xor_strings(\$sym,  $symbol[$i]);
 
@@ -362,6 +371,33 @@ sub pivot_f2 {
 
 sub solve_f2 {
 
+    # steps:
+    #
+    # 1. forward propagation of gen - alpha rows into bottom alpha rows
+    # 2. conversion of bottom right alpha x alpha submatrix into echelon form
+    # 3. back-propagation to clear any 1's apart from on main diagonal
+    #
+    # The second step can fail if there are not enough 1's to produce
+    # a diagonal. However, we can still continue the algorithm so long
+    # as we clear any zeros from underneath the diagonal. We'll report
+    # the problem to the calling program, which will go back into the
+    # loop where it waits for a new packet to fill any remaining holes.
+    #
+    # The first step breaks the optimisation of only storing alpha
+    # values per matrix row. I'll use vec and bitwise string xor
+    # extensively here to work on full matrix rows.
+
+    my $j = 0;
+    do {
+	# Zero-extend coding row, placing 1 at *end*. Use index
+	# arithmetic later to simulate rotation of the vector.
+#	warn $gen - $alpha + $j;
+	vec($coding[$gen - $alpha + $j], $gen - 1,1) = 1;
+	die "bit bug" unless length($coding[$gen - $alpha + $j]) == $gen / 8;
+	die "array bug" unless @filled == @symbol;
+    } until (++$j == $alpha);
+
+    
 
 
 }
