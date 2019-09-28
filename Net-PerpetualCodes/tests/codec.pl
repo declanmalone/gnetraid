@@ -387,17 +387,55 @@ sub solve_f2 {
     # values per matrix row. I'll use vec and bitwise string xor
     # extensively here to work on full matrix rows.
 
-    my $j = 0;
+    my ($j, $overhang) = (0, 0);
+
+    my @arows;			# last alpha rows of matrix
     do {
-	# Zero-extend coding row, placing 1 at *end*. Use index
-	# arithmetic later to simulate rotation of the vector.
-#	warn $gen - $alpha + $j;
-	vec($coding[$gen - $alpha + $j], $gen - 1,1) = 1;
-	die "bit bug" unless length($coding[$gen - $alpha + $j]) == $gen / 8;
-	die "array bug" unless @filled == @symbol;
+	my $row  = "";
+	my $from = $coding[$gen - $alpha + $j];
+	if (0) {
+	    # Zero-extend coding row, placing 1 at *end*. Use index
+	    # arithmetic later to simulate rotation of the vector.
+	    # warn $gen - $alpha + $j;
+	    vec($coding[$gen - $alpha + $j], $gen - 1,1) = 1;
+	    die "bit bug" unless length($coding[$gen - $alpha + $j]) == $gen/8;
+	    die "array bug" unless @filled == @symbol;
+
+	    # The above idea isn't good because the alpha rows above this
+	    # block will straddle the end of our matrix row
+	    # representation, complicating forward propagation.
+	    #
+	    # The most straightforward thing is to just create new matrix
+	    # rows.
+	    my $row  = "";
+	    my $from = $coding[$gen - $alpha + $j];
+	    my @bits = split(//,unpack("b$alpha", $from));
+	    ++$overhang;
+	    vec($row, 0, $overhang) = vec($from, $alpha - $overhang ,$overhang);
+	    if ($overhang != $alpha) {
+
+	    }
+
+	    # OK. That's not going to work because vec can only set a bit
+	    # at a time...
+	    #
+	    # Maybe what I need is the first solution combined with a
+	    # rotate left. Conceptually, that's the easiest thing to
+	    # consider, although it's an extra step...
+	}
+
+	my $diag = $gen - $alpha + $j;
+	vec($row, $diag, 1) = 1;
+	my $b = 0;
+	do {
+	    $diag++; $diag = 0 if $diag == $gen;
+	    vec($row, $diag, 1) = vec($from, $b++, 1)
+	} until $b == $alpha;
+			 
+			 
     } until (++$j == $alpha);
 
-    
+    # 
 
 
 }
