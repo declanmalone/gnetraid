@@ -143,6 +143,25 @@ if ($test_what) {
 	    }
 	}
 	
+    } elsif ($test_what eq "vec_ctz") {
+	my @ones = map { chr } qw(1 2 4 8 16 32 64 128);
+	my $zero = chr 0;
+	for my $leading (0..2) {
+	    for my $trailing (0..2) {
+		for my $one_byte (0..7) {
+		    my $s = $zero x $leading;
+		    $s.= $ones[$one_byte];
+		    $s.= $zero x $trailing;
+		    my $count = vec_ctz($s);
+		    my $expect = $trailing * 8 + $one_byte;
+		    next if $count == $expect;
+		    warn "Failed: vec_ctz wrong for leading $leading, ".
+			"bit position $one_byte, trailing $trailing\n";
+		    die "Got $count, expected $expect\n";
+		}
+	    }
+	}
+	
     } elsif ($test_what eq "vec_mul") {
 	my $str = "CamelCase";
 	my $nul = "\0" x length($str);
@@ -710,11 +729,11 @@ unsigned vec_ctz(SV *sv) {
 
     s += len - 1;
     int zeroes = 0;
-    while (*(s--) == (char) 0) { zeroes+=8; }
+    while (*s == (char) 0) { zeroes+=8; --s; }
     if (*s & 0x0f) {
         return zeroes + trailing[(*s) & 0x0f];
     } else {
-        return zeroes + 4 + leading[(*s) >> 4];
+        return zeroes + 4 + trailing[((unsigned char) *s) >> 4];
     }
 }
 
