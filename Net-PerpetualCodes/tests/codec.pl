@@ -116,6 +116,7 @@ my @filled = ((0) x $gen);
 my @coding = ();
 my @symbol = ();
 my $remain = $gen;
+my @pivot_queue = ();
 
 # Fountain Code for F_2
 sub encode_block_f2 {
@@ -248,6 +249,7 @@ if ($packets) {
 # matrix, apart from at the very end where we have a step that
 # involves the last alpha rows needing to have the full row
 # stored/worked on.
+
 
 # Pivot will return the number of additional pivots required
 sub pivot_f2 {
@@ -485,7 +487,7 @@ sub solve_f2 {
     #       skip to next column
     #   add this column to all columns beneath whose value is 1
     #
-    # No information would be lost by deleting the row in this case
+    # No information would be lost(*) by deleting the row in this case
     # because it's being added into the next equation. Also, because
     # we're checking for other rows that we could swap with, in the
     # worst case scenario, we've got something like a bubble sort.
@@ -493,6 +495,102 @@ sub solve_f2 {
     # That should work, and I don't have to resort to re-pivoting
     # later or doing a full recursive search (eg, to move all holes to
     # the end of the matrix).
+    #
+    # (*) actually, this *could* lead to losing information, if the
+    # two rows cancel each other out.
+    #
+    # The simplest solution, then, is just to use a pivot queue and
+    # push the awkward rows back into it.
+
+    my $decode_ok = 1;		# be optimistic
+    my $zero_alpha = "\0" x $alpha;
+    # reduce @arows to alpha * alpha
+    map { substr $_, 0, ($gen - $alpha / 8), '' } @arows;
+  ZERO_BELOW:
+    for my $diag (0 .. $alpha - 2) {
+	my $swap_row = $diag;
+	if (vec ($arows[$diag], $diag, 1) == 0) {
+	  SWAP_ROW:
+	    for my $down_row ($diag + 1 .. $alpha - 1) {
+		if (vec ($arows[$down_row], $diag, 1) == 1) {
+		    $swap_row = $down_row;
+		    last SWAP_ROW;
+		}
+	    }
+	    if ($swap_row == $diag) {
+		# this column is all 0's, so see if we need to
+		# re-pivot the row
+		$decode_ok = 0;
+		if ($arows[$diag] eq $zero_alpha) {
+		    # no, completely cancelled: discard it
+		    die "bug: cancelled alpha row had nonzero symbol"
+			if $symbol[$diag + $gen - $alpha] ne $zero_block;
+		    # don't have to blank coding, symbol tables
+		    # just mark the row as not filled
+		    $filled[$diag + $gen - $alpha] = 0;
+		} else {
+		    ...;
+		    # We have to find the right i value by using vec_clz
+		    push @pivot_queue, [$i];
+		    # remember to blank this arow here so that at the
+		    # end, when decode_ok != 1, we don't try to push
+		    # updates to this row back into @coding.
+		}
+		# skip to next diagonal element so that we end
+		# with echelon form
+		next ZERO_BELOW;
+	    } else {
+		# we did find a row to swap with; swap in arows and
+		# larger generation tables.
+		my $gen_base = $gen - $alpha;
+		@arows[$diag,$sym_row] = @arows[$sym_row,$diag];
+		@symbol[$gen_base + $diag, $gen_base + $sym_row] =
+		    @symbol[$gen_base + $sym_row, $gen_base + $diag];
+		@coding[$gen_base + $diag, $gen_base + $sym_row] =
+		    @coding[$gen_base + $sym_row, $gen_base + $diag];
+	    }
+	}
+	# found a 1 on the diagonal: use it to cancel 1's below
+	# (start from swap_row + 1: we might have skipped some zeros)
+	for my $down_row ($swap_row + 1 .. $alpha - 1) {
+	    if (vec ($arows[$down_row], $diag, 1) == 1) {
+		$arows[$down_row] ^= vec ($arows[$diag], $diag, 1);
+		$symbol[$gen - $alpha + $down_row] ^=
+		    $symbol[$gen - $alpha + $diag];
+		# @coding is updated at the end
+	    }
+	}
+    }
+
+    # If we failed to decode, convert @arows back into @coding format
+    # and return failure (1).
+    unless ($decode_ok) {
+	...;
+	return 1;
+    }
+
+    # Step 3: back-substitute
+    #
+    # This is straightforward, but we're back to using the compressed
+    # matrix form. Note that we only have to update the @symbol table.
+    # We don't need to update @coding because it's implied that it's
+    # going to end up with zero values to the right of the diagonal.
+    my $diag = $gen - 1;	# bottom right
+    do {
+	# Counter is usually alpha, but not when we get to the top
+	# of the matrix.
+	my $rows = $alpha < $diag ? $alpha : $diag;
+	if ($rows) {
+	    my $i = $diag - 1;	# row pointer
+	    my $bit = 0;
+	    do {
+		$symbol[$i] ^= $symbol[$diag] if vec $coding[$i], $bit, 1;
+	    } while (++$bit, --$i, --$rows);
+	}
+    } while (--$diag);		# stop at top row
+
+    # Success
+    return 0;
 }
 
 
