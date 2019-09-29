@@ -46,35 +46,25 @@ GetOptions ("blocksize=i"       => \$blocksize,
 	    "hacky"             => \$hacky,
 	    "seed=i"            => \$seed,
 	    "generation=i"      => \$gen,
-	    "deterministic"     => \$deterministic,
-)
+	    "deterministic"     => \$deterministic)
     or die("Error in command line arguments\n");
 
-if ($test_what eq "vec_mul") {
-    my $str = "CamelCase";
-    my $nul = "\0" x length($str);
-    gf256_vec_mul($str,"\001");	# in-place update!
-    die "gf256_vec_mul identity failed (got '$str')\n" if $str ne 'CamelCase';
-    gf256_vec_mul($str,"\0");
-    die "gf256_vec_mul zero failed (got '$str')\n" if $str ne $nul;
-    print "vec_mul tests passed\n";
-    exit 0;
-}
+# Check command-line arguments
 
-sub solve_f2;
-if ($test_what eq "solve_f2") {
-    solve_f2;
-    exit;
-}
-
-
+# Later, I might implement F_16, though I'm not sure that it would be
+# any faster than F_256. It would rely on assembler optimisations,
+# specifically doing in-register lookups on the log table, anyway, but
+# it might still need memory lookup for exp...
 die "Field must be 2 or 256\n" if ($q != 2 and $q != 256);
 
-# strictly speaking, setting a seed is deterministic, but I use
+# Alpha has a max of gen - 1:
+die "Aperture too big!\n" if $alpha >= $gen;
+
+# Strictly speaking, setting a seed is deterministic, but I use
 # --deterministic to indicate using a fixed seed of 0.
 die "Incompatible options --seed and --deterministic\n"
     if $deterministic and defined $seed;
-$seed = 0 if $deterministic;
+$seed = 0    if $deterministic;
 srand($seed) if defined($seed);
 
 die "Must specify an input file with --infile\n"
@@ -110,13 +100,76 @@ my $zero_block = "\0" x $blocksize; # independent of alpha, gen, q
 if ($q == 256) { ...  }
 
 
-
 # Simulate a square matrix of size $gen
 my @filled = ((0) x $gen);
 my @coding = ();
 my @symbol = ();
 my $remain = $gen;
 my @pivot_queue = ();
+
+# Forward declaration of subs
+sub encode_block_f2;
+sub encode_block_f256;
+sub solve_f2;
+
+# Tests available from command line as '--test <what>'
+if ($test_what eq "vec_mul") {
+    my $str = "CamelCase";
+    my $nul = "\0" x length($str);
+    gf256_vec_mul($str,"\001");	# in-place update!
+    die "gf256_vec_mul identity failed (got '$str')\n" if $str ne 'CamelCase';
+    gf256_vec_mul($str,"\0");
+    die "gf256_vec_mul zero failed (got '$str')\n" if $str ne $nul;
+    print "vec_mul tests passed\n";
+    exit 0;
+}
+
+if ($test_what eq "solve_f2") {
+    solve_f2;
+    exit;
+}
+
+if ($test_what eq "codec_f2") {
+    my $rp = 0;
+    while (1) {
+	my ($i, $code, $sym);
+	if (@pivot_queue) {
+	    my $new = shift @pivot_queue;
+	    ($i, $code, $sym) = @{$new};
+	    warn "Re-pivoting\n";
+        } else {
+	    ($i, $code, $sym) = encode_block_f2;
+	    ++$rp;		# received packets
+	}
+	if (pivot_f2($i, $code, $sym) == 0) {
+	    last if solve_f2() == 0;
+	}
+    };
+    warn "Decoded after $rp packets\n";
+    my $matched = 0;
+    for (0 .. $gen) {
+	++$matched if $message[$_] eq $symbol[$_];
+    }
+    exit;
+}
+
+# default test... just generate packets, but don't try to decode
+if ($packets) {
+    my ($i, $vec, $sym);
+    print "Benchmarking encode_block_f2.\n";
+    print "Generating $packets packets equivalent to ",
+    ($packets * $blocksize), " bytes\n";
+    while ($packets--) {
+	if ($qbits == 1) {
+	    ($i, $vec, $sym) = encode_block_f2;
+	} else {
+	    ($i, $vec, $sym) = encode_block_f256;
+	}
+    }
+    print "All packets produced\n";
+    exit (0);
+}
+
 
 # Fountain Code for F_2
 sub encode_block_f2 {
@@ -202,22 +255,6 @@ sub encode_block_f256 {
 }
 
 
-# Quick test... just generate packets, but don't try to decode
-if ($packets) {
-    my ($i, $vec, $sym);
-    print "Benchmarking encode_block_f2.\n";
-    print "Generating $packets packets equivalent to ",
-    ($packets * $blocksize), " bytes\n";
-    while ($packets--) {
-	if ($qbits == 1) {
-	    ($i, $vec, $sym) = encode_block_f2;
-	} else {
-	    ($i, $vec, $sym) = encode_block_f256;
-	}
-    }
-    print "All packets produced\n";
-    exit (0);
-}
 
 ## Initial Results
 #
@@ -301,6 +338,9 @@ sub pivot_f2 {
     # counting the number of leading and trailing zero bits it has.
     # Also for shifting a string left some number of bits.
     # 
+    # Of course, another optimisation is not using a full gen x gen
+    # matrix. Instead, only alpha values to the right of the diagonal
+    # are stored.
 
     # First pass of implementation won't implement memoisation. Note
     # that even if we fail to pivot, all changes that are carried out
@@ -321,7 +361,7 @@ sub pivot_f2 {
 
 	# My inline C routines for vec_clz and vec_ctz can go off the
 	# ends of the array, so before calling them, I must make sure
-	# that it's not all zeroes.
+	# that the array isn't zero.
 	my ($ctz_row, $ctz_code, $clz_code);
 	if ($code ne $zero_code) {
 	    # decide whether to swap with already pivoted row
@@ -336,7 +376,7 @@ sub pivot_f2 {
 	    # if we get here, it means that we've received a
 	    # duplicate, so we can do a self-check to make sure that
 	    # the new value and the previously-solved value agree.
-	    die "Inconsistent value calculated for row $i\n"
+	    die "Inconsistent value calculated for row $i"
 		unless $sym eq $symbol[$i];
 
 	    # In any case, we don't need to do any more work now
@@ -355,7 +395,7 @@ sub pivot_f2 {
 	# if the aperture has also gone to zero, we expect the symbol
 	# to also be cancelled (another self-check).
 	if ($code eq $zero_code) {
-	    die "failed: zero code vector => zero symbol\n"
+	    die "failed: zero code vector => zero symbol"
 		unless $sym eq $zero_block;
 	    return $remain;
 	}
@@ -521,33 +561,42 @@ sub solve_f2 {
 		# this column is all 0's, so see if we need to
 		# re-pivot the row
 		$decode_ok = 0;
+		# either way, we remove this row from the big matrix
+		$filled[$diag + $gen - $alpha] = 0;
 		if ($arows[$diag] eq $zero_alpha) {
 		    # no, completely cancelled: discard it
 		    die "bug: cancelled alpha row had nonzero symbol"
 			if $symbol[$diag + $gen - $alpha] ne $zero_block;
-		    # don't have to blank coding, symbol tables
-		    # just mark the row as not filled
-		    $filled[$diag + $gen - $alpha] = 0;
 		} else {
-		    ...;
 		    # We have to find the right i value by using vec_clz
-		    push @pivot_queue, [$i];
+		    my $lz = vec_clz($arows[$diag]);
+		    my $i = $gen - $alpha + $diag; # existing row
+		    $i += $lz + 1;		   # skip first 1
+		    my $code = $arows[$diag];
+		    my $sym  = $symbol[$gen - $alpha + $diag];
+		    vec_shl($code, $lz + 1);
+		    push @pivot_queue, [$i, $code, $sym];
 		    # remember to blank this arow here so that at the
 		    # end, when decode_ok != 1, we don't try to push
 		    # updates to this row back into @coding.
+		    $arows[$diag] = $zero_alpha;
 		}
 		# skip to next diagonal element so that we end
 		# with echelon form
 		next ZERO_BELOW;
 	    } else {
 		# we did find a row to swap with; swap in arows and
-		# larger generation tables.
+		# symbol tables.
 		my $gen_base = $gen - $alpha;
-		@arows[$diag,$sym_row] = @arows[$sym_row,$diag];
-		@symbol[$gen_base + $diag, $gen_base + $sym_row] =
-		    @symbol[$gen_base + $sym_row, $gen_base + $diag];
-		@coding[$gen_base + $diag, $gen_base + $sym_row] =
-		    @coding[$gen_base + $sym_row, $gen_base + $diag];
+		@arows[$diag,$swap_row] = @arows[$swap_row,$diag];
+		@symbol[$gen_base + $diag, $gen_base + $swap_row] =
+		    @symbol[$gen_base + $swap_row, $gen_base + $diag];
+		if (0) {
+		    # don't update coding until later; it's not
+		    # consistent with the current @arows values
+		    @coding[$gen_base + $diag, $gen_base + $swap_row] =
+			@coding[$gen_base + $swap_row, $gen_base + $diag];
+		}
 	    }
 	}
 	# found a 1 on the diagonal: use it to cancel 1's below
@@ -622,7 +671,7 @@ const static short trailing[] = {
   3, 0, 1, 0, 2, 0, 1, 0  // 8-15
 };
 // No boundary check done here either.
-void vec_ctz(SV *sv) {
+unsigned vec_ctz(SV *sv) {
     STRLEN len;
     char *s;
     s = SvPV(sv, len);
@@ -688,7 +737,7 @@ unsigned char gf256_mul_elems(unsigned char a, unsigned char b) {
 
 // Inline::C automatically handles passing of strings by value
 // (letting us write char *s), but not pass by reference, so we have
-// to use SV* instead
+// to use SV* below instead
 
 void gf256_vec_mul(SV *sv, char val) {
     const static char         *exp =  exp_table + 512;
