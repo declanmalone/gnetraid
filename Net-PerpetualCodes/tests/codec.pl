@@ -389,6 +389,7 @@ sub solve_f2 {
 
     my ($j, $overhang) = (0, 0);
 
+    # Upgrade last alpha rows to full matrix rows
     my @arows;			# last alpha rows of matrix
     do {
 	my $row  = "";
@@ -405,9 +406,93 @@ sub solve_f2 {
 			 
     } until (++$j == $alpha);
 
-    # 
+    # I'm tempted to shift to C again here, because to do forward
+    # substitution, we need to rotate the original apertures,
+    # inserting a 1 in front of them, then effectively shifting them
+    # right some number of bits before we can XOR into the row.
+    
 
+    # Ah. I can do this in one go with my existing vec_shl
+    #
+    # Create a new string preceded by 0x01
+    # Shift it left so that the 1 is in the right place
+    # Byte-wise XOR the resulting string into the right column
+    #
+    # eg, substituting in row 0:
+    #
+    # char(0x01) . "string"
+    # shl 7 (1 is now in column 0)
+    # xor into row at byte offset 0
+    #
+    # Then onto row 1:
+    #
+    # same char(0x01) . "string"
+    # shl 6 (the 1 is now in col 1)
+    # same xor byte offset
 
+    # Step 1: Forward propagation!
+    my $shl = 7;		# as --$shl wraps around,
+    my $col = 0;		# this increments by 1
+    my $width = ($alpha / 8) + 1;
+    for my $diag (0 .. $gen - $alpha - 1) {
+	my $idrow = "\001" . $coding[$diag];
+	vec_shl($idrow,$shl) if $shl;
+	for my $arow (0 .. $alpha - 1) {
+	    if (vec($arows[$arow], $diag, 1)) {
+		substr($arows[$arow], $col, $width) ^= $idrow;
+		$symbol[$gen - $alpha + $arow] ^= $symbol[$diag];
+	    }
+	}
+	($shl, $col) = (7, $col + 1) if (--$shl < 0);
+    }
+
+    # Step 2: convert submatrix at bottom right to echelon form
+
+    # I have an idea for how to handle the case(s) where we cannot
+    # decode the matrix at this time, although it may be a little bit
+    # like using a sledgehammer to crack a nut.
+    #
+    # I have a vec_clz routine, so I can use that along with a perl
+    # sort to reorder the rows of the submatrix. Then, I can scan up
+    # to see if there are any zero rows.
+    #
+    # Things are complicated because I want to leave the matrix in a
+    # state where it's possible to continue adding new rows if we end
+    # up with one or more cancelled rows. Everything would be fine if
+    # it weren't for the requirement that we have to have a 1 element
+    # on the diagonal. If we get a 0 only in the last row, that's fine
+    # because the coding vector for that row is also 0 at that stage.
+    # But what happens if it's the second-last row that has a 0 in the
+    # identity slot? Can that even happen? Well, if it can, then I
+    # suppose that we can substitute in the identity for the last row,
+    # assuming there is one. Otherwise, we can swap the last two rows.
+    #
+    # I suppose that one possible solution is to re-pivot rows that
+    # don't have an identity in the right position, but do have data
+    # to the right. Basically, I'd mark those rows as now free and
+    # push them into the pivot queue. Or I could do something similar
+    # here and forward propagate the current failed row.
+    #
+    # So, the method would be:
+    # for each column:
+    #   if this diagonal is 0
+    #     try to find a row below that has a 1
+    #     if found
+    #       swap rows
+    #     else
+    #       forward propagate this row to the next
+    #       mark this as free
+    #       skip to next column
+    #   add this column to all columns beneath whose value is 1
+    #
+    # No information would be lost by deleting the row in this case
+    # because it's being added into the next equation. Also, because
+    # we're checking for other rows that we could swap with, in the
+    # worst case scenario, we've got something like a bubble sort.
+    #
+    # That should work, and I don't have to resort to re-pivoting
+    # later or doing a full recursive search (eg, to move all holes to
+    # the end of the matrix).
 }
 
 
