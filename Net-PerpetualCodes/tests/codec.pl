@@ -111,45 +111,54 @@ my @pivot_queue = ();
 sub encode_block_f2;
 sub encode_block_f256;
 sub solve_f2;
+sub codec_f2;
 
 # Tests available from command line as '--test <what>'
-if ($test_what eq "vec_mul") {
-    my $str = "CamelCase";
-    my $nul = "\0" x length($str);
-    gf256_vec_mul($str,"\001");	# in-place update!
-    die "gf256_vec_mul identity failed (got '$str')\n" if $str ne 'CamelCase';
-    gf256_vec_mul($str,"\0");
-    die "gf256_vec_mul zero failed (got '$str')\n" if $str ne $nul;
-    print "vec_mul tests passed\n";
-    exit 0;
-}
+my %valid_tests = map { $_ => undef } qw(
+   vec_mul solve_f2 codec_f2 vec_clz vec_ctz vec_shl
+);
 
-if ($test_what eq "solve_f2") {
-    solve_f2;
-    exit;
-}
-
-if ($test_what eq "codec_f2") {
-    my $rp = 0;
-    while (1) {
-	my ($i, $code, $sym);
-	if (@pivot_queue) {
-	    my $new = shift @pivot_queue;
-	    ($i, $code, $sym) = @{$new};
-	    warn "Re-pivoting\n";
-        } else {
-	    ($i, $code, $sym) = encode_block_f2;
-	    ++$rp;		# received packets
-	}
-	if (pivot_f2($i, $code, $sym) == 0) {
-	    last if solve_f2() == 0;
-	}
-    };
-    warn "Decoded after $rp packets\n";
-    my $matched = 0;
-    for (0 .. $gen) {
-	++$matched if $message[$_] eq $symbol[$_];
+if ($test_what) {
+    unless (exists $valid_tests{$test_what}) {
+	warn "Invalid test $test_what\n";
+	warn "Select from: " . (join ", ", sort keys %valid_tests) . "\n";
+	exit 1;
     }
+    if ($test_what eq "vec_clz") {
+	my @ones = map { chr } qw(128 64 32 16 8 4 2 1);
+	my $zero = chr 0;
+	for my $leading (0..2) {
+	    for my $trailing (0..2) {
+		for my $one_byte (0..7) {
+		    my $s = $zero x $leading;
+		    $s.= $ones[$one_byte];
+		    $s.= $zero x $trailing;
+		    my $count = vec_clz($s);
+		    my $expect = $leading * 8 + $one_byte;
+		    next if $count == $expect;
+		    warn "Failed: vec_clz wrong for leading $leading, ".
+			"bit position $one_byte, trailing $trailing\n";
+		    die "Got $count, expected $expect\n";
+		}
+	    }
+	}
+	
+    } elsif ($test_what eq "vec_mul") {
+	my $str = "CamelCase";
+	my $nul = "\0" x length($str);
+	gf256_vec_mul($str,"\001");	# in-place update!
+	die "gf256_vec_mul identity failed (got '$str')\n" if $str ne 'CamelCase';
+	gf256_vec_mul($str,"\0");
+	die "gf256_vec_mul zero failed (got '$str')\n" if $str ne $nul;
+	print "vec_mul tests passed\n";
+
+    } elsif ($test_what eq "solve_f2") {
+	solve_f2;
+
+    } elsif ($test_what eq "codec_f2") {
+	codec_f2;
+    }
+
     exit;
 }
 
@@ -170,6 +179,29 @@ if ($packets) {
     exit (0);
 }
 
+# Loop producing packets until message decoded fully into @symbol
+sub codec_f2 {
+	my $rp = 0;
+	while (1) {
+	    my ($i, $code, $sym);
+	    if (@pivot_queue) {
+		my $new = shift @pivot_queue;
+		($i, $code, $sym) = @{$new};
+		warn "Re-pivoting\n";
+	    } else {
+		($i, $code, $sym) = encode_block_f2;
+		++$rp;		# received packets
+	    }
+	    if (pivot_f2($i, $code, $sym) == 0) {
+		last if solve_f2() == 0;
+	    }
+	};
+	warn "Decoded after $rp packets\n";
+	my $matched = 0;
+	for (0 .. $gen) {
+	    ++$matched if $message[$_] eq $symbol[$_];
+	}
+}
 
 # Fountain Code for F_2
 sub encode_block_f2 {
@@ -657,9 +689,9 @@ const static short leading[] = {
 // is not all zeroes first
 unsigned int vec_clz(char *s) {
     int zeroes = 0;
-    while (*(s++) == (char) 0) { zeroes+=8; }
+    while (*s == (char) 0) { zeroes+=8; ++s; }
     if (*s & 0xf0) {
-        return zeroes + leading[(*s) >> 4];
+        return zeroes + leading[((unsigned char) *s) >> 4];
     } else {
         return zeroes + 4 + leading[*s];
     }
