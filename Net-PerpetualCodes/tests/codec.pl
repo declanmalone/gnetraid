@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+use v5.24;
+
 use Inline 'C';
 
 use Carp;
@@ -20,7 +22,7 @@ use Getopt::Long;
 
 # General options that don't affect algorithm
 my $infile    = undef;
-my $blocksize = 1024;
+my $blocksize = 32;
 my $verbose   = 0;
 my $hacky     = 0;
 my $packets   = 0;		# 0   -> run until decoded;
@@ -29,8 +31,8 @@ my $test_what = '';		# run internal tests
 
 # Algorithm-specific stuff
 my $q         = 2;   		# default to GF(2) == GF(2**1);
-my $alpha     = 32;		# aperture size alpha
-my $gen       = 2048;
+my $alpha     = 8;		# aperture size alpha
+my $gen       = 32;
 
 # Random number stuff
 my $deterministic = 0;		# whether to use a predictable seed
@@ -161,7 +163,74 @@ if ($test_what) {
 		}
 	    }
 	}
-	
+    } elsif ($test_what eq "vec_shl") {
+	# The easiest way to test this is by building up strings by
+	# hand, then testing various b values. Note that 0x55 and 0xaa
+	# are rotations (inverses) of each other, so the pattern is
+	# ...0101010101010101...
+	my @strings = (
+	    "\x00\xAA\xAA\x00\x00\x01",
+	    "\x01\x55\x54\x00\x00\x02",
+	    "\x02\xAA\xA8\x00\x00\x04",
+	    "\x05\x55\x50\x00\x00\x08",
+
+	    "\x0A\xAA\xA0\x00\x00\x10",
+	    "\x15\x55\x40\x00\x00\x20",
+	    "\x2A\xAA\x80\x00\x00\x40",
+	    "\x55\x55\x00\x00\x00\x80",
+
+	    # Pattern repeats, after shifting one byte over
+	    "\xAA\xAA\x00\x00\x01\x00",
+	    "\x55\x54\x00\x00\x02\x00",
+	    "\xAA\xA8\x00\x00\x04\x00",
+	    "\x55\x50\x00\x00\x08\x00",
+
+	    "\xAA\xA0\x00\x00\x10\x00",
+	    "\x55\x40\x00\x00\x20\x00",
+	    "\xAA\x80\x00\x00\x40\x00",
+	    "\x55\x00\x00\x00\x80\x00",
+
+	    # Pattern repeats, after shifting one byte over
+	    "\xAA\x00\x00\x01\x00\x00",
+	    "\x54\x00\x00\x02\x00\x00",
+	    "\xA8\x00\x00\x04\x00\x00",
+	    "\x50\x00\x00\x08\x00\x00",
+
+	    "\xA0\x00\x00\x10\x00\x00",
+	    "\x40\x00\x00\x20\x00\x00",
+	    "\x80\x00\x00\x40\x00\x00",
+	    "\x00\x00\x00\x80\x00\x00",
+
+	    # Pattern repeats, after shifting one byte over
+	    "\x00\x00\x01\x00\x00\x00",
+	    "\x00\x00\x02\x00\x00\x00",
+	    "\x00\x00\x04\x00\x00\x00",
+	    "\x00\x00\x08\x00\x00\x00",
+
+	    "\x00\x00\x10\x00\x00\x00",
+	    "\x00\x00\x20\x00\x00\x00",
+	    "\x00\x00\x40\x00\x00\x00",
+	    "\x00\x00\x80\x00\x00\x00",
+
+	);
+	for my $bits (0,8,0,8,1,1..16) {
+	    die unless @strings == 32;
+	    for my $start (0.. @strings -2) {
+		last if $start + $bits >= @strings;
+		# Weirdly, you need to explicitly stringify below:
+		my $str = "$strings[$start]";
+		my $old = unpack "H12", $str;
+		vec_shl($str, $bits);
+		my $expect = $strings[$start + $bits];
+		if ($str ne $expect) {
+		    $str = unpack "H*", $str;
+		    $expect = unpack "H*", $expect;
+		    warn "vec_shl: wrong output for start $start, bits $bits\n";
+		    warn "Expected $old << $bits = $expect; got $str\n";
+		}
+	    }
+	}
+
     } elsif ($test_what eq "vec_mul") {
 	my $str = "CamelCase";
 	my $nul = "\0" x length($str);
@@ -208,18 +277,25 @@ sub codec_f2 {
 		($i, $code, $sym) = @{$new};
 		warn "Re-pivoting\n";
 	    } else {
-		($i, $code, $sym) = encode_block_f2;
+		($i, $code, $sym) = encode_block_f2();
 		++$rp;		# received packets
 	    }
 	    if (pivot_f2($i, $code, $sym) == 0) {
+		warn "Trying to solve\n";
 		last if solve_f2() == 0;
 	    }
 	};
 	warn "Decoded after $rp packets\n";
 	my $matched = 0;
-	for (0 .. $gen) {
+	for (0 .. $gen-1) {
 	    ++$matched if $message[$_] eq $symbol[$_];
 	}
+	warn "Matched $matched source <=> decoded blocks\n";
+	my $in  = unpack("H*", $message[0]);
+	my $out = unpack("H*", $symbol[0]);
+	warn "Input block 0 was $in\n";
+	warn "Output block 0 was $out\n";
+	exit;
 }
 
 # Fountain Code for F_2
@@ -227,7 +303,7 @@ sub encode_block_f2 {
     my ($i, $code_vector, $block);
 
     $i = int(rand $gen);
-    $block = $message[$i];
+    $block = "$message[$i]";
 
     # Need to convert random number into both a string (for later
     # XORs), and into integers that we can scan for binary 1's.
@@ -243,9 +319,9 @@ sub encode_block_f2 {
 	my $mask = 128;
 	while ($mask) {
 	    if ($rand_int & $mask) {
-		fast_xor_strings(\$block, $message[$j])
+		fast_xor_strings(\$block, "$message[$j]")
 	    }
-	    ++$j; $j = 0 if $j >= $gen;
+	    ++$j; $j -= $gen if $j >= $gen;
 	    $mask >>= 1;
 	}
     }
@@ -258,7 +334,7 @@ sub encode_block_f256 {
     my $hack = shift;
     my ($i, $code_vector, $block);
     $i = int(rand $gen);
-    $block = $message[$i];
+    $block = "$message[$i]";
 
     # Here, we multiply message blocks by a randomly selected GF(2**8)
     # element.
@@ -274,7 +350,7 @@ sub encode_block_f256 {
 	    # Math::FastGF2 (would speed this up a lot). 
 	    if ($hacky) {
 		# use Inline C routine
-		my $product = $message[$j]; # copy
+		my $product = "$message[$j]"; # copy
 		if ("no" eq "mult, then add") {
 		    # do multiply-add as two steps
 		    gf256_vec_mul($product, chr $rand_int);
@@ -414,21 +490,26 @@ sub pivot_f2 {
 	# ends of the array, so before calling them, I must make sure
 	# that the array isn't zero.
 	my ($ctz_row, $ctz_code, $clz_code);
+	die unless length $code == length $zero_code;
 	if ($code ne $zero_code) {
 	    # decide whether to swap with already pivoted row
-	    my $ctz_row  = vec_ctz($coding[$i]);
-	    my $ctz_code = vec_ctz($code);
+	    my $ctz_row  = vec_ctz("$coding[$i]");
+	    my $ctz_code = vec_ctz("$code");
 	    if ($ctz_code > $ctz_row) {
-		($code, $coding[$i]) = ($coding[$i], $code);
-		($sym,  $symbol[$i]) = ($symbol[$i], $sym);
+		($code, $coding[$i]) = ("$coding[$i]", "$code");
+		($sym,  $symbol[$i]) = ("$symbol[$i]", "$sym");
 	    }
 	    # ... and fall through ...
 	} else {
+	    return $remain;
+
 	    # if we get here, it means that we've received a
 	    # duplicate, so we can do a self-check to make sure that
 	    # the new value and the previously-solved value agree.
-	    die "Inconsistent value calculated for row $i"
+	    die "Inconsistent value calculated for row $i " .
+		"(tries is $tries; remain is $remain)"
 		unless $sym eq $symbol[$i];
+	    warn "OK";
 
 	    # In any case, we don't need to do any more work now
 	    return $remain;
@@ -439,20 +520,22 @@ sub pivot_f2 {
 	#
 	# Note: I see that recent versions of perl let you do xors
 	# (as well as and, or, and bitwise not) on strings directly.
-	fast_xor_strings(\$code, $coding[$i]);
-	fast_xor_strings(\$sym,  $symbol[$i]);
+	fast_xor_strings(\$code, "$coding[$i]");
+	fast_xor_strings(\$sym,  "$symbol[$i]");
 
 	# The implicit '1' before the aperture has been cancelled, so
 	# if the aperture has also gone to zero, we expect the symbol
 	# to also be cancelled (another self-check).
 	if ($code eq $zero_code) {
+
+	    return $remain;
 	    die "failed: zero code vector => zero symbol"
 		unless $sym eq $zero_block;
 	    return $remain;
 	}
 
 	# update the coding vector and i
-	$clz_code = vec_clz($code);
+	$clz_code = vec_clz("$code");
 	vec_shl($code, $clz_code + 1);
 	$i += $clz_code + 1;
 	$i -= $gen if $i >= $gen;
@@ -460,6 +543,11 @@ sub pivot_f2 {
 
     carp "Baled out trying to pivot element after $tries tries\n";
     return $remain;
+}
+
+sub vec_bit {
+    my $bit = shift;
+    (($bit >> 3) << 3) + (7 - $bit & 7);
 }
 
 sub solve_f2 {
@@ -489,121 +577,92 @@ sub solve_f2 {
 	my $from = $coding[$gen - $alpha + $j];
 	my $diag = $gen - $alpha + $j;
 
-	vec($row, $diag, 1) = 1;
+	# I want the first bit to be the most significant bit, but vec
+	# counts from the LSB!  If I don't work this way, then
+	# shifting left won't work as expected.
+	vec($row, vec_bit($diag), 1) = 1;
 	my $b = 0;
 	do {
 	    $diag++; $diag = 0 if $diag == $gen;
-	    vec($row, $diag, 1) = vec($from, $b, 1)
+	    vec($row, vec_bit($diag), 1) = vec($from, $b, 1)
 	} until ++$b == $alpha;
 	push @arows, $row;
 			 
     } until (++$j == $alpha);
 
-    # I'm tempted to shift to C again here, because to do forward
-    # substitution, we need to rotate the original apertures,
-    # inserting a 1 in front of them, then effectively shifting them
-    # right some number of bits before we can XOR into the row.
-    
-
-    # Ah. I can do this in one go with my existing vec_shl
-    #
-    # Create a new string preceded by 0x01
-    # Shift it left so that the 1 is in the right place
-    # Byte-wise XOR the resulting string into the right column
-    #
-    # eg, substituting in row 0:
-    #
-    # char(0x01) . "string"
-    # shl 7 (1 is now in column 0)
-    # xor into row at byte offset 0
-    #
-    # Then onto row 1:
-    #
-    # same char(0x01) . "string"
-    # shl 6 (the 1 is now in col 1)
-    # same xor byte offset
+    # Dump out the @arows version of the matrix
+    if (1) {
+	warn "Alpha matrix after creation\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "B*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
 
     # Step 1: Forward propagation!
+
+    # Can use vec_shl when subtracting rows as an alternative to
+    # unshifting a 1 bit then rotating right...
+
     my $shl = 7;		# as --$shl wraps around,
     my $col = 0;		# this increments by 1
     my $width = ($alpha / 8) + 1;
     for my $diag (0 .. $gen - $alpha - 1) {
-	my $idrow = "\001" . $coding[$diag];
+	my $idrow = "\001$coding[$diag]";
+	#warn "idrow before shl $shl: " . unpack("B*", $idrow);
+	die if ($alpha / 8 + 1) != length $idrow;
 	vec_shl($idrow,$shl) if $shl;
+	#warn "idrow  after shl $shl: " . unpack("B*", $idrow);
 	for my $arow (0 .. $alpha - 1) {
-	    if (vec($arows[$arow], $diag, 1)) {
-		substr($arows[$arow], $col, $width) ^= $idrow;
-		$symbol[$gen - $alpha + $arow] ^= $symbol[$diag];
+	    if (vec($arows[$arow], vec_bit($diag), 1)) {
+		substr($arows[$arow], $col, $width) ^= "$idrow";
+		$symbol[$gen - $alpha + $arow] ^= "$symbol[$diag]";
 	    }
 	}
 	($shl, $col) = (7, $col + 1) if (--$shl < 0);
     }
 
-    # Step 2: convert submatrix at bottom right to echelon form
+    warn "Did step 1";
 
-    # I have an idea for how to handle the case(s) where we cannot
-    # decode the matrix at this time, although it may be a little bit
-    # like using a sledgehammer to crack a nut.
-    #
-    # I have a vec_clz routine, so I can use that along with a perl
-    # sort to reorder the rows of the submatrix. Then, I can scan up
-    # to see if there are any zero rows.
-    #
-    # Things are complicated because I want to leave the matrix in a
-    # state where it's possible to continue adding new rows if we end
-    # up with one or more cancelled rows. Everything would be fine if
-    # it weren't for the requirement that we have to have a 1 element
-    # on the diagonal. If we get a 0 only in the last row, that's fine
-    # because the coding vector for that row is also 0 at that stage.
-    # But what happens if it's the second-last row that has a 0 in the
-    # identity slot? Can that even happen? Well, if it can, then I
-    # suppose that we can substitute in the identity for the last row,
-    # assuming there is one. Otherwise, we can swap the last two rows.
-    #
-    # I suppose that one possible solution is to re-pivot rows that
-    # don't have an identity in the right position, but do have data
-    # to the right. Basically, I'd mark those rows as now free and
-    # push them into the pivot queue. Or I could do something similar
-    # here and forward propagate the current failed row.
-    #
-    # So, the method would be:
-    # for each column:
-    #   if this diagonal is 0
-    #     try to find a row below that has a 1
-    #     if found
-    #       swap rows
-    #     else
-    #       forward propagate this row to the next
-    #       mark this as free
-    #       skip to next column
-    #   add this column to all columns beneath whose value is 1
-    #
-    # No information would be lost(*) by deleting the row in this case
-    # because it's being added into the next equation. Also, because
-    # we're checking for other rows that we could swap with, in the
-    # worst case scenario, we've got something like a bubble sort.
-    #
-    # That should work, and I don't have to resort to re-pivoting
-    # later or doing a full recursive search (eg, to move all holes to
-    # the end of the matrix).
-    #
-    # (*) actually, this *could* lead to losing information, if the
-    # two rows cancel each other out.
-    #
-    # The simplest solution, then, is just to use a pivot queue and
-    # push the awkward rows back into it.
+    # Dump out the @arows version of the matrix
+    if (1) {
+	warn "Alpha matrix after step 1\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "B*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+    
+
+    # Step 2: convert submatrix at bottom right to echelon form
+    # (what [2015] called "inversion")
 
     my $decode_ok = 1;		# be optimistic
-    my $zero_alpha = "\0" x $alpha;
+    my $zero_alpha = "\0" x ($alpha / 8);
     # reduce @arows to alpha * alpha
-    map { substr $_, 0, ($gen - $alpha / 8), '' } @arows;
+    for (0..@arows -1) {
+	substr $arows[$_], 0, ($gen - $alpha) / 8, '';
+	#	warn "Length now " . length($arows[$_]);
+    }
+
+    # Dump out the @arows version of the matrix
+    if (1) {
+	warn "Alpha matrix after reduction to alpha x alpha\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "B*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+
+
   ZERO_BELOW:
     for my $diag (0 .. $alpha - 2) {
 	my $swap_row = $diag;
-	if (vec ($arows[$diag], $diag, 1) == 0) {
+	if (vec ($arows[$diag], vec_bit($diag), 1) == 0) {
 	  SWAP_ROW:
 	    for my $down_row ($diag + 1 .. $alpha - 1) {
-		if (vec ($arows[$down_row], $diag, 1) == 1) {
+		if (vec ($arows[$down_row], vec_bit($diag), 1) == 1) {
+		    warn "Swapping row $swap_row with $down_row";
 		    $swap_row = $down_row;
 		    last SWAP_ROW;
 		}
@@ -613,23 +672,29 @@ sub solve_f2 {
 		# re-pivot the row
 		$decode_ok = 0;
 		# either way, we remove this row from the big matrix
-		$filled[$diag + $gen - $alpha] = 0;
+		$filled[$gen - $alpha + $diag] = 0;
+		$remain++;
+		die if length($arows[$diag]) != length($zero_alpha);
 		if ($arows[$diag] eq $zero_alpha) {
 		    # no, completely cancelled: discard it
+		    warn "cancelled alpha row was zero\n";
+
 		    die "bug: cancelled alpha row had nonzero symbol"
-			if $symbol[$diag + $gen - $alpha] ne $zero_block;
+			if $symbol[$diag + $gen - $alpha] ne $zero_alpha;
+#			ne $symbol[$swap_row + $gen - $alpha];
 		} else {
 		    # We have to find the right i value by using vec_clz
-		    my $lz = vec_clz($arows[$diag]);
+		    my $lz = vec_clz("$arows[$diag]");
 		    my $i = $gen - $alpha + $diag; # existing row
 		    $i += $lz + 1;		   # skip first 1
-		    my $code = $arows[$diag];
+		    my $code = "$arows[$diag]";
 		    my $sym  = $symbol[$gen - $alpha + $diag];
 		    vec_shl($code, $lz + 1);
-		    push @pivot_queue, [$i, $code, $sym];
+		    push @pivot_queue, [($i % $gen), $code, $sym];
 		    # remember to blank this arow here so that at the
 		    # end, when decode_ok != 1, we don't try to push
 		    # updates to this row back into @coding.
+		    warn "hole in submatrix after decoding";
 		    $arows[$diag] = $zero_alpha;
 		}
 		# skip to next diagonal element so that we end
@@ -653,19 +718,44 @@ sub solve_f2 {
 	# found a 1 on the diagonal: use it to cancel 1's below
 	# (start from swap_row + 1: we might have skipped some zeros)
 	for my $down_row ($swap_row + 1 .. $alpha - 1) {
-	    if (vec ($arows[$down_row], $diag, 1) == 1) {
-		$arows[$down_row] ^= vec ($arows[$diag], $diag, 1);
-		$symbol[$gen - $alpha + $down_row] ^=
-		    $symbol[$gen - $alpha + $diag];
+	    if (vec ($arows[$down_row], vec_bit($diag), 1) == 1) {
+		 $arows[$down_row] ^= "$arows[$diag]";
+#		     "$arows[$down_row]" ^ "$arows[$diag]";
+		 die if length($arows[$down_row]) != length($zero_alpha);
+		 $symbol[$gen - $alpha + $down_row] ^=
+#		     "$symbol[$gen - $alpha + $down_row]" ^ 
+		     "$symbol[$gen - $alpha + $diag]";
 		# @coding is updated at the end
 	    }
 	}
     }
 
+    # Dump out the @arows version of the matrix
+    if (1) {
+	warn "Alpha matrix after \"inversion\"\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "B*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+    
+    
+    # Have been working on @arows, now have to move updated values
+    # back into @coding
+    $coding[$gen - 1] = $zero_alpha;
+    $shl = 1;			# shift left by one to remove diagonal
+    for my $i (0 .. $alpha - 2) {
+	my $code = "$arows[$i]";
+	vec_shl($code,$shl);
+	$coding[$gen - $alpha + $i] = $code;
+	++$shl;
+    }
+
+    warn "Did step 2";
+
     # If we failed to decode, convert @arows back into @coding format
     # and return failure (1).
     unless ($decode_ok) {
-	...;
 	return 1;
     }
 
@@ -684,7 +774,10 @@ sub solve_f2 {
 	    my $i = $diag - 1;	# row pointer
 	    my $bit = 0;
 	    do {
-		$symbol[$i] ^= $symbol[$diag] if vec $coding[$i], $bit, 1;
+		if (vec $coding[$i], vec_bit($bit), 1) {
+		    $symbol[$i] ^= "$symbol[$diag]";
+		    $coding[$i] ^= "$coding[$diag]";
+		}
 	    } while (++$bit, --$i, --$rows);
 	}
     } while (--$diag);		# stop at top row
@@ -740,7 +833,7 @@ unsigned vec_ctz(SV *sv) {
 // Shift a vector (string) left by b bits
 void vec_shl(SV *sv, unsigned b) {
     STRLEN len;
-    char *s;
+    unsigned char *s;
     unsigned full_bytes;
 
     if (b == 0) return;
@@ -749,7 +842,7 @@ void vec_shl(SV *sv, unsigned b) {
     full_bytes = b >> 3;
 
     // shifting by full bytes is easy
-    if (b & 7 == 0) {
+    if ((b & 7) == 0) {
         int c = len - full_bytes;
         while (c--) {
             *s = s[full_bytes];
@@ -759,13 +852,15 @@ void vec_shl(SV *sv, unsigned b) {
         return;
     }
 
+    //return;
+
     // or else combine bits from two bytes
     int c = len - full_bytes - 1;
-    char l,r;
+    unsigned char l,r;
     b &= 7;
     while (c--) {
-        l = s[full_bytes]     <<      b;
-        r = s[full_bytes +1 ] >> (8 - b);
+        l = s[full_bytes]    <<      b;
+        r = ((unsigned char) s[full_bytes +1]) >> (8 - b);
         *(s++) = l | r;
     }
     // final byte to shift should be at end of vector
