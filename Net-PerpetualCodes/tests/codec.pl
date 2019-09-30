@@ -671,8 +671,8 @@ sub solve_f2 {
 		    warn "Re-pivoting alpha row $diag\n";
 		    my $code = "$arows[$diag]";
 		    warn "Code before shift: " . (unpack "B*", $code) . "\n";
-		    my $sym  = $symbol[$gen - $alpha + $diag];
-		    my $i = $gen - $alpha + $diag; # existing row
+		    my $i    = $gen - $alpha + $diag; # existing row
+		    my $sym  = $symbol[$i];
 
 		    # Can't check symbol yet, because we have to find the
 		    # first 1 value and skip it.
@@ -680,7 +680,7 @@ sub solve_f2 {
 
 		    # Now try to repivot
 		    my $lz = vec_clz("$arows[$diag]");
-		    $i += $lz + 1;		   # skip first 1
+		    $i += ($lz-$diag); # don't count triangle of zeroes
 		    vec_shl($code, $lz + 1);
 		    warn "Code after shift: " . (unpack "B*", $code) . "\n";
 		    warn "Symbol: " . (unpack "B*", $sym) . "\n";
@@ -729,6 +729,17 @@ sub solve_f2 {
 		# @coding is updated at the end
 	    }
 	}
+
+	# More debug messages...
+	if (1) {
+	    warn "Alpha matrix after clearing column $diag\n";
+	    for (0..$alpha -1) {
+		my $r = unpack "B*", $arows[$_];
+		warn "| $r |\n";
+	    }
+	}
+
+
     }
     
 
