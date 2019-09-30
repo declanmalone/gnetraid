@@ -3,7 +3,9 @@
 use strict;
 use warnings;
 
-use v5.24;
+use v5.20;
+
+my $debug = 0;
 
 use Inline 'C';
 
@@ -288,7 +290,7 @@ sub codec_f2 {
 	    ($i, $code, $sym) = encode_block_f2();
 	    ++$rp;		# received packets
 	}
-	check_symbol_f2($i,$code,$sym);
+	check_symbol_f2($i,$code,$sym) if $debug>1;
 	if (pivot_f2($i, "$code", "$sym") == 0) {
 	    warn "Trying to solve\n";
 	    last if solve_f2() == 0;
@@ -314,14 +316,16 @@ sub codec_f2 {
 	die unless $msg[$_] eq $message[$_];
     }
     warn "Matched $matched source <=> decoded blocks";
-    $in  = unpack("H*", $message[0]);
-    $out = unpack("H*", $symbol[0]);
-    warn "Input block 0 was $in\n";
-    warn "Output block 0 was $out\n";
-    $in  = unpack("H*", $message[$gen - 1]);
-    $out = unpack("H*", $symbol[$gen - 1]);
-    warn "Input block $gen-1 was $in\n";
-    warn "Output block $gen-1 was $out\n";
+    if ($debug) {
+	$in  = unpack("H*", $message[0]);
+	$out = unpack("H*", $symbol[0]);
+	warn "Input block 0 was $in\n";
+	warn "Output block 0 was $out\n";
+	$in  = unpack("H*", $message[$gen - 1]);
+	$out = unpack("H*", $symbol[$gen - 1]);
+	warn "Input block $gen-1 was $in\n";
+	warn "Output block $gen-1 was $out\n";
+    }
     exit;
 }
 
@@ -440,20 +444,22 @@ sub pivot_f2 {
 
     my $tries = 0;
     while (++$tries < $gen * 2) {
-	warn "Trying to pivot into row $i\n";
+	warn "Trying to pivot into row $i\n" if $debug;
 	# We can get here if the original i slot was empty, or if we
 	# substituted in another row and advanced i accordingly,
 	# finding a subsequent empty i' slot.
 	if ($filled[$i] == 0) {
-	    warn "Successfully pivoted into row $i\n";
+	    warn "Successfully pivoted into row $i\n" if $debug;
 	    $filled[$i] = 1;
 	    $coding[$i] = $code;
 	    $symbol[$i] = $sym;
 	    return --$remain
 	}
-	warn "Row $i is occupied\n";
- 	warn "Row code is ", (unpack "B*", $coding[$i]), "\n";
-	warn "Our code is ", (unpack "B*", $code), "\n";
+	if ($debug) {
+	    warn "Row $i is occupied\n";
+	    warn "Row code is ", (unpack "B*", $coding[$i]), "\n";
+	    warn "Our code is ", (unpack "B*", $code), "\n";
+	}
 
 	die unless length $code == length $zero_code;
 
@@ -466,22 +472,25 @@ sub pivot_f2 {
 	    $ctz_code = vec_ctz("$code")       unless $code eq $zero_code;
 	    $ctz_row  = vec_ctz("$coding[$i]") unless $coding[$i] eq $zero_code;
 
-	    warn "ctz_row  is $ctz_row\n";
-	    warn "ctz_code is $ctz_code\n";
+	    warn "ctz_row  is $ctz_row\n"  if $debug;
+	    warn "ctz_code is $ctz_code\n" if $debug;
 	    if ($ctz_code > $ctz_row) {
-		warn "Evicting row $i\n";
-		check_symbol_f2($i,$coding[$i],$symbol[$i], "(evicted)");
+		warn "Evicting row $i\n" if $debug;
+		check_symbol_f2($i,$coding[$i],$symbol[$i], "(evicted)")
+		    if $debug > 1;
 		($code, $coding[$i]) = ("$coding[$i]", "$code");
 		($sym,  $symbol[$i]) = ("$symbol[$i]", "$sym");
 	    }
 	}
 
-	# Bug fix?... don't XOR something with a copy of itself!
-	# (actually, was already handled in the code below)
-	if ("$coding[$i]" eq "$code") {
-	    die "Inconsistent packet symbol received for row $i\n"
-		if "$symbol[$i]" ne "$sym";
-	    return $remain;
+	if ($debug) {
+	    # Bug fix?... don't XOR something with a copy of itself!
+	    # (actually, was already handled in the code below)
+	    if ("$coding[$i]" eq "$code") {
+		die "Inconsistent packet symbol received for row $i\n"
+		    if "$symbol[$i]" ne "$sym";
+		return $remain;
+	    }
 	}
 
 	# Substitute the existing code vector and symbol into the ones
@@ -497,32 +506,35 @@ sub pivot_f2 {
 	    $code ^= "$coding[$i]";
 	    $sym  ^= "$symbol[$i]";
 	}
-	warn "Our code is ", (unpack "B*", $code), " after XOR\n";
+	warn "Our code is ", (unpack "B*", $code), " after XOR\n" if $debug;
 
 	# The implicit '1' before the code has been cancelled, so if
 	# the code itself has also gone to zero, we expect the symbol
 	# to also be cancelled (another self-check).
 	if ($code eq $zero_code) {
-	    warn "Our code got cancelled\n";
+	    warn "Our code got cancelled\n" if ($debug);
 	    die "failed: zero code vector => zero symbol (i=$i)"
 		unless $sym eq $zero_block;
-	    warn "As expected, so did our symbol\n";
+	    warn "As expected, so did our symbol\n" if ($debug);
 	    return $remain;
 	}
 
 	# update the coding vector and i (symbol done already)
-	warn "Updating coding vector and i\n";
-	warn "old i: $i\n";
-	warn "code is ", (unpack "B*", $code), "\n";
+	if ($debug) {
+	    warn "Updating coding vector and i\n";
+	    warn "old i: $i\n";
+	    warn "code is ", (unpack "B*", $code), "\n";
+	}
 	my $clz_code = vec_clz("$code");
-	warn "$clz_code leading zeroes\n";
+	warn "$clz_code leading zeroes\n" if $debug;
 	vec_shl($code, $clz_code + 1);
-	warn "shifted code is ", (unpack "B*", $code), "\n";
+	warn "shifted code is ", (unpack "B*", $code), "\n" if $debug;
 	$i += $clz_code + 1;
 	$i -= $gen if $i >= $gen;
-	warn "new i: $i";
+	warn "new i: $i" if $debug;
 
-	check_symbol_f2($i,$code,$sym, "(after attempted pivot)");
+	check_symbol_f2($i,$code,$sym, "(after attempted pivot)")
+	    if $debug > 1;
     }
 
     carp "Bailed out trying to pivot element after $tries tries\n";
@@ -575,7 +587,7 @@ sub solve_f2 {
     } until (++$j == $alpha);
 
     # Dump out the @arows version of the matrix
-    if (1) {
+    if ($debug) {
 	warn "Alpha matrix after creation\n";
 	for (0..$alpha -1) {
 	    my $r = unpack "B*", $arows[$_];
@@ -599,8 +611,10 @@ sub solve_f2 {
 	#warn "idrow  after shl $shl: " . unpack("B*", $idrow);
 	for my $arow (0 .. $alpha - 1) {
 	    if (vec($arows[$arow], vec_bit($diag), 1) == 1) {
-		warn "Did forward prop from $diag to \$arow[$arow]\n";
-		warn "code was ", unpack("B*", $idrow), "\n";
+		if ($debug) {
+		    warn "Did forward prop from $diag to \$arow[$arow]\n";
+		    warn "code was ", unpack("B*", $idrow), "\n";
+		}
 		substr($arows[$arow], $col, $width) ^= "$idrow";
 		$symbol[$gen - $alpha + $arow] ^= "$symbol[$diag]";
 	    }
@@ -611,7 +625,7 @@ sub solve_f2 {
     warn "Did step 1";
 
     # Dump out the @arows version of the matrix
-    if (1) {
+    if ($debug) {
 	warn "Alpha matrix after step 1\n";
 	for (0..$alpha -1) {
 	    my $r = unpack "B*", $arows[$_];
@@ -631,7 +645,7 @@ sub solve_f2 {
     }
 
     # Dump out the @arows version of the matrix
-    if (1) {
+    if ($debug) {
 	warn "Alpha matrix after reduction to alpha x alpha\n";
 	for (0..$alpha -1) {
 	    my $r = unpack "B*", $arows[$_];
@@ -647,7 +661,7 @@ sub solve_f2 {
 	  SWAP_ROW:
 	    for my $down_row ($diag + 1 .. $alpha - 1) {
 		if (vec ($arows[$down_row], vec_bit($diag), 1) == 1) {
-		    warn "Swapping row $swap_row with $down_row";
+		    warn "Swapping row $swap_row with $down_row" if $debug;
 		    $swap_row = $down_row;
 		    last SWAP_ROW;
 		}
@@ -660,17 +674,18 @@ sub solve_f2 {
 		$filled[$gen - $alpha + $diag] = 0;
 		$remain++;
 		die if length($arows[$diag]) != length($zero_alpha);
-		warn "No ones found to swap with in column $diag\n";
+		warn "No ones found to swap with in column $diag\n" if $debug;
 		if ($arows[$diag] eq $zero_alpha) {
 		    # no, completely cancelled: discard it
-		    warn "Cancelled alpha row was zero, not re-pivoting\n";
+		    warn "Cancelled alpha row was zero, not re-pivoting\n" if $debug;
 		    die "bug: cancelled alpha row had nonzero symbol"
 			if $symbol[$diag + $gen - $alpha] ne $zero_block;
 		} else {
 		    # We have to find the right i value by using vec_clz
-		    warn "Re-pivoting alpha row $diag\n";
+		    warn "Re-pivoting alpha row $diag\n" if $debug;
 		    my $code = "$arows[$diag]";
-		    warn "Code before shift: " . (unpack "B*", $code) . "\n";
+		    warn "Code before shift: " . (unpack "B*", $code) . "\n"
+			if $debug;
 		    my $i    = $gen - $alpha + $diag; # existing row
 		    my $sym  = $symbol[$i];
 
@@ -682,14 +697,17 @@ sub solve_f2 {
 		    my $lz = vec_clz("$arows[$diag]");
 		    $i += ($lz-$diag); # don't count triangle of zeroes
 		    vec_shl($code, $lz + 1);
-		    warn "Code after shift: " . (unpack "B*", $code) . "\n";
-		    warn "Symbol: " . (unpack "B*", $sym) . "\n";
+		    if ($debug) {
+			warn "Code after shift: " . (unpack "B*", $code) . "\n";
+			warn "Symbol: " . (unpack "B*", $sym) . "\n";
+		    }
 		    $i %= $gen;
-		    warn "new i: $i\n";
+		    warn "new i: $i\n" if $debug;
 
 		    # The last (?!) remaining bug is triggered here...
-		    check_symbol_f2($i,"$code","$sym", "(after repivot)");
-		    #push @pivot_queue, [$i, "$code", "$sym"];
+		    check_symbol_f2($i,"$code","$sym", "(after repivot)")
+			if $debug>1;
+		    push @pivot_queue, [$i, "$code", "$sym"];
 
 		    # Clear out the hole everywhere
 		    $arows [$diag]                 = $zero_alpha;
@@ -703,7 +721,8 @@ sub solve_f2 {
 	    } else {
 		# we did find a row to swap with; swap in arows and
 		# symbol tables.
-		warn "Row $swap_row has a 1, so swapping with row $diag (0)\n";
+		warn "Row $swap_row has a 1, so swapping with row $diag (0)\n"
+		    if $debug;
 		my $gen_base = $gen - $alpha;
 		@arows [$diag,$swap_row] = @arows[$swap_row,$diag];
 		@symbol[$gen_base + $diag, $gen_base + $swap_row] =
@@ -731,7 +750,7 @@ sub solve_f2 {
 	}
 
 	# More debug messages...
-	if (1) {
+	if ($debug) {
 	    warn "Alpha matrix after clearing column $diag\n";
 	    for (0..$alpha -1) {
 		my $r = unpack "B*", $arows[$_];
@@ -744,7 +763,7 @@ sub solve_f2 {
     
 
     # Dump out the @arows version of the matrix
-    if (1) {
+    if ($debug) {
 	warn "Alpha matrix after \"inversion\"\n";
 	for (0..$alpha -1) {
 	    my $r = unpack "B*", $arows[$_];
@@ -764,7 +783,7 @@ sub solve_f2 {
     }
 
     # Dump out the last alpha rows of @coding
-    if (1) {
+    if ($debug) {
 	warn "Coding matrix after conversion from \@arows\n";
 	my $matched = 0;
 	for (0 .. $gen - 1) {
@@ -779,7 +798,7 @@ sub solve_f2 {
 	warn "Matched $matched rows";
     }
 
-    warn "Did step 2";
+    warn "Did step 2" if $debug;
 
     return 1 unless $decode_ok;
     
@@ -796,27 +815,27 @@ sub solve_f2 {
 	my $rows = $alpha < $diag ? $alpha : $diag;
 	#warn "Rows is $rows\n";
 	#$rows = $diag;	# DEBUG
-	warn "Working up from row $diag\n";
+	warn "Working up from row $diag\n" if $debug;
 	if ($rows) {
 	    my $i = $diag - 1;	# row pointer
 	    my $bit = 0;
 	    die if $i < 0;
 	    do {
-		warn "Checking bit $bit of coding/symbol $i\n";
+		warn "Checking bit $bit of coding/symbol $i\n" if $debug;
 		if (vec($coding[$i], vec_bit($bit), 1) == 1) {
-		    warn "1: substituting\n";
+		    warn "1: substituting\n" if $debug;
 		    $symbol[$i] ^= "$symbol[$diag]";
 		    # do clear the bit in case 
 		    vec($coding[$i], vec_bit($bit), 1) = 0;
 		} else {
-		    warn "0: not substituting\n";
+		    warn "0: not substituting\n" if $debug;
 		}
 	    } while (++$bit, --$i, --$rows);
 	}
     } while (--$diag);		# stop at top row
 
     # After decoding
-    if (1) {
+    if ($debug) {
 	warn "Matrix after final back-propagation:\n";
 	my $matched = 0;
 	for (0 .. $gen - 1) {
@@ -830,7 +849,6 @@ sub solve_f2 {
 	warn "Remaining is $remain\n";
 	warn "Matched $matched rows";
     }
-
 
     return ($decode_ok) ? 0 : 1;
 }
