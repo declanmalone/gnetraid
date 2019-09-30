@@ -66,8 +66,13 @@ die "Aperture too big!\n" if $alpha >= $gen;
 # --deterministic to indicate using a fixed seed of 0.
 die "Incompatible options --seed and --deterministic\n"
     if $deterministic and defined $seed;
-$seed = 0    if $deterministic;
-srand($seed) if defined($seed);
+
+$seed = 0 if $deterministic;
+if (defined($seed)) {
+    $seed = srand($seed);
+} else {
+    $seed = srand;
+}
 
 die "Must specify an input file with --infile\n"
     unless defined $infile;
@@ -269,33 +274,54 @@ if ($packets) {
 
 # Loop producing packets until message decoded fully into @symbol
 sub codec_f2 {
-	my $rp = 0;
-	while (1) {
-	    my ($i, $code, $sym);
-	    if (@pivot_queue) {
-		my $new = shift @pivot_queue;
-		($i, $code, $sym) = @{$new};
-		warn "Re-pivoting\n";
-	    } else {
-		($i, $code, $sym) = encode_block_f2();
-		++$rp;		# received packets
-	    }
-	    if (pivot_f2($i, $code, $sym) == 0) {
-		warn "Trying to solve\n";
-		last if solve_f2() == 0;
-	    }
-	};
-	warn "Decoded after $rp packets\n";
-	my $matched = 0;
-	for (0 .. $gen-1) {
-	    ++$matched if $message[$_] eq $symbol[$_];
+    my ($rp, $matched) = (0,0);
+    warn "Seed: $seed\n";
+    my @msg = @message;
+    my ($in,$out);
+    while (1) {
+	my ($i, $code, $sym);
+	if (@pivot_queue) {
+	    my $new = shift @pivot_queue;
+	    ($i, $code, $sym) = @{$new};
+	    warn "Re-pivoting\n";
+	} else {
+	    ($i, $code, $sym) = encode_block_f2();
+	    ++$rp;		# received packets
 	}
-	warn "Matched $matched source <=> decoded blocks\n";
-	my $in  = unpack("H*", $message[0]);
-	my $out = unpack("H*", $symbol[0]);
-	warn "Input block 0 was $in\n";
-	warn "Output block 0 was $out\n";
-	exit;
+	if (pivot_f2($i, $code, $sym) == 0) {
+	    warn "Trying to solve\n";
+	    last if solve_f2() == 0;
+	    warn "After initial solve, need to go again\n";
+	    $matched = 0;
+	    for (0 .. $gen-1) {
+		++$matched if $msg[$_] eq $symbol[$_];
+	    }
+	    # Check for corruption of original array
+	    for (0 .. $gen-1) {
+		die unless $msg[$_] eq $message[$_];
+	    }
+	    warn "Matched $matched source <=> decoded blocks\n";
+	}
+    };
+    warn "Fully decoded after $rp packets\n";
+    $matched = 0;
+    for (0 .. $gen-1) {
+	++$matched if $msg[$_] eq $symbol[$_];
+    }
+    # Check for corruption of original array
+    for (0 .. $gen-1) {
+	die unless $msg[$_] eq $message[$_];
+    }
+    warn "Matched $matched source <=> decoded blocks\n";
+    $in  = unpack("H*", $message[0]);
+    $out = unpack("H*", $symbol[0]);
+    warn "Input block 0 was $in\n";
+    warn "Output block 0 was $out\n";
+    $in  = unpack("H*", $message[$gen - 1]);
+    $out = unpack("H*", $symbol[$gen - 1]);
+    warn "Input block $gen-1 was $in\n";
+    warn "Output block $gen-1 was $out\n";
+    exit;
 }
 
 # Fountain Code for F_2
@@ -313,13 +339,18 @@ sub encode_block_f2 {
     my $j = ($i + 1) % $gen;
     $code_vector = "";
     my $bytes = $alpha / 8;
+    die if int($bytes) != $bytes;
     while ($bytes--) {
 	my $rand_int  = int rand 256;
 	$code_vector .= chr $rand_int;
 	my $mask = 128;
 	while ($mask) {
 	    if ($rand_int & $mask) {
-		fast_xor_strings(\$block, "$message[$j]")
+		if (0) {
+		    fast_xor_strings(\$block, "$message[$j]");
+		} else {
+		    $block ^= "$message[$j]";
+		}
 	    }
 	    ++$j; $j -= $gen if $j >= $gen;
 	    $mask >>= 1;
@@ -383,36 +414,6 @@ sub encode_block_f256 {
 
 
 
-## Initial Results
-#
-# The basic algorithm with F2 seems sound when it comes to encoding.
-# Although an average of alpha/2 blocks are XORed into each block
-# that's sent, it's not a huge burden.
-#
-# As for using GF(2**8), I don't have anything right now that will
-# efficiently multiply a vector (such as a source block) by a
-# constant. This should be easily remedied, and providing (as seems
-# likely) that the resulting XS operation is no more than 5x slower
-# than a single XOR, it's likely that using alpha/8 with GF(2**8) is
-# going to be faster than using GF(2**1). That's not even taking into
-# account the algorithmic complexity curve associated with increasing
-# alpha.
-
-## Next steps
-#
-# I'll ignore GF(2**8) calculations for now. There are three more
-# things to do:
-#
-# 1. handover of the "packet" (i, coding vector, encoded symbol)
-#
-# 2. the "initial descent" / "on-the-fly decoding" step
-#
-# 3. solving a complete matrix (which should always succeed)
-#
-# From here on, we use an optimised representation of the sparse
-# matrix, apart from at the very end where we have a step that
-# involves the last alpha rows needing to have the full row
-# stored/worked on.
 
 
 # Pivot will return the number of additional pivots required
@@ -420,99 +421,44 @@ sub pivot_f2 {
 
     my ($i, $code, $sym) = @_;
 
-    # Use three "optimisations" here
-    #
-    # 1. break infinite loop
-    #
-    # Some elements can't be pivoted because they can't be cancelled
-    # out. For example, if our matrix looks like:
-    #
-    # A + B = x0
-    # B + C = x1
-    # C + A = x2
-    #
-    # Then if we receive A + D = x3, the pivot routine will get stuck
-    # in an infinite loop because we can never cancel A (or B, or
-    # C). Cycle detection is possible, but adds complexity. Instead,
-    # use a loop counter and bail if it exceeds a set value. [2015]
-    # suggests 2g or 3g, but I think that the "effective aperture"
-    # trick from [2006] may reduce the average number of rows updated,
-    # allowing us to bring the cutoff down further.
-    #
-    # 2. memoise operations
-    #
-    # Some blocks can fail to pivot, as above, so save the workings
-    # and apply them only if it succeeds.
-    #
-    # Note that it seems possible to use memoisation to detect cycles
-    # as above. If we find ourselves redoing the same substitution as
-    # we had already done previously, it should indicate that we are
-    # in an infinite loop.
-    #
-    # 3. "effective aperture" trick
-    #
-    # As described in [2006]. We try to maximise the number of zero
-    # elements in the array with a heuristic method of counting the
-    # number of trailing zero elements of the array row and the
-    # element being pivoted. If the element being pivoted has more
-    # trailing zeros than the row it's being pivoted into, we swap
-    # them, then continue to pivot the row that was evicted.
-    #    
-    # Other:
-    #
-    # Also, we can do a peephole optimisation by writing C routines
-    # for checking whether a coding vector has become zero and for
-    # counting the number of leading and trailing zero bits it has.
-    # Also for shifting a string left some number of bits.
-    # 
-    # Of course, another optimisation is not using a full gen x gen
-    # matrix. Instead, only alpha values to the right of the diagonal
-    # are stored.
-
-    # First pass of implementation won't implement memoisation. Note
-    # that even if we fail to pivot, all changes that are carried out
-    # are elementary row operations, so we don't need to undo them.
-    # The only impact is that we're doing unnecessary row updates.
-
     my $tries = 0;
     while (++$tries < $gen * 2) {
+	warn "Trying to pivot into row $i\n";
 	# We can get here if the original i slot was empty, or if we
 	# substituted in another row and advanced i accordingly,
 	# finding a subsequent empty i' slot.
 	if ($filled[$i] == 0) {
+	    warn "Successfully pivoted into row $i\n";
 	    $filled[$i] = 1;
 	    $coding[$i] = $code;
 	    $symbol[$i] = $sym;
 	    return --$remain
 	}
+	warn "Row $i is occupied\n";
+ 	warn "Row code is ", (unpack "B*", $coding[$i]), "\n";
+	warn "Our code is ", (unpack "B*", $code), "\n";
+	
 
 	# My inline C routines for vec_clz and vec_ctz can go off the
 	# ends of the array, so before calling them, I must make sure
 	# that the array isn't zero.
-	my ($ctz_row, $ctz_code, $clz_code);
 	die unless length $code == length $zero_code;
-	if ($code ne $zero_code) {
-	    # decide whether to swap with already pivoted row
-	    my $ctz_row  = vec_ctz("$coding[$i]");
-	    my $ctz_code = vec_ctz("$code");
+
+	if (1) {     # BUG... fixed
+	    my ($ctz_row, $ctz_code) = ($alpha,$alpha);
+
+	    $ctz_code  = vec_ctz("$code") 
+		unless $code eq $zero_code;
+	    $ctz_row  = vec_ctz("$coding[$i]")
+		unless "$coding[$i]" eq $zero_code;
+
+	    warn "ctz_row  is $ctz_row\n";
+	    warn "ctz_code is $ctz_code\n";
 	    if ($ctz_code > $ctz_row) {
+		warn "Evicting row $i\n";
 		($code, $coding[$i]) = ("$coding[$i]", "$code");
 		($sym,  $symbol[$i]) = ("$symbol[$i]", "$sym");
 	    }
-	    # ... and fall through ...
-	} else {
-	    return $remain;
-
-	    # if we get here, it means that we've received a
-	    # duplicate, so we can do a self-check to make sure that
-	    # the new value and the previously-solved value agree.
-	    die "Inconsistent value calculated for row $i " .
-		"(tries is $tries; remain is $remain)"
-		unless $sym eq $symbol[$i];
-	    warn "OK";
-
-	    # In any case, we don't need to do any more work now
-	    return $remain;
 	}
 
 	# Substitute the existing code vector and symbol into the ones
@@ -520,28 +466,43 @@ sub pivot_f2 {
 	#
 	# Note: I see that recent versions of perl let you do xors
 	# (as well as and, or, and bitwise not) on strings directly.
-	fast_xor_strings(\$code, "$coding[$i]");
-	fast_xor_strings(\$sym,  "$symbol[$i]");
+	if (0) {
+	    fast_xor_strings(\$code, "$coding[$i]");
+	    fast_xor_strings(\$sym,  "$symbol[$i]");
+	} else {
+	    $code ^= "$coding[$i]";
+	    $sym  ^= "$symbol[$i]";
+	}
+	warn "Our code is ", (unpack "B*", $code), " after XOR\n";
 
 	# The implicit '1' before the aperture has been cancelled, so
 	# if the aperture has also gone to zero, we expect the symbol
 	# to also be cancelled (another self-check).
 	if ($code eq $zero_code) {
 
-	    return $remain;
-	    die "failed: zero code vector => zero symbol"
+	    warn "Our code got cancelled\n";
+	    #return $remain;
+	    
+	    die "failed: zero code vector => zero symbol (i=$i)"
 		unless $sym eq $zero_block;
+	    warn "As expected, so did our symbol\n";
 	    return $remain;
 	}
 
 	# update the coding vector and i
-	$clz_code = vec_clz("$code");
+	warn "Updating coding vector, i\n";
+	warn "old i: $i\n";
+	warn "code is ", (unpack "B*", $code), "\n";
+	my $clz_code = vec_clz("$code");
+	warn "$clz_code leading zeroes\n";
 	vec_shl($code, $clz_code + 1);
+	warn "shifted code is ", (unpack "B*", $code), "\n";
 	$i += $clz_code + 1;
 	$i -= $gen if $i >= $gen;
+	warn "new i: $i"
     }
 
-    carp "Baled out trying to pivot element after $tries tries\n";
+    carp "Bailed out trying to pivot element after $tries tries\n";
     return $remain;
 }
 
@@ -584,10 +545,10 @@ sub solve_f2 {
 	my $b = 0;
 	do {
 	    $diag++; $diag = 0 if $diag == $gen;
-	    vec($row, vec_bit($diag), 1) = vec($from, $b, 1)
+	    vec($row, vec_bit($diag), 1) = vec($from, vec_bit($b), 1)
 	} until ++$b == $alpha;
 	push @arows, $row;
-			 
+
     } until (++$j == $alpha);
 
     # Dump out the @arows version of the matrix
@@ -614,7 +575,9 @@ sub solve_f2 {
 	vec_shl($idrow,$shl) if $shl;
 	#warn "idrow  after shl $shl: " . unpack("B*", $idrow);
 	for my $arow (0 .. $alpha - 1) {
-	    if (vec($arows[$arow], vec_bit($diag), 1)) {
+	    if (vec($arows[$arow], vec_bit($diag), 1) == 1) {
+		warn "Did forward prop from $diag to \$arow[$arow]\n";
+		warn "code was ", unpack("B*", $idrow), "\n";
 		substr($arows[$arow], $col, $width) ^= "$idrow";
 		$symbol[$gen - $alpha + $arow] ^= "$symbol[$diag]";
 	    }
@@ -632,7 +595,6 @@ sub solve_f2 {
 	    warn "| $r |\n";
 	}
     }
-    
 
     # Step 2: convert submatrix at bottom right to echelon form
     # (what [2015] called "inversion")
@@ -656,7 +618,7 @@ sub solve_f2 {
 
 
   ZERO_BELOW:
-    for my $diag (0 .. $alpha - 2) {
+    for my $diag (0 .. $alpha - 1) { ## BUG
 	my $swap_row = $diag;
 	if (vec ($arows[$diag], vec_bit($diag), 1) == 0) {
 	  SWAP_ROW:
@@ -680,8 +642,7 @@ sub solve_f2 {
 		    warn "cancelled alpha row was zero\n";
 
 		    die "bug: cancelled alpha row had nonzero symbol"
-			if $symbol[$diag + $gen - $alpha] ne $zero_alpha;
-#			ne $symbol[$swap_row + $gen - $alpha];
+			if $symbol[$diag + $gen - $alpha] ne $zero_block;
 		} else {
 		    # We have to find the right i value by using vec_clz
 		    my $lz = vec_clz("$arows[$diag]");
@@ -696,6 +657,7 @@ sub solve_f2 {
 		    # updates to this row back into @coding.
 		    warn "hole in submatrix after decoding";
 		    $arows[$diag] = $zero_alpha;
+		    $symbol[$gen - $alpha + $diag] = $zero_block;
 		}
 		# skip to next diagonal element so that we end
 		# with echelon form
@@ -715,20 +677,21 @@ sub solve_f2 {
 		}
 	    }
 	}
+
 	# found a 1 on the diagonal: use it to cancel 1's below
 	# (start from swap_row + 1: we might have skipped some zeros)
 	for my $down_row ($swap_row + 1 .. $alpha - 1) {
 	    if (vec ($arows[$down_row], vec_bit($diag), 1) == 1) {
-		 $arows[$down_row] ^= "$arows[$diag]";
-#		     "$arows[$down_row]" ^ "$arows[$diag]";
-		 die if length($arows[$down_row]) != length($zero_alpha);
-		 $symbol[$gen - $alpha + $down_row] ^=
-#		     "$symbol[$gen - $alpha + $down_row]" ^ 
-		     "$symbol[$gen - $alpha + $diag]";
+		#next if $arows[$down_row] eq $zero_alpha;
+		$arows[$down_row] ^= "$arows[$diag]";
+		die if length($arows[$down_row]) != length($zero_alpha);
+		$symbol[$gen - $alpha + $down_row] ^=
+		    "$symbol[$gen - $alpha + $diag]";
 		# @coding is updated at the end
 	    }
 	}
     }
+    
 
     # Dump out the @arows version of the matrix
     if (1) {
@@ -751,14 +714,26 @@ sub solve_f2 {
 	++$shl;
     }
 
-    warn "Did step 2";
-
-    # If we failed to decode, convert @arows back into @coding format
-    # and return failure (1).
-    unless ($decode_ok) {
-	return 1;
+    # Dump out the last alpha rows of @coding
+    if (1) {
+	warn "Coding matrix after conversion from \@arows\n";
+	my $matched = 0;
+	for (0 .. $gen - 1) {
+	    my $r = unpack "B*", $coding[$_];
+	    my $fill = $filled[$_] ? "[FILLED] " : "         ";
+	    my $match = ($message[$_] eq $symbol[$_]) ?
+		(++$matched, " [MATCH]") : "";
+	    warn "| $r | $fill $match\n";
+	    warn "+-" . ("-" x $alpha) . "-+" if $gen - $alpha -1 == $_;
+	}
+	warn "Remaining is $remain\n";
+	warn "Matched $matched rows";
     }
 
+    warn "Did step 2";
+
+    return 1 unless $decode_ok;
+    
     # Step 3: back-substitute
     #
     # This is straightforward, but we're back to using the compressed
@@ -770,20 +745,45 @@ sub solve_f2 {
 	# Counter is usually alpha, but not when we get to the top
 	# of the matrix.
 	my $rows = $alpha < $diag ? $alpha : $diag;
+	#warn "Rows is $rows\n";
+	#$rows = $diag;	# DEBUG
+	warn "Working up from row $diag\n";
 	if ($rows) {
 	    my $i = $diag - 1;	# row pointer
 	    my $bit = 0;
+	    die if $i < 0;
 	    do {
-		if (vec $coding[$i], vec_bit($bit), 1) {
+		warn "Checking bit $bit of coding/symbol $i\n";
+		if (vec($coding[$i], vec_bit($bit), 1) == 1) {
+		    warn "1: substituting\n";
 		    $symbol[$i] ^= "$symbol[$diag]";
-		    $coding[$i] ^= "$coding[$diag]";
+		    # do clear the bit in case 
+		    vec($coding[$i], vec_bit($bit), 1) = 0;
+		} else {
+		    warn "0: not substituting\n";
 		}
 	    } while (++$bit, --$i, --$rows);
 	}
     } while (--$diag);		# stop at top row
 
-    # Success
-    return 0;
+    # After decoding
+    if (1) {
+	warn "Matrix after final back-propagation:\n";
+	my $matched = 0;
+	for (0 .. $gen - 1) {
+	    my $r = unpack "B*", $coding[$_];
+	    my $fill = $filled[$_] ? "[FILLED] " : "         ";
+	    my $match = ($message[$_] eq $symbol[$_]) ?
+		(++$matched, " [MATCH]") : "";
+	    warn "| $r | $fill $match\n";
+	    warn "+-" . ("-" x $alpha) . "-+" if $gen - $alpha -1 == $_;
+	}
+	warn "Remaining is $remain\n";
+	warn "Matched $matched rows";
+    }
+
+
+    return ($decode_ok) ? 0 : 1;
 }
 
 
