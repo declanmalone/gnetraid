@@ -271,7 +271,7 @@ if ($packets) {
     print "All packets produced\n";
     exit (0);
 }
-
+sub check_symbol_f2;
 # Loop producing packets until message decoded fully into @symbol
 sub codec_f2 {
     my ($rp, $matched) = (0,0);
@@ -288,7 +288,8 @@ sub codec_f2 {
 	    ($i, $code, $sym) = encode_block_f2();
 	    ++$rp;		# received packets
 	}
-	if (pivot_f2($i, $code, $sym) == 0) {
+	check_symbol_f2($i,$code,$sym);
+	if (pivot_f2($i, "$code", "$sym") == 0) {
 	    warn "Trying to solve\n";
 	    last if solve_f2() == 0;
 	    warn "After initial solve, need to go again\n";
@@ -312,7 +313,7 @@ sub codec_f2 {
     for (0 .. $gen-1) {
 	die unless $msg[$_] eq $message[$_];
     }
-    warn "Matched $matched source <=> decoded blocks\n";
+    warn "Matched $matched source <=> decoded blocks";
     $in  = unpack("H*", $message[0]);
     $out = unpack("H*", $symbol[0]);
     warn "Input block 0 was $in\n";
@@ -412,7 +413,23 @@ sub encode_block_f256 {
     return ($i, $code_vector, $block);
 }
 
-
+# Like encode_block_f2, but instead of randomly generating a code,
+# takes i and code and checks that the symbol is correct.
+sub check_symbol_f2 {
+    my ($i,$code,$sym,$msg) = @_;
+    $msg = "" unless defined $msg;
+    warn "Checking: i is $i\n";
+    warn "Checking: Code is " . (unpack "B*", $code) . "\n";
+    my $check = "$message[$i]";
+    for (0..$alpha-1) {
+	my $bit = vec_bit($_);
+	my $j = ($i + $_ + 1) % $gen;
+	next unless vec($code,$bit,1) == 1;
+	warn "Checking: XORing in \$message[$j]\n";
+	$check ^= "$message[$j]";
+    }
+    die "Symbol not correct. $msg\n" unless $sym eq $check;
+}
 
 
 
@@ -437,35 +454,42 @@ sub pivot_f2 {
 	warn "Row $i is occupied\n";
  	warn "Row code is ", (unpack "B*", $coding[$i]), "\n";
 	warn "Our code is ", (unpack "B*", $code), "\n";
-	
+
+	die unless length $code == length $zero_code;
 
 	# My inline C routines for vec_clz and vec_ctz can go off the
 	# ends of the array, so before calling them, I must make sure
 	# that the array isn't zero.
-	die unless length $code == length $zero_code;
-
-	if (1) {     # BUG... fixed
+	if (1) {     # BUG... fixed (check for zero code first)
 	    my ($ctz_row, $ctz_code) = ($alpha,$alpha);
 
-	    $ctz_code  = vec_ctz("$code") 
-		unless $code eq $zero_code;
-	    $ctz_row  = vec_ctz("$coding[$i]")
-		unless "$coding[$i]" eq $zero_code;
+	    $ctz_code = vec_ctz("$code")       unless $code eq $zero_code;
+	    $ctz_row  = vec_ctz("$coding[$i]") unless $coding[$i] eq $zero_code;
 
 	    warn "ctz_row  is $ctz_row\n";
 	    warn "ctz_code is $ctz_code\n";
 	    if ($ctz_code > $ctz_row) {
 		warn "Evicting row $i\n";
+		check_symbol_f2($i,$coding[$i],$symbol[$i], "(evicted)");
 		($code, $coding[$i]) = ("$coding[$i]", "$code");
 		($sym,  $symbol[$i]) = ("$symbol[$i]", "$sym");
 	    }
 	}
 
+	# Bug fix?... don't XOR something with a copy of itself!
+	# (actually, was already handled in the code below)
+	if ("$coding[$i]" eq "$code") {
+	    die "Inconsistent packet symbol received for row $i\n"
+		if "$symbol[$i]" ne "$sym";
+	    return $remain;
+	}
+
 	# Substitute the existing code vector and symbol into the ones
 	# we're trying to insert
 	#
-	# Note: I see that recent versions of perl let you do xors
-	# (as well as and, or, and bitwise not) on strings directly.
+	# Note: I see that recent versions of perl let you do xors (as
+	# well as and, or, and bitwise not) on strings directly, so
+	# I'll use that.
 	if (0) {
 	    fast_xor_strings(\$code, "$coding[$i]");
 	    fast_xor_strings(\$sym,  "$symbol[$i]");
@@ -475,22 +499,19 @@ sub pivot_f2 {
 	}
 	warn "Our code is ", (unpack "B*", $code), " after XOR\n";
 
-	# The implicit '1' before the aperture has been cancelled, so
-	# if the aperture has also gone to zero, we expect the symbol
+	# The implicit '1' before the code has been cancelled, so if
+	# the code itself has also gone to zero, we expect the symbol
 	# to also be cancelled (another self-check).
 	if ($code eq $zero_code) {
-
 	    warn "Our code got cancelled\n";
-	    #return $remain;
-	    
 	    die "failed: zero code vector => zero symbol (i=$i)"
 		unless $sym eq $zero_block;
 	    warn "As expected, so did our symbol\n";
 	    return $remain;
 	}
 
-	# update the coding vector and i
-	warn "Updating coding vector, i\n";
+	# update the coding vector and i (symbol done already)
+	warn "Updating coding vector and i\n";
 	warn "old i: $i\n";
 	warn "code is ", (unpack "B*", $code), "\n";
 	my $clz_code = vec_clz("$code");
@@ -499,7 +520,9 @@ sub pivot_f2 {
 	warn "shifted code is ", (unpack "B*", $code), "\n";
 	$i += $clz_code + 1;
 	$i -= $gen if $i >= $gen;
-	warn "new i: $i"
+	warn "new i: $i";
+
+	check_symbol_f2($i,$code,$sym, "(after attempted pivot)");
     }
 
     carp "Bailed out trying to pivot element after $tries tries\n";
@@ -646,22 +669,32 @@ sub solve_f2 {
 		} else {
 		    # We have to find the right i value by using vec_clz
 		    warn "Re-pivoting alpha row $diag\n";
-		    my $lz = vec_clz("$arows[$diag]");
-		    my $i = $gen - $alpha + $diag; # existing row
-		    $i += $lz + 1;		   # skip first 1
 		    my $code = "$arows[$diag]";
 		    warn "Code before shift: " . (unpack "B*", $code) . "\n";
 		    my $sym  = $symbol[$gen - $alpha + $diag];
+		    my $i = $gen - $alpha + $diag; # existing row
+
+		    # Can't check symbol yet, because we have to find the
+		    # first 1 value and skip it.
+		    #check_symbol_f2($i,"$code","$sym", "(before repivot)");
+
+		    # Now try to repivot
+		    my $lz = vec_clz("$arows[$diag]");
+		    $i += $lz + 1;		   # skip first 1
 		    vec_shl($code, $lz + 1);
 		    warn "Code after shift: " . (unpack "B*", $code) . "\n";
 		    warn "Symbol: " . (unpack "B*", $sym) . "\n";
 		    $i %= $gen;
 		    warn "new i: $i\n";
-		    #push @pivot_queue, [$i, $code, $sym];
 
-		    # Clear out the hole
+		    # The last (?!) remaining bug is triggered here...
+		    check_symbol_f2($i,"$code","$sym", "(after repivot)");
+		    #push @pivot_queue, [$i, "$code", "$sym"];
+
+		    # Clear out the hole everywhere
 		    $arows [$diag]                 = $zero_alpha;
 		    $symbol[$gen - $alpha + $diag] = $zero_block;
+		    $coding[$gen - $alpha + $diag] = $zero_code;
 		}
 		# skip to next diagonal element so that we end
 		# with echelon form
@@ -712,7 +745,7 @@ sub solve_f2 {
     # back into @coding
     $coding[$gen - 1] = $zero_alpha;
     $shl = 1;			# shift left by one to remove diagonal
-    for my $i (0 .. $alpha - 2) {
+    for my $i (0 .. $alpha - 1) {
 	my $code = "$arows[$i]";
 	vec_shl($code,$shl);
 	$coding[$gen - $alpha + $i] = $code;
