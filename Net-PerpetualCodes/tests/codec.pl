@@ -637,36 +637,42 @@ sub solve_f2 {
 		$filled[$gen - $alpha + $diag] = 0;
 		$remain++;
 		die if length($arows[$diag]) != length($zero_alpha);
+		warn "No ones found to swap with in column $diag\n";
 		if ($arows[$diag] eq $zero_alpha) {
 		    # no, completely cancelled: discard it
-		    warn "cancelled alpha row was zero\n";
-
+		    warn "Cancelled alpha row was zero, not re-pivoting\n";
 		    die "bug: cancelled alpha row had nonzero symbol"
 			if $symbol[$diag + $gen - $alpha] ne $zero_block;
 		} else {
 		    # We have to find the right i value by using vec_clz
+		    warn "Re-pivoting alpha row $diag\n";
 		    my $lz = vec_clz("$arows[$diag]");
 		    my $i = $gen - $alpha + $diag; # existing row
 		    $i += $lz + 1;		   # skip first 1
 		    my $code = "$arows[$diag]";
+		    warn "Code before shift: " . (unpack "B*", $code) . "\n";
 		    my $sym  = $symbol[$gen - $alpha + $diag];
 		    vec_shl($code, $lz + 1);
-		    push @pivot_queue, [($i % $gen), $code, $sym];
-		    # remember to blank this arow here so that at the
-		    # end, when decode_ok != 1, we don't try to push
-		    # updates to this row back into @coding.
-		    warn "hole in submatrix after decoding";
-		    $arows[$diag] = $zero_alpha;
+		    warn "Code after shift: " . (unpack "B*", $code) . "\n";
+		    warn "Symbol: " . (unpack "B*", $sym) . "\n";
+		    $i %= $gen;
+		    warn "new i: $i\n";
+		    #push @pivot_queue, [$i, $code, $sym];
+
+		    # Clear out the hole
+		    $arows [$diag]                 = $zero_alpha;
 		    $symbol[$gen - $alpha + $diag] = $zero_block;
 		}
 		# skip to next diagonal element so that we end
 		# with echelon form
 		next ZERO_BELOW;
+
 	    } else {
 		# we did find a row to swap with; swap in arows and
 		# symbol tables.
+		warn "Row $swap_row has a 1, so swapping with row $diag (0)\n";
 		my $gen_base = $gen - $alpha;
-		@arows[$diag,$swap_row] = @arows[$swap_row,$diag];
+		@arows [$diag,$swap_row] = @arows[$swap_row,$diag];
 		@symbol[$gen_base + $diag, $gen_base + $swap_row] =
 		    @symbol[$gen_base + $swap_row, $gen_base + $diag];
 		if (0) {
@@ -701,8 +707,7 @@ sub solve_f2 {
 	    warn "| $r |\n";
 	}
     }
-    
-    
+
     # Have been working on @arows, now have to move updated values
     # back into @coding
     $coding[$gen - 1] = $zero_alpha;
