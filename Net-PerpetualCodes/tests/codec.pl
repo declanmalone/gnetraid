@@ -5,7 +5,7 @@ use warnings;
 
 use v5.20;
 
-my $debug = 0;
+my $debug = 2;
 
 use Inline 'C';
 
@@ -100,7 +100,7 @@ my $qbits = log($q) / log(2);
 die "Alpha times bits(field) must be a multiple of 8 bits\n" 
     if $alpha * $qbits % 8;
 
-# Meaning that we can do this:
+
 my $zero_code  = "\0" x ($alpha * $qbits >> 3);
 my $zero_block = "\0" x $blocksize; # independent of alpha, gen, q
 
@@ -120,11 +120,13 @@ my @pivot_queue = ();
 sub encode_block_f2;
 sub encode_block_f256;
 sub solve_f2;
+sub solve_f256;
 sub codec_f2;
+sub codec_f256;
 
 # Tests available from command line as '--test <what>'
 my %valid_tests = map { $_ => undef } qw(
-   vec_mul solve_f2 codec_f2 vec_clz vec_ctz vec_shl
+   vec_mul solve_f2 codec_f2 vec_clz vec_ctz vec_shl codec_f256
 );
 
 if ($test_what) {
@@ -252,6 +254,9 @@ if ($test_what) {
 
     } elsif ($test_what eq "codec_f2") {
 	codec_f2;
+
+    } elsif ($test_what eq "codec_f256") {
+	codec_f256;
     }
 
     exit;
@@ -294,6 +299,61 @@ sub codec_f2 {
 	if (pivot_f2($i, "$code", "$sym") == 0) {
 	    warn "Trying to solve\n";
 	    last if solve_f2() == 0;
+	    warn "After initial solve, need to go again\n";
+	    $matched = 0;
+	    for (0 .. $gen-1) {
+		++$matched if $msg[$_] eq $symbol[$_];
+	    }
+	    # Check for corruption of original array
+	    for (0 .. $gen-1) {
+		die unless $msg[$_] eq $message[$_];
+	    }
+	    warn "Matched $matched source <=> decoded blocks\n";
+	}
+    };
+    warn "Fully decoded after $rp packets\n";
+    $matched = 0;
+    for (0 .. $gen-1) {
+	++$matched if $msg[$_] eq $symbol[$_];
+    }
+    # Check for corruption of original array
+    for (0 .. $gen-1) {
+	die unless $msg[$_] eq $message[$_];
+    }
+    warn "Matched $matched source <=> decoded blocks";
+    if ($debug) {
+	$in  = unpack("H*", $message[0]);
+	$out = unpack("H*", $symbol[0]);
+	warn "Input block 0 was $in\n";
+	warn "Output block 0 was $out\n";
+	$in  = unpack("H*", $message[$gen - 1]);
+	$out = unpack("H*", $symbol[$gen - 1]);
+	warn "Input block $gen-1 was $in\n";
+	warn "Output block $gen-1 was $out\n";
+    }
+    exit;
+}
+
+sub check_symbol_f256;
+sub codec_f256 {
+    my ($rp, $matched) = (0,0);
+    warn "Seed: $seed\n";
+    my @msg = @message;
+    my ($in,$out);
+    while (1) {
+	my ($i, $code, $sym);
+	if (@pivot_queue) {
+	    my $new = shift @pivot_queue;
+	    ($i, $code, $sym) = @{$new};
+	    warn "Re-pivoting\n";
+	} else {
+	    ($i, $code, $sym) = encode_block_f256();
+	    ++$rp;		# received packets
+	}
+	check_symbol_f256($i,$code,$sym) if $debug>1;
+	if (pivot_f256($i, "$code", "$sym") == 0) {
+	    warn "Trying to solve\n";
+	    last if solve_f256() == 0;
 	    warn "After initial solve, need to go again\n";
 	    $matched = 0;
 	    for (0 .. $gen-1) {
@@ -435,12 +495,30 @@ sub check_symbol_f2 {
     die "Symbol not correct. $msg\n" unless $sym eq $check;
 }
 
-
+# Like encode_block_f2, but instead of randomly generating a code,
+# takes i and code and checks that the symbol is correct.
+sub check_symbol_f256 {
+    my ($i,$code,$sym,$msg) = @_;
+    $msg = "" unless defined $msg;
+    warn "Checking: i is $i\n";
+    warn "Checking: Code is " . (unpack "H*", $code) . "\n";
+    my $check = "$message[$i]";
+    my $k;
+    for my $bit (0..$alpha-1) {
+	my $j = ($i + $bit + 1) % $gen;
+	$k = substr $code, $bit, 1;
+	next if "\0" eq $k;
+	warn "Checking: XORing in $k times \$message[$j]\n";
+	gf256_vec_fma($check, "$message[$j]", $k);
+    }
+    die "Symbol not correct. $msg\n" unless $sym eq $check;
+}
 
 # Pivot will return the number of additional pivots required
 sub pivot_f2 {
 
     my ($i, $code, $sym) = @_;
+    my $zero_code  = "\0" x ($alpha * $qbits >> 3);
 
     my $tries = 0;
     while (++$tries < $gen * 2) {
@@ -541,9 +619,79 @@ sub pivot_f2 {
     return $remain;
 }
 
+sub pivot_f256 {
+    my ($i, $code, $sym) = @_;
+    my $zero_code = "\0" x $alpha;
+
+    my $tries = 0;
+    while (++$tries < $gen * 2) {
+	warn "Trying to pivot into row $i\n" if $debug;
+	if ($filled[$i] == 0) {
+	    warn "Successfully pivoted into row $i\n" if $debug;
+	    $filled[$i] = 1;
+	    $coding[$i] = $code;
+	    $symbol[$i] = $sym;
+	    return --$remain
+	}
+	if ($debug) {
+	    warn "Row $i is occupied\n";
+	    warn "Row code is ", (unpack "H*", $coding[$i]), "\n";
+	    warn "Our code is ", (unpack "H*", $code), "\n";
+	}
+	die unless $alpha == length $code;
+
+	if (1) {
+	    my ($ctz_row, $ctz_code);
+	    $coding[$i] =~ m/(\0*)$/; $ctz_row  = length($1);
+	    $code       =~ m/(\0*)$/; $ctz_code = length($1);
+	    warn "ctz_row  is $ctz_row\n"  if $debug;
+	    warn "ctz_code is $ctz_code\n" if $debug;
+
+	    if ($ctz_code > $ctz_row) {
+		warn "Evicting row $i\n" if $debug;
+		check_symbol_f256($i,$coding[$i],$symbol[$i], "(evicted)")
+		    if $debug > 1;
+		($code, $coding[$i]) = ("$coding[$i]", "$code");
+		($sym,  $symbol[$i]) = ("$symbol[$i]", "$sym");
+	    }
+	}
+
+	$code ^= "$coding[$i]";
+	$sym  ^= "$symbol[$i]";
+	warn "Our code is ", (unpack "H*", $code), " after XOR\n" if $debug;
+
+	if ($code eq $zero_code) {
+	    warn "Our code got cancelled\n" if ($debug);
+	    die "failed: zero code vector => zero symbol (i=$i)"
+		unless $sym eq $zero_block;
+	    warn "As expected, so did our symbol\n" if ($debug);
+	    return $remain;
+	}
+	# update the coding vector and i (symbol done already)
+	if ($debug) {
+	    warn "Updating coding vector and i\n";
+	    warn "old i: $i\n";
+	    warn "code is ", (unpack "H*", $code), "\n";
+	}
+	$code       =~ m/^(\0*)/;
+	my $clz_code = length($1);
+	warn "$clz_code leading zeroes\n" if $debug;
+	$code = substr($code, $clz_code + 1) . ("\0" x ($clz_code + 1));
+	warn "shifted code is ", (unpack "H*", $code), "\n" if $debug;
+	$i += $clz_code + 1;
+	$i -= $gen if $i >= $gen;
+	warn "new i: $i" if $debug;
+
+	check_symbol_f256($i,$code,$sym, "(after attempted pivot)")
+	    if $debug > 1;
+    }
+    carp "Bailed out trying to pivot element after $tries tries\n";
+    return $remain;
+}
+
 sub vec_bit {
-    my $bit = shift;
-    (($bit >> 3) << 3) + (7 - $bit & 7);
+    # my $bit = shift;
+    (($_[0] >> 3) << 3) + (7 - $_[0] & 7);
 }
 
 sub solve_f2 {
@@ -555,10 +703,11 @@ sub solve_f2 {
     # 3. back-propagation to clear any 1's apart from on main diagonal
     #
     # The second step can fail if there are not enough 1's to produce
-    # a diagonal. However, we can still continue the algorithm so long
-    # as we clear any zeros from underneath the diagonal. We'll report
-    # the problem to the calling program, which will go back into the
-    # loop where it waits for a new packet to fill any remaining holes.
+    # a diagonal. However, we can still continue the pivot algorithm
+    # so long as we clear any zeros from underneath the diagonal in
+    # the remaining rows. We'll report the problem to the calling
+    # program, which will go back into the loop where it waits for a
+    # new packet to fill any remaining holes.
     #
     # The first step breaks the optimisation of only storing alpha
     # values per matrix row. I'll use vec and bitwise string xor
@@ -853,6 +1002,327 @@ sub solve_f2 {
     return ($decode_ok) ? 0 : 1;
 }
 
+sub solve_f256 {
+
+    # steps: same as in solve_f2
+    #
+    #
+    my $j = 0;
+
+    # Upgrade last alpha rows to full matrix rows
+    my @arows;
+    do {
+	my ($from,$row) = ($coding[$gen - $alpha + $j++]); # NB: ++
+	$row  = substr $from, -$j, $j, ''; # splice from tail end
+	$row .= "\0" x ($gen - $alpha -1);
+	$row .= "\01$from";
+	die unless $gen == length $row;
+	push @arows, $row;
+
+    } until ($j == $alpha);
+
+    # Dump out the @arows version of the matrix
+    if ($debug) {
+	warn "Alpha matrix after creation\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "H*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+
+    # Step 1: Forward propagation!
+
+    # No need for bit shifts, since everything is byte-aligned.
+    # However, we do need to multiply a code/symbol row above before
+    # xoring it into the row below.
+    #
+    # Note that gf256_vec_fma operates on strings of equal length, so
+    # we need to do a bit of string splicing.
+
+    for my $diag (0 .. $gen - $alpha - 1) {
+	for my $arow (0 .. $alpha - 1) {
+	    my $k = substr $arows[$arow], $diag, 1; # mult. factor
+	    next if "\0" eq $k;
+
+	    # skip the first element containing k, since it's implicit
+	    # in the main coding vector table.
+	    my $updated = substr $arows[$arow], $diag + 1, $alpha;
+	    # $updated = "$updated"; # just in case
+	    gf256_vec_fma($updated, $coding[$diag], $k);
+	    # leading k is implicitly cancelled, so make it explicit
+	    substr $arows[$arow], $diag, $alpha + 1, "\0$updated";
+
+	    # Likewise, multiply and add to the symbol table entry
+	    gf256_vec_fma($symbol[$gen - $alpha + $arow],
+			  $symbol[$diag], $k);
+	    
+	}
+    }
+
+    warn "Did step 1";
+
+    # Dump out the @arows version of the matrix
+    if ($debug) {
+	warn "Alpha matrix after step 1\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "H*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+
+    # Step 2: convert submatrix at bottom right to echelon form
+    # (what [2015] called "inversion")
+
+    my $decode_ok = 1;		# be optimistic
+    my $zero_alpha = "\0" x $alpha;
+    # reduce @arows to alpha * alpha
+    for (0..@arows -1) {
+	substr $arows[$_], 0, ($gen - $alpha), '';
+	warn "Length now " . length($arows[$_]) if $debug;
+    }
+
+    # Dump out the @arows version of the matrix
+    if ($debug) {
+	warn "Alpha matrix after reduction to alpha x alpha\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "H*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+
+
+  ZERO_BELOW:
+    for my $diag (0 .. $alpha - 1) { ## BUG (not really)
+	my $swap_row = $diag;
+	my $k = substr $arows[$diag], $diag, 1;
+	if ("\0" eq $k) {
+	  SWAP_ROW:
+	    for my $down_row ($diag + 1 .. $alpha - 1) {
+		if ("\0" ne substr $arows[$down_row], $diag, 1) {
+		    warn "Swapping row $swap_row with $down_row" if $debug;
+		    $swap_row = $down_row;
+		    last SWAP_ROW;
+		}
+	    }
+	    if ($swap_row == $diag) {
+
+		# Skipping implementation for now. It's more likely
+		# that we won't get here because the probability that
+		# the rows are all linearly independent is much better
+		# than for F_2.
+		...;
+
+		    
+		# this column is all 0's, so see if we need to
+		# re-pivot the row
+		$decode_ok = 0;
+		# either way, we remove this row from the big matrix
+		$filled[$gen - $alpha + $diag] = 0;
+		$remain++;
+		die if length($arows[$diag]) != length($zero_alpha);
+		warn "No ones found to swap with in column $diag\n" if $debug;
+		if ($arows[$diag] eq $zero_alpha) {
+		    # no, completely cancelled: discard it
+		    warn "Cancelled alpha row was zero, not re-pivoting\n" if $debug;
+		    die "bug: cancelled alpha row had nonzero symbol"
+			if $symbol[$diag + $gen - $alpha] ne $zero_block;
+		} else {
+		    # We have to find the right i value by using vec_clz
+		    warn "Re-pivoting alpha row $diag\n" if $debug;
+		    my $code = "$arows[$diag]";
+		    warn "Code before shift: " . (unpack "B*", $code) . "\n"
+			if $debug;
+		    my $i    = $gen - $alpha + $diag; # existing row
+		    my $sym  = $symbol[$i];
+
+		    # Can't check symbol yet, because we have to find the
+		    # first 1 value and skip it.
+		    #check_symbol_f2($i,"$code","$sym", "(before repivot)");
+
+		    # Now try to repivot
+		    my $lz = vec_clz("$arows[$diag]");
+		    $i += ($lz-$diag); # don't count triangle of zeroes
+		    vec_shl($code, $lz + 1);
+		    if ($debug) {
+			warn "Code after shift: " . (unpack "B*", $code) . "\n";
+			warn "Symbol: " . (unpack "B*", $sym) . "\n";
+		    }
+		    $i %= $gen;
+		    warn "new i: $i\n" if $debug;
+
+		    # The last (?!) remaining bug is triggered here...
+		    check_symbol_f2($i,"$code","$sym", "(after repivot)")
+			if $debug>1;
+		    push @pivot_queue, [$i, "$code", "$sym"];
+
+		    # Clear out the hole everywhere
+		    $arows [$diag]                 = $zero_alpha;
+		    $symbol[$gen - $alpha + $diag] = $zero_block;
+		    $coding[$gen - $alpha + $diag] = $zero_code;
+		}
+		# skip to next diagonal element so that we end
+		# with echelon form
+		next ZERO_BELOW;
+
+	    } else {
+		# Back to implementing for F_256 ...
+
+		# Actually, this bit should be unchanged from F_2
+		warn "Row $swap_row has a non-zero element. " .
+		    "Swapping with row $diag (0)\n" if $debug;
+		my $gen_base = $gen - $alpha;
+		@arows [$diag,$swap_row] = @arows[$swap_row,$diag];
+		@symbol[$gen_base + $diag, $gen_base + $swap_row] =
+		    @symbol[$gen_base + $swap_row, $gen_base + $diag];
+
+		# This is new:
+		$k = substr $arows[$diag], $diag, 1;
+	    }
+	}
+
+	# Add an extra step here: normalise the diagonal to 1
+	if ("\0" eq $k) {
+	    0 or die;
+	} elsif ("\001" eq $k) {
+	    1;
+	} else {
+	    my $inv_k = gf256_inv_elem(ord $k); # calculate 1/k
+	    gf256_vec_mul($arows[$diag],  $inv_k);
+	    gf256_vec_mul($symbol[$gen - $alpha, $diag], $inv_k);
+	}
+
+	# use the diagonal to cancel non-zero values below (start from
+	# swap_row + 1: we might have skipped some zeros)
+	for my $down_row ($swap_row + 1 .. $alpha - 1) {
+	    my $k = substr $arows[$down_row], $diag, 1;
+	    next if $k eq "\0";
+
+	    # The diagonal element above has been normalised to 1, so
+	    # we can do the same kind of fma as before, except now that
+	    # we're working with 2 @arows, the 1's are explicit
+
+	    gf256_vec_fma($arows[$down_row], $arows[$diag], $k);
+	    my $gen_base = $gen - $alpha;
+	    gf256_vec_fma($symbol[$gen_base + $down_row], 
+			  $symbol[$gen_base + $diag], $k);
+	}
+
+	# More debug messages...
+	if ($debug) {
+	    warn "Alpha matrix after clearing column $diag\n";
+	    for (0..$alpha -1) {
+		my $r = unpack "H*", $arows[$_];
+		warn "| $r |\n";
+	    }
+	}
+
+
+    }
+
+    # Dump out the @arows version of the matrix
+    if ($debug) {
+	warn "Alpha matrix after \"inversion\"\n";
+	for (0..$alpha -1) {
+	    my $r = unpack "H*", $arows[$_];
+	    warn "| $r |\n";
+	}
+    }
+
+    # Have been working on @arows, now have to move updated values
+    # back into @coding
+    for my $i (0 .. $alpha - 1) {
+	my $zero_padded = $arows[$i] . $zero_alpha;
+	$coding[$gen - $alpha + $i] = substr($zero_padded, $i + 1, $alpha)
+    }
+    
+    # Dump out the last alpha rows of @coding
+    if ($debug) {
+	warn "Coding matrix after conversion from \@arows\n";
+	my $matched = 0;
+	for (0 .. $gen - 1) {
+	    my $r = unpack "H*", $coding[$_];
+	    my $fill = $filled[$_] ? "[FILLED] " : "         ";
+	    my $match = ($message[$_] eq $symbol[$_]) ?
+		(++$matched, " [MATCH]") : "";
+	    warn "| $r | $fill $match\n";
+	    warn "+-" . ("-" x $alpha) . "-+" if $gen - $alpha -1 == $_;
+	}
+	warn "Remaining is $remain\n";
+	warn "Matched $matched rows";
+    }
+
+    warn "Did step 2" if $debug;
+
+    return 1 unless $decode_ok;
+
+    # Before I implement the next bit, I'm going to just make sure
+    # that there are no syntax errors, then go back and test what
+    # happens in the F_2 code when I don't update the coding vector in
+    # step 3.
+    #
+    # My intuition is that all we have to do here is just substitute
+    # symbols.
+
+    # Actually, scratch that. The code below is simple enough for me
+    # to just finish changing it...
+    
+    # Step 3: back-substitute
+    #
+    # This is straightforward, but we're back to using the compressed
+    # matrix form. Note that we only have to update the @symbol table.
+    # We don't need to update @coding because it's implied that it's
+    # going to end up with zero values to the right of the diagonal.
+    my $diag = $gen - 1;	# bottom right
+    do {
+	# Counter is usually alpha, but not when we get to the top
+	# of the matrix.
+	my $rows = $alpha < $diag ? $alpha : $diag;
+	#warn "Rows is $rows\n";
+	#$rows = $diag;	# DEBUG
+	warn "Working up from row $diag\n" if $debug;
+	if ($rows) {
+	    my $i = $diag - 1;	# row pointer
+	    my $bit = 0;
+	    die if $i < 0;
+	    do {
+		warn "Checking bit $bit of coding/symbol $i\n" if $debug;
+		my $k = substr $coding[$i], $bit, 1;
+		if ("\0" eq $k) {
+		    warn " =0: not substituting\n" if $debug;
+		} elsif ("\1" eq $k) {
+		    warn " =1 : substituting use XOR\n" if $debug;
+		    $symbol[$i] ^= $symbol[$diag];
+		    # do clear the bit in case 
+		    substr $coding[$i], $bit, 1, "\0";
+		} else {
+		    warn " >1 : substituting using vec_fma\n" if $debug;
+		    gf256_vec_fma($symbol[$i], $symbol[$diag], $k);
+		    # do clear the bit in case 
+		    substr $coding[$i], $bit, 1, "\0";
+		}
+	    } while (++$bit, --$i, --$rows);
+	}
+    } while (--$diag);		# stop at top row
+
+    # After decoding
+    if ($debug) {
+	warn "Matrix after final back-propagation:\n";
+	my $matched = 0;
+	for (0 .. $gen - 1) {
+	    my $r = unpack "H*", $coding[$_];
+	    my $fill = $filled[$_] ? "[FILLED] " : "         ";
+	    my $match = ($message[$_] eq $symbol[$_]) ?
+		(++$matched, " [MATCH]") : "";
+	    warn "| $r | $fill $match\n";
+	    warn "+-" . ("-" x $alpha) . "-+" if $gen - $alpha -1 == $_;
+	}
+	warn "Remaining is $remain\n";
+	warn "Matched $matched rows";
+    }
+
+    return ($decode_ok) ? 0 : 1;
+}
+
 
 __END__
 __C__
@@ -937,6 +1407,7 @@ void vec_shl(SV *sv, unsigned b) {
     while (full_bytes--) { *(s++) = (char) 0; }
 }
 
+// Field operations (single/pair of elements)
 const static unsigned char exp_table[];
 const static signed short log_table[];
 
@@ -944,6 +1415,12 @@ unsigned char gf256_mul_elems(unsigned char a, unsigned char b) {
     const static char         *exp =  exp_table + 512;
     const static signed short *log =  log_table;
     return exp[log[a] + log[b]];
+}
+
+unsigned char gf256_inv_elem(unsigned char a) {
+    const static char         *exp =  exp_table + 512;
+    const static signed short *log =  log_table;
+    return exp[255-log[a]];
 }
 
 // multiply all elements of a vector by a constant.
