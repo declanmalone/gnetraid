@@ -693,8 +693,12 @@ sub pivot_f256 {
 }
 
 sub vec_bit {
-    # my $bit = shift;
-    (($_[0] >> 3) << 3) + (7 - $_[0] & 7);
+    return (($_[0] >> 3) << 3) + (7 - $_[0] & 7);
+    # Alternative way of phrasing this (seems to be a bit slower, even
+    # with fewer ops: shows overhead of naming variables):
+    my $bit = shift;
+    my $mask = $bit & 7;
+    return ($bit ^ $mask) + 7 - $mask;
 }
 
 sub solve_f2 {
@@ -978,7 +982,7 @@ sub solve_f2 {
 		    warn "1: substituting\n" if $debug;
 		    $symbol[$i] ^= "$symbol[$diag]";
 		    # do clear the bit in case 
-		    vec($coding[$i], vec_bit($bit), 1) = 0;
+		    # vec($coding[$i], vec_bit($bit), 1) = 0;
 		} else {
 		    warn "0: not substituting\n" if $debug;
 		}
@@ -1051,7 +1055,7 @@ sub solve_f256 {
 	    # in the main coding vector table.
 	    my $updated = substr $arows[$arow], $diag + 1, $alpha;
 	    # $updated = "$updated"; # just in case
-	    gf256_vec_fma($updated, $coding[$diag], ord $k);
+	    # gf256_vec_fma($updated, $coding[$diag], ord $k);
 	    # leading k is implicitly cancelled, so make it explicit
 	    substr $arows[$arow], $diag, $alpha + 1, "\0$updated";
 
@@ -1332,7 +1336,187 @@ sub solve_f256 {
     return ($decode_ok) ? 0 : 1;
 }
 
+# The remaining is a rewrite to handle the scheme described in:
+#
+# "Perpetual Codes: Cache-friendly Coding", Petar Maymounkov, 2006
+#
+# Some differences:
+#
+# * encoded packets for row i don't have to have source block [i]
+#   incorporated in it. (this might have some implication for the row
+#   "eviction" code I borrowed for the implementation above)
+#
+# * a pre-coding step adds two types of redundant symbols, which are
+#   interleaved with message blocks.
+#
+# * these are basically random source blocks, not constrained to being
+#   selected from the apterture (alpha)
+#
+# * stops decoding when the main matrix (labelled 'A') is "almost"
+#   full, and then attempts to solve the full set of equations by
+#   substituting it into the other matrix (labelled B) containing the
+#   sparse, random redundancy blocks.
+#
+# * an optimisation that reduces the work in the previous step
+#   (labelled "Inner System Disjoin")
+#
+# * some notes on implementation, such as organisation of matrices in
+#   memory (or an external file) in order to ensure decoded symbols
+#   are contiguous, and to optimise for a forward scan of data where
+#   possible.
+#
+# * a new set of parameters relating to the pre-coding step
 
+# Implementation details
+#
+# Option handling and function naming gets a little bit unweildy when
+# we've got two major axes:
+#
+# * choice of algorithm
+# * choice of field
+#
+# I might just write a parallel implementation of all the high-level
+# routines (such as pivot_f2), but I'll need to rename the existing
+# subs. I think that the easiest way to name them is after the
+# respective papers that I'm following. So these will be _2015 for the
+# current implementation above, and _2006 for the new one, below.
+#
+# I had considered jumping straight to a C implementation for the new
+# algorithms, but it seems that it's better to iron out the kinks in
+# Perl first, get the thing working, and then look at how I can
+# approach the C version.
+#
+# Due to interleaving of source blocks and redundant blocks, as well
+# as the desire to have each matrix contiguous in its own memory
+# space, I will need some sort of permutation system. For example, in
+# the previous code, I worked with the @coding and @symbol matrices
+# (vectors, really). In the new code, however, a given row in these
+# could refer to:
+#
+# * a zero block, which the pre-code adds at the start of the stream
+#   for padding (to eliminate the forward substitution step in [2016].
+#
+# * a source message block
+#
+# * a redundant symbol (the two types can be stored in the same matrix
+#   and have compatible types)
+#
+# Strictly speaking, this sort of permutation/depermutation is only of
+# interest for the @symbol matrix. Each element in a coding vector can
+# refer to different types of symbol.
+#
+# I can re-use the existing compact interpretation of the coding
+# vector array (plus a new permutation layer to map the effective row
+# i to the correct symbol), but I will need to have a different
+# representation for the random redundant symbols. I assume that the
+# zero blocks do not need explicit storage. Or that I will have to
+# store no more than one of them.
+#
+# There are actually two ways to handle the mapping of i (and
+# effective i) values used to index the @coding array to the
+# appropriate symbol table entries:
+#
+# 1. by means of a permutation function (and its inverse, if needed);
+#    
+# 2. by means of a lookup table
+#
+# The second method would store references to the appropriate symbol
+# table entry, so an extra dereferencing step would be needed to
+# access the symbol. A similar table of references would work in
+# reverse, too, should we need to convert i references in the B
+# (redundancy) matrix into the correct source message blocks within A.
+#
+# The formulation of the permutation function in the paper uses a
+# formal numerical description, which is quite difficult to follow,
+# although it seems to simply boil down to saying that the two types
+# of non-zero redundant symbols should be inserted at equal intervals
+# among the source symbols.
+#
+# The paper suggests that the gamma value (which determines the number
+# of non-zero redundant blocks) be a rational number, and that it
+# creates a spread of redundant blocks that book-ends the non-zero
+# values. For example:
+#
+# | 0 0 0 R m m R m m R m m R |
+#
+# We might also use something like Bresenham's line drawing algorithm
+# to find the correct points.
+#
+# For longer sequences where everything to the right of the first R
+# does not divide into equal m,m,..,m,R segments, we have to use the
+# accumulated error (or the floor-based calculation mentioned in the
+# text) to decide to add a final m before the R or not.
+#
+# Interpreting this as line in two dimensions gives us an intuitive
+# way of looking at the permutation and its inverse, eg:
+#
+#     rho(i) 
+# R_last   ^        x
+# m_k-1	   |   	      
+# m_k-2	   |   	      
+# R_...	   |     x   
+# m_...	   |  	      
+# ...	   |  	      
+#	   |  x      
+# ...	   |  	      
+# m_0	   | 	      
+# R_0	   x	      
+# 0	   |	      
+# 0	   |	      
+# ...	   |	      
+# 0        |	
+#          +------------> R
+#          0  1  2  3
+#
+# This shows the mapping of R values in the redundancy matrix to
+# positions in the coding matrix. You can also go in the opposite
+# direction by transposing the graph.
+#
+# All i values and effective i values (ie, column positions to the
+# right of the diagonal) refer to the Y axis above, though logically
+# speaking we will have a redundant matrix B which is actually ordered
+# as per the X axis, and a disjoint "message matrix", which is the
+# complement of the B matrix (ignoring zero elements).
+#
+# I feel more comfortable calculating the mappings once and using
+# lookup tables (dealing with integers all the time) rather than using
+# numeric formulas.
+#
+#
+# "Filled" vector
+#
+# In the Inner System Disjoin step, coding vectors are effectively
+# shifted to the right of the matrix by some number of columns until
+# they align with a hole below (without wrap-around). We can do this
+# without needing to expand the compact form of @coding out into a
+# full matrix representation by shifting left the coded form after
+# back-substitution. However, this means that we have to track the
+# number of times the vector has shifted (logically, to the right
+# within the matrix, but physically left in the coded form). We can
+# re-use the @filled vector, but change it slightly:
+#
+# * before this step, we use a value of -1 to indicate the row is empty
+# * a value of 0 indicates fullness
+# * positive values indicates fullness + a shift of that amount
+#
+# After the step:
+#
+# | 1     1 0 1       | normalised, filled = 2 (shifted twice)
+# |   1   1 1 0       | normalised, filled = 1
+# |     1 0 0 1       | normalised, filled = 0 (not shifted)
+# |   ... 0 0 0 ...   | hole, filled = -1
+#
+#
+# About this step... I had previously imagined that it was carried out
+# from the top of the matrix to the bottom, but actually it is carried
+# out from the bottom up. In fact, it is basically a modification of a
+# normal back-propagation step except that instead of "pushing up" a 1
+# in a column as far as it will go, we "pull up" all diagonal elements
+# from below for a particular row. Also, we stop when we hit a hole
+# and treat that as if it were the end of the matrix.
+#
+#
+#
 __END__
 __C__
 /* Miscellaneous GF(2**8) stuff */
