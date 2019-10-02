@@ -5,7 +5,7 @@ use warnings;
 
 use v5.20;
 
-my $debug = 2;
+my $debug = 0;
 
 use Inline 'C';
 
@@ -103,11 +103,6 @@ die "Alpha times bits(field) must be a multiple of 8 bits\n"
 
 my $zero_code  = "\0" x ($alpha * $qbits >> 3);
 my $zero_block = "\0" x $blocksize; # independent of alpha, gen, q
-
-
-# Implement the algorithm over F2 first
-if ($q == 256) { ...  }
-
 
 # Simulate a square matrix of size $gen
 my @filled = ((0) x $gen);
@@ -458,32 +453,10 @@ sub encode_block_f256 {
 	if ($rand_int) {
 	    # I should really write a vector multiply method in
 	    # Math::FastGF2 (would speed this up a lot). 
-	    if ($hacky) {
-		# use Inline C routine
-		my $product = "$message[$j]"; # copy
-		if ("no" eq "mult, then add") {
-		    # do multiply-add as two steps
-		    gf256_vec_mul($product, chr $rand_int);
-		    fast_xor_strings(\$block, $product);
-		} else {
-		    # fused multiply-add
-		    gf256_vec_fma($block, $product, chr $rand_int);
-		}
-	    } else {
-		my $product = '';
-		my @elems = map { ord $_ } (split '', $message[$j]);
-		# my $a = $log_table[$rand_int];
-		for my $k (0 .. $blocksize - 1) {
-		    #		if (!$hacky) {
-		    $product .= chr gf256_mul_elems($rand_int, $elems[$k]);
-		    #		} else {
-		    # use lookup tables directly
-		    #		    $product .= 
-		    #			chr $exp_table[$a + $log_table[$elems[$k]] + 512];
-		    #		}
-		}
-		fast_xor_strings(\$block, $product)
-	    }
+
+	    # use Inline C routine
+	    my $product = "$message[$j]"; # copy
+	    gf256_vec_fma($block, $product, $rand_int);
 	}
 	++$j; $j = 0 if $j >= $gen;
     }
