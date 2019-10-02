@@ -127,6 +127,7 @@ sub codec_f256;
 # Tests available from command line as '--test <what>'
 my %valid_tests = map { $_ => undef } qw(
    vec_mul solve_f2 codec_f2 vec_clz vec_ctz vec_shl codec_f256
+   gf256_maths
 );
 
 if ($test_what) {
@@ -135,7 +136,20 @@ if ($test_what) {
 	warn "Select from: " . (join ", ", sort keys %valid_tests) . "\n";
 	exit 1;
     }
-    if ($test_what eq "vec_clz") {
+    if ($test_what eq "gf256_maths") {
+	my ($a,$b) = (0x53, 0xca);
+	my $one = gf256_mul_elems($a,$b);
+	die "Expected 53 x ca == 1 (got $one)" unless $one == 0x01;
+	$one = gf256_inv_elem(0x01);
+	die "Expected inv(1) == 1 (got $one)" unless $one == 0x01;
+	my $inv = gf256_inv_elem(0x53);
+	die "Expected inv(53) == ca (got $one)" unless $inv == 0xca;
+	$inv = gf256_inv_elem(0xca);
+	die "Expected inv(ca) == 53 (got $one)" unless $inv == 0x53;
+	
+	print "Looks OK\n";
+	exit 0;
+    } elsif ($test_what eq "vec_clz") {
 	my @ones = map { chr } qw(128 64 32 16 8 4 2 1);
 	my $zero = chr 0;
 	for my $leading (0..2) {
@@ -508,8 +522,9 @@ sub check_symbol_f256 {
 	my $j = ($i + $bit + 1) % $gen;
 	$k = substr $code, $bit, 1;
 	next if "\0" eq $k;
-	warn "Checking: XORing in $k times \$message[$j]\n";
-	gf256_vec_fma($check, "$message[$j]", $k);
+	my $khex = unpack "H2", $k;
+	warn "Checking: XORing in $khex times \$message[$j]\n";
+	gf256_vec_fma($check, "$message[$j]", ord $k);
     }
     die "Symbol not correct. $msg\n" unless $sym eq $check;
 }
@@ -656,10 +671,13 @@ sub pivot_f256 {
 	    }
 	}
 
+	# Need to do fused multiply-add? No.
+	# But we do need to normalise ... a little bit later
+	
 	$code ^= "$coding[$i]";
 	$sym  ^= "$symbol[$i]";
 	warn "Our code is ", (unpack "H*", $code), " after XOR\n" if $debug;
-
+	
 	if ($code eq $zero_code) {
 	    warn "Our code got cancelled\n" if ($debug);
 	    die "failed: zero code vector => zero symbol (i=$i)"
@@ -676,8 +694,20 @@ sub pivot_f256 {
 	$code       =~ m/^(\0*)/;
 	my $clz_code = length($1);
 	warn "$clz_code leading zeroes\n" if $debug;
-	$code = substr($code, $clz_code + 1) . ("\0" x ($clz_code + 1));
+
+	my ($k,$inv_k);
+	$k = substr($code, $clz_code, 1);
+        $inv_k = gf256_inv_elem(ord $k);
+
+	warn "Multiplying code by " . (unpack "H*", chr $inv_k) . "\n"
+	    if $debug;
+	gf256_vec_mul($code, $inv_k);
+	gf256_vec_mul($sym,  $inv_k);
+	warn "Multiplied code is ", (unpack "H*", $code), "\n" if $debug;
+	
+	$code  = substr($code, $clz_code + 1) . ("\0" x ($clz_code + 1));
 	warn "shifted code is ", (unpack "H*", $code), "\n" if $debug;
+
 	$i += $clz_code + 1;
 	$i -= $gen if $i >= $gen;
 	warn "new i: $i" if $debug;
@@ -1048,13 +1078,13 @@ sub solve_f256 {
 	    # in the main coding vector table.
 	    my $updated = substr $arows[$arow], $diag + 1, $alpha;
 	    # $updated = "$updated"; # just in case
-	    gf256_vec_fma($updated, $coding[$diag], $k);
+	    gf256_vec_fma($updated, $coding[$diag], ord $k);
 	    # leading k is implicitly cancelled, so make it explicit
 	    substr $arows[$arow], $diag, $alpha + 1, "\0$updated";
 
 	    # Likewise, multiply and add to the symbol table entry
 	    gf256_vec_fma($symbol[$gen - $alpha + $arow],
-			  $symbol[$diag], $k);
+			  $symbol[$diag], ord $k);
 	    
 	}
     }
@@ -1188,7 +1218,7 @@ sub solve_f256 {
 	} else {
 	    my $inv_k = gf256_inv_elem(ord $k); # calculate 1/k
 	    gf256_vec_mul($arows[$diag],  $inv_k);
-	    gf256_vec_mul($symbol[$gen - $alpha, $diag], $inv_k);
+	    gf256_vec_mul($symbol[$gen - $alpha + $diag], $inv_k);
 	}
 
 	# use the diagonal to cancel non-zero values below (start from
@@ -1201,10 +1231,10 @@ sub solve_f256 {
 	    # we can do the same kind of fma as before, except now that
 	    # we're working with 2 @arows, the 1's are explicit
 
-	    gf256_vec_fma($arows[$down_row], $arows[$diag], $k);
+	    gf256_vec_fma($arows[$down_row], $arows[$diag], ord $k);
 	    my $gen_base = $gen - $alpha;
 	    gf256_vec_fma($symbol[$gen_base + $down_row], 
-			  $symbol[$gen_base + $diag], $k);
+			  $symbol[$gen_base + $diag], ord $k);
 	}
 
 	# More debug messages...
@@ -1232,7 +1262,13 @@ sub solve_f256 {
     # back into @coding
     for my $i (0 .. $alpha - 1) {
 	my $zero_padded = $arows[$i] . $zero_alpha;
-	$coding[$gen - $alpha + $i] = substr($zero_padded, $i + 1, $alpha)
+	$coding[$gen - $alpha + $i] = substr($zero_padded, $i + 1, $alpha);
+	check_symbol_f256($gen - $alpha + $i,
+			  $coding[$gen - $alpha + $i],
+			  $symbol[$gen - $alpha + $i],
+			  "(after conversion to \@coding)")
+	    if $debug > 1;
+
     }
     
     # Dump out the last alpha rows of @coding
@@ -1289,14 +1325,14 @@ sub solve_f256 {
 		my $k = substr $coding[$i], $bit, 1;
 		if ("\0" eq $k) {
 		    warn " =0: not substituting\n" if $debug;
-		} elsif ("\1" eq $k) {
+		} elsif ("\001" eq $k) {
 		    warn " =1 : substituting use XOR\n" if $debug;
 		    $symbol[$i] ^= $symbol[$diag];
 		    # do clear the bit in case 
 		    substr $coding[$i], $bit, 1, "\0";
 		} else {
 		    warn " >1 : substituting using vec_fma\n" if $debug;
-		    gf256_vec_fma($symbol[$i], $symbol[$diag], $k);
+		    gf256_vec_fma($symbol[$i], $symbol[$diag], ord $k);
 		    # do clear the bit in case 
 		    substr $coding[$i], $bit, 1, "\0";
 		}
@@ -1412,14 +1448,14 @@ const static unsigned char exp_table[];
 const static signed short log_table[];
 
 unsigned char gf256_mul_elems(unsigned char a, unsigned char b) {
-    const static char         *exp =  exp_table + 512;
     const static signed short *log =  log_table;
+    const static char         *exp =  exp_table + 512;
     return exp[log[a] + log[b]];
 }
 
 unsigned char gf256_inv_elem(unsigned char a) {
-    const static char         *exp =  exp_table + 512;
-    const static signed short *log =  log_table;
+    const static signed   short *log =  log_table;
+    const static unsigned char  *exp =  exp_table + 512;
     return exp[255-log[a]];
 }
 
@@ -1429,7 +1465,7 @@ unsigned char gf256_inv_elem(unsigned char a) {
 // (letting us write char *s), but not pass by reference, so we have
 // to use SV* below instead
 
-void gf256_vec_mul(SV *sv, char val) {
+void gf256_vec_mul(SV *sv, unsigned char val) {
     const static char         *exp =  exp_table + 512;
     const static signed short *log =  log_table;
     signed short log_a = log[(unsigned char) val];
@@ -1447,7 +1483,7 @@ void gf256_vec_mul(SV *sv, char val) {
 
 // multiply all elements of a vector by a constant, then add another
 // vector of the same length (ie, "fused multiply-add")
-void gf256_vec_fma(SV *dv, SV *sv, char val ) {
+void gf256_vec_fma(SV *dv, SV *sv, unsigned char val ) {
     static char         *exp =  exp_table + 512;
     static signed short *log =  log_table;
     unsigned char *d, *s;
