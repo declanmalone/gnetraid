@@ -34,7 +34,7 @@ my $test_what = '';		# run internal tests
 # Algorithm-specific stuff
 my $q         = 2;   		# default to GF(2) == GF(2**1);
 my $alpha     = 8;		# aperture size alpha
-my $gen       = 32;
+my $gen       = 64;
 
 # Random number stuff
 my $deterministic = 0;		# whether to use a predictable seed
@@ -111,6 +111,39 @@ my @symbol = ();
 my $remain = $gen;
 my @pivot_queue = ();
 
+# Parameters and data structures for [2006]
+#
+# These are the parameters as described in the paper, and how they map
+# onto variables used above
+#
+# n      gen    size of the A/@coding matrix
+# k             number of message source blocks (before pre-code)
+# gamma         factor controlling the number of redundance symbols
+#               (there are sqrt(k) in all, gamma・k of which in r')
+# delta         stop decoding when there are delta・n holes in A
+# alpha  alpha  aperture size
+# omega         scope for r' symbols = omega・sqrt(k)
+# d             number of source symbols composed into the r'' symbols
+#
+# The paper describes experimental setup of these parameters as:
+#
+# delta = 0.05
+# gamma = 6・delta = 0.03
+# omega = d = 10
+#
+# (also alpha = 32, but I will experiment with various values)
+
+my $delta = 0.05;
+my $gamma = 6 * $delta;
+my $omega = 10;
+
+# (arbitrarily) round up the size of r'', then r' becomes what's left
+my $rsize          = int (0.5 + (@message * $gamma));
+my $rticktick_size = int (0.5 + sqrt(@message));
+my $rtick_size     = $rsize - $rticktick_size;
+
+warn $rsize;
+
 # Forward declaration of subs
 sub encode_block_f2;
 sub encode_block_f256;
@@ -118,11 +151,12 @@ sub solve_f2;
 sub solve_f256;
 sub codec_f2;
 sub codec_f256;
+sub precode_f2;
 
 # Tests available from command line as '--test <what>'
 my %valid_tests = map { $_ => undef } qw(
    vec_mul solve_f2 codec_f2 vec_clz vec_ctz vec_shl codec_f256
-   gf256_maths
+   gf256_maths precode_f2
 );
 
 if ($test_what) {
@@ -131,7 +165,9 @@ if ($test_what) {
 	warn "Select from: " . (join ", ", sort keys %valid_tests) . "\n";
 	exit 1;
     }
-    if ($test_what eq "gf256_maths") {
+    if ($test_what eq "precode_f2") {
+	precode_f2;
+    } elsif ($test_what eq "gf256_maths") {
 	my ($a,$b) = (0x53, 0xca);
 	my $one = gf256_mul_elems($a,$b);
 	die "Expected 53 x ca == 1 (got $one)" unless $one == 0x01;
@@ -1515,8 +1551,145 @@ sub solve_f256 {
 # from below for a particular row. Also, we stop when we hit a hole
 # and treat that as if it were the end of the matrix.
 #
+
+# Floyd's algorithm for randomly selecting a subset of a list
 #
+# Pseudocode:
 #
+#    initialize set S to empty
+#    for J := N-K + 1 to N do
+#       T := RandInt(1, J)
+#       if T is not in S then
+#           insert T in S
+#       else
+#           insert J in S
+#    (if needed: traverse set S to produce a list L)
+#
+# Implementation below:
+# * Uses perl's rand for now
+# * Returns a list of k indices in the range [start, start + n - 1]
+sub floyd {
+  my ($start, $n, $k) = @_;
+  my %set;
+  my ($j, $t) = ($n - $k);
+  while ($j < $n) {
+    $t = int rand($j + 1);
+    if (!exists($set{$t + $start})) {
+      $set{$t + $start} = undef;
+    } else {
+      $set{$j + $start} = undef;
+    }
+    ++$j;
+  }
+  return keys %set;
+}
+
+
+# Create redundant symbols centred on @coding diagonal
+sub r_tick_symbol {
+    my $i = shift;
+    my $k = @message;
+
+    # Centre line is just scaled version of the coding matrix diagonal
+    my $i_term     = $i * ($k / $rtick_size);
+    my $omega_term = $omega * sqrt($k)/2;
+    my $lower = int ($i_term - $omega_term);
+    my $upper = int ($i_term + $omega_term);
+
+    $lower = 0  if $lower < 0;
+    $upper = $k if $upper > $k;
+
+    # Choose d (=omega) symbols from [lower, upper -1]
+    # Sorting by increasing order might be useful later
+    return [ sort { $a <=> $b } floyd($lower, $upper - $lower, $omega) ];
+}
+
+# Create "random annex" redundant symbols
+sub r_ticktick_symbol {
+    my $k = @message;
+    return [ sort { $a <=> $b } floyd(0, $k, int (0.5 + sqrt($k))) ];
+}
+
+
+# Sender-side setup for precode (outer code)
+# See section 2.1.3
+
+# Sender-side variables:
+my (@rcodes, @rsymbols,@precoded);
+
+# Receiver-side variables
+my (@B_coding, @B_symbol);
+
+use POSIX qw(floor);
+
+sub rho {
+    my $i = shift;
+    my $k = @message;
+
+    return $i if $i < $alpha - 1;
+    return ($i - $alpha + 1 + 
+	    floor(($i - $alpha + 1) / floor(0.000 + 1 / (0.0 + $gamma))))
+	if $i < $k + $alpha - 1;
+    return  ($i - $k - $alpha + 1) * floor(1 / ($gamma));
+}
+
+sub precode_f2 {
+
+    my $k = @message;
+    my $n = $k + $rsize + $alpha - 1;
+
+    # Create a table for redundant codes
+    map { push @rcodes, r_tick_symbol($_)   }  (0 .. $rtick_size -1);
+    map { push @rcodes, r_ticktick_symbol() }  (1 .. $rticktick_size);
+
+    # Sender side has to calculate the symbols
+    for (0 .. @rcodes - 1) {
+	my $code = $rcodes[$_]; die unless @$code;
+	my $sym  = $message[$code->[0]];
+	$sym ^= $message[$code->[$_]] for (1 .. @$code -1);
+	push @rsymbols, $sym;
+    }
+
+    # I can't understand the presentation of the interleaving
+    # permutation in the paper. rho(i), rho(alpha -1) and rho
+    # (k+alpha-1) all map to zero. Surely that can't be right...
+    my $rho;
+
+    say "Zeros";
+    say rho $_ for (0 .. $alpha -2);
+
+    say "Messages";
+    say rho $_ for ($alpha - 1 .. $k + $alpha - 2);
+    
+    say "Redundant";
+    say rho $_ for ($k + $alpha - 1 .. $n - 1);
+    
+    # @precoded will be the interleaved array. It will be consulted by
+    # encode_block_f2_2006. Store references to messages to save memory.
+    say "alpha is $alpha, n is $n, k is $k; rsize is $rsize";
+    say "gamma is $gamma, 1/gamma is" . (1/$gamma);
+
+    map { $precoded[rho($_)] = \$zero_block } (0 .. $alpha - 2);
+
+    # first message symbol starts at alpha
+    for (0 .. $k - 1) {
+	my $ind = rho($_ + $alpha - 1) + $alpha;
+	$precoded[$ind] = "Message[$_]";
+    }
+
+    # First redundant symbol starts at alpha - 1
+    for (0 .. $rsize - 1) {
+	my $ind = rho($_ + $k + $alpha - 1) + $alpha - 1;
+	$precoded[$ind] = "--> Redundant[$_]"
+    }
+
+    for ( 0 .. @precoded - 1) {
+	my $not = exists $precoded[$_] ? "     " : " not ";
+	say "$_: $not exists " . ($precoded[$_]);
+    }
+    
+}
+
 __END__
 __C__
 /* Miscellaneous GF(2**8) stuff */
