@@ -136,6 +136,10 @@ my @pivot_queue = ();
 my $delta = 0.05;
 my $gamma = 6 * $delta;
 my $omega = 10;
+# use (rational) integer maths to fix maths bug in rho()
+# equivalent to gamma = 0.3 (3/10)
+my $gtop = 3;
+my $gbot = 10;
 
 # (arbitrarily) round up the size of r'', then r' becomes what's left
 my $rsize          = int (0.5 + (@message * $gamma));
@@ -1620,7 +1624,8 @@ my (@rcodes, @rsymbols,@precoded);
 # Receiver-side variables
 my (@B_coding, @B_symbol);
 
-use POSIX qw(floor);
+use POSIX qw(floor round);
+
 
 sub rho {
     my $i = shift;
@@ -1628,9 +1633,9 @@ sub rho {
 
     return $i if $i < $alpha - 1;
     return ($i - $alpha + 1 + 
-	    floor(($i - $alpha + 1) / floor(0.000 + 1 / (0.0 + $gamma))))
+	    int (($i - $alpha + 1) *  ($gtop / $gbot)))
 	if $i < $k + $alpha - 1;
-    return  ($i - $k - $alpha + 1) * floor(1 / ($gamma));
+    return  (($i - $k - $alpha + 1) * $gbot / $gtop);
 }
 
 sub precode_f2 {
