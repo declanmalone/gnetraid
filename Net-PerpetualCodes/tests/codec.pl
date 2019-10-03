@@ -1638,23 +1638,9 @@ sub rho {
     return  (($i - $k - $alpha + 1) * $gbot / $gtop);
 }
 
-sub precode_f2 {
-
+sub abandoned_rho {
     my $k = @message;
     my $n = $k + $rsize + $alpha - 1;
-
-    # Create a table for redundant codes
-    map { push @rcodes, r_tick_symbol($_)   }  (0 .. $rtick_size -1);
-    map { push @rcodes, r_ticktick_symbol() }  (1 .. $rticktick_size);
-
-    # Sender side has to calculate the symbols
-    for (0 .. @rcodes - 1) {
-	my $code = $rcodes[$_]; die unless @$code;
-	my $sym  = $message[$code->[0]];
-	$sym ^= $message[$code->[$_]] for (1 .. @$code -1);
-	push @rsymbols, $sym;
-    }
-
     # I can't understand the presentation of the interleaving
     # permutation in the paper. rho(i), rho(alpha -1) and rho
     # (k+alpha-1) all map to zero. Surely that can't be right...
@@ -1688,6 +1674,59 @@ sub precode_f2 {
 	$precoded[$ind] = "--> Redundant[$_]"
     }
 
+    for ( 0 .. @precoded - 1) {
+	my $not = exists $precoded[$_] ? "     " : " not ";
+	say "$_: $not exists " . ($precoded[$_]);
+    }
+    
+}
+
+
+sub precode_f2 {
+
+    my $k = @message;
+    my $n = $k + $rsize + $alpha - 1;
+
+    # Create a table for redundant codes
+    map { push @rcodes, r_tick_symbol($_)   }  (0 .. $rtick_size -1);
+    map { push @rcodes, r_ticktick_symbol() }  (1 .. $rticktick_size);
+
+    # Sender side has to calculate the symbols
+    for (0 .. @rcodes - 1) {
+	my $code = $rcodes[$_]; die unless @$code;
+	my $sym  = $message[$code->[0]];
+	$sym ^= $message[$code->[$_]] for (1 .. @$code -1);
+	push @rsymbols, $sym;
+    }
+
+    say "alpha is $alpha, n is $n, k is $k; rsize is $rsize";
+    say "gamma is $gamma, 1/gamma is" . (1/$gamma);
+
+    # zero padding at start...
+    map { $precoded[rho($_)] = \$zero_block } (0 .. $alpha - 2);
+
+    # Integer-maths implementation of interleaving. Basically a
+    # variation on Bresenham's line-drawing algorithm, except:
+    #
+    # * slope is always less than 1 (and no need to flip axes)
+    #
+    # * consume a redundant symbol instead of incrementing y
+    my ($mp,$rp,$err,$count,$p,$q) = (0,0);
+    # start with
+    ($p, $q) = ($rsize, $k + $rsize); # slope (y2-y1)/(x2-x1)
+    $err   = $q - $p;
+    $count = $k + $rsize;
+    while ($count--) {
+	$err += $p;
+	if ($err >= $q) {
+	    push @precoded, "R:  --> Redundant[$rp]";
+	    $rp++;
+	    $err -= $q;
+	} else {
+	    push @precoded, "M: Message[$mp]";
+	    $mp++;
+	}
+    }
     for ( 0 .. @precoded - 1) {
 	my $not = exists $precoded[$_] ? "     " : " not ";
 	say "$_: $not exists " . ($precoded[$_]);
