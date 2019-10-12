@@ -1734,6 +1734,84 @@ sub precode_f2 {
     
 }
 
+# A note on tail removal, padding and alpha...
+#
+# I've been using the convention that alpha is the width of the
+# aperture to the right of the main diagonal. I don't explicitly store
+# the diagonal bits within the earlier [2015] implementation, and I
+# shouldn't need to explicitly store it here, either.
+#
+# The only implication that this discrepancy has is to do with tail
+# clearance and the size of the zero-padding. I need to increase the
+# padding by 1.
+#
+# This brings to mind another difference between the two
+# implementations. In [2015], the authors talk about failing to pivot
+# a symbol into the table, but there doesn't appear to be any mention
+# of this in [2016]. Perhaps it was an oversight, or perhaps the
+# problem only becomes evident when the table has very few holes left,
+# which is something that practically speaking won't happen often? I
+# actually suspect that it was an oversight/omission.
+#
+# I had an explanatory comment to that effect here in an older
+# version, but I deleted it. Consider a system of equations:
+#
+# A + B = x0
+# B + C = x1
+# C + A = x2
+#
+# If we receive A + D = x3, we go into a infinite loop even if there
+# is a free slot at D:
+#
+# Matches A row, so pivot:
+#
+# (A + B) + (A + D) -> B + D
+#
+# Matches B row, so pivot
+#
+# (B + C) + (B + D) -> C + D
+#
+# Matches C row, so pivot
+#
+# (C + A) + (C + D) -> A + D
+#
+# Now we're back trying to pivot in the same A + D code.
+#
+# Actually, this probably *won't* happen because the canonical form
+# for C + A is A + C, which would conflict with the A + B
+# entry. However, I suppose that we could get a similar chain if you
+# account for wrap-around. You can have a canonical form Z + A, for
+# example.
+#
+# I'll investigate this later. Actually, one idea that I have is that
+# perhaps such cycles must necessarily wrap around the end of the
+# matrix. If that's the case, then perhaps the zero padding eliminates
+# it. If necessary, I can make some modifications:
+#
+# * make the encoder avoid sending a fully zeroed packet
+#
+# * make the decoder mark A_0 as "filled" during setup
+#
+# * possibly do tail clearance during initial descent
+#
+# Actually, so long as the encoder zeroes out the appropriate
+# elements, we shouldn't need to do anything special on the receiving
+# side apart from marking A_0 as full. We could even eliminate the
+# (small) tail clearance step.
+#
+# I had been thinking about whether this implementation would actually
+# be any faster than the other one. Assuming that the initial
+# descent/pivoting is the most expensive operation, I don't really see
+# much difference between the two there. The pre-coded version will
+# have higher post-reception overheads, but it's possible that it has
+# better worst-case performance pre-reception. The (supposed) cycle
+# breaking that the zero padding performs for us incidentally,
+# combined with not needing to fill in all the holes could actually
+# give it enough of an edge to cancel out the extra post-reception
+# overheads.
+#
+
+
 __END__
 __C__
 /* Miscellaneous GF(2**8) stuff */
