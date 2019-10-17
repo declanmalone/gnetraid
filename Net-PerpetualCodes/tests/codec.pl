@@ -327,6 +327,7 @@ if ($packets) {
     print "All packets produced\n";
     exit (0);
 }
+
 sub check_symbol_f2;
 # Loop producing packets until message decoded fully into @symbol
 sub codec_f2 {
@@ -339,7 +340,7 @@ sub codec_f2 {
 	if (@pivot_queue) {
 	    my $new = shift @pivot_queue;
 	    ($i, $code, $sym) = @{$new};
-	    warn "Re-pivoting\n";
+	    warn "Re-pivoting from queue\n";
 	} else {
 	    ($i, $code, $sym) = encode_block_f2();
 	    ++$rp;		# received packets
@@ -669,9 +670,16 @@ sub pivot_f256 {
 	die unless $alpha == length $code;
 
 	if (1) {
+	    # profiling shows that the regexp below are expensive.
+	    # Call vec_ctz instead
 	    my ($ctz_row, $ctz_code);
-	    $coding[$i] =~ m/(\0*)$/; $ctz_row  = length($1);
-	    $code       =~ m/(\0*)$/; $ctz_code = length($1);
+	    if (0) {
+		$coding[$i] =~ m/(\0*)$/; $ctz_row  = length($1);
+		$code       =~ m/(\0*)$/; $ctz_code = length($1);
+	    } else {
+		$ctz_row  = vec_ctz($coding[$i]) >> 3;
+		$ctz_code = vec_ctz($code) >> 3;
+	    }
 	    warn "ctz_row  is $ctz_row\n"  if $debug;
 	    warn "ctz_code is $ctz_code\n" if $debug;
 
@@ -704,8 +712,14 @@ sub pivot_f256 {
 	    warn "old i: $i\n";
 	    warn "code is ", (unpack "H*", $code), "\n";
 	}
-	$code       =~ m/^(\0*)/;
-	my $clz_code = length($1);
+	# avoid using regexp below
+	my $clz_code;
+	if (0) {
+	    $code       =~ m/^(\0*)/;
+	    $clz_code = length($1);
+	} else {
+	    $clz_code = vec_clz($code) >> 3;
+	}
 	warn "$clz_code leading zeroes\n" if $debug;
 
 	my ($k,$inv_k);
@@ -1095,7 +1109,9 @@ sub solve_f256 {
 	    # in the main coding vector table.
 	    my $updated = substr $arows[$arow], $diag + 1, $alpha;
 	    # $updated = "$updated"; # just in case
-	    # gf256_vec_fma($updated, $coding[$diag], ord $k);
+
+	    # I had the following commented out, but it's needed
+	    gf256_vec_fma($updated, $coding[$diag], ord $k);
 	    # leading k is implicitly cancelled, so make it explicit
 	    substr $arows[$arow], $diag, $alpha + 1, "\0$updated";
 
@@ -1682,7 +1698,7 @@ sub abandoned_rho {
 }
 
 
-sub precode_f2 {
+sub precode_f2_2006 {
 
     my $k = @message;
     my $n = $k + $rsize + $alpha - 1;
@@ -1734,82 +1750,76 @@ sub precode_f2 {
     
 }
 
-# A note on tail removal, padding and alpha...
-#
-# I've been using the convention that alpha is the width of the
-# aperture to the right of the main diagonal. I don't explicitly store
-# the diagonal bits within the earlier [2015] implementation, and I
-# shouldn't need to explicitly store it here, either.
-#
-# The only implication that this discrepancy has is to do with tail
-# clearance and the size of the zero-padding. I need to increase the
-# padding by 1.
-#
-# This brings to mind another difference between the two
-# implementations. In [2015], the authors talk about failing to pivot
-# a symbol into the table, but there doesn't appear to be any mention
-# of this in [2016]. Perhaps it was an oversight, or perhaps the
-# problem only becomes evident when the table has very few holes left,
-# which is something that practically speaking won't happen often? I
-# actually suspect that it was an oversight/omission.
-#
-# I had an explanatory comment to that effect here in an older
-# version, but I deleted it. Consider a system of equations:
-#
-# A + B = x0
-# B + C = x1
-# C + A = x2
-#
-# If we receive A + D = x3, we go into a infinite loop even if there
-# is a free slot at D:
-#
-# Matches A row, so pivot:
-#
-# (A + B) + (A + D) -> B + D
-#
-# Matches B row, so pivot
-#
-# (B + C) + (B + D) -> C + D
-#
-# Matches C row, so pivot
-#
-# (C + A) + (C + D) -> A + D
-#
-# Now we're back trying to pivot in the same A + D code.
-#
-# Actually, this probably *won't* happen because the canonical form
-# for C + A is A + C, which would conflict with the A + B
-# entry. However, I suppose that we could get a similar chain if you
-# account for wrap-around. You can have a canonical form Z + A, for
-# example.
-#
-# I'll investigate this later. Actually, one idea that I have is that
-# perhaps such cycles must necessarily wrap around the end of the
-# matrix. If that's the case, then perhaps the zero padding eliminates
-# it. If necessary, I can make some modifications:
-#
-# * make the encoder avoid sending a fully zeroed packet
-#
-# * make the decoder mark A_0 as "filled" during setup
-#
-# * possibly do tail clearance during initial descent
-#
-# Actually, so long as the encoder zeroes out the appropriate
-# elements, we shouldn't need to do anything special on the receiving
-# side apart from marking A_0 as full. We could even eliminate the
-# (small) tail clearance step.
-#
-# I had been thinking about whether this implementation would actually
-# be any faster than the other one. Assuming that the initial
-# descent/pivoting is the most expensive operation, I don't really see
-# much difference between the two there. The pre-coded version will
-# have higher post-reception overheads, but it's possible that it has
-# better worst-case performance pre-reception. The (supposed) cycle
-# breaking that the zero padding performs for us incidentally,
-# combined with not needing to fill in all the holes could actually
-# give it enough of an edge to cancel out the extra post-reception
-# overheads.
-#
+# Test harness for this version of codec
+
+sub check_symbol_f2_2006;
+sub encode_block_f2_2006;
+sub post_receive_f2_2006;
+# Loop producing packets until message decoded fully into @symbol
+sub codec_f2_2006 {
+    my ($rp, $matched) = (0,0);
+    warn "Seed: $seed\n";
+    my @msg = @message;
+    my ($in,$out);
+
+    # set up precode
+    precode_f2_2006();
+    my $k = @message;
+    my $n = $k + $rsize + $alpha - 1;
+
+    my $holes;
+    while (1) {
+	my ($i, $code, $sym);
+	if (@pivot_queue) {
+	    my $new = shift @pivot_queue;
+	    ($i, $code, $sym) = @{$new};
+	    warn "Re-pivoting from queue\n";
+	} else {
+	    ($i, $code, $sym) = encode_block_f2_2006();
+	    ++$rp;		# received packets
+	}
+	check_symbol_f2_2006($i,$code,$sym) if $debug>1;
+	
+	$holes = pivot_f2_2006($i, "$code", "$sym");
+	if ($holes <= $delta * $n) {
+	    warn "Trying to solve\n";
+	    last if solve_f2_2006() == 0;
+	    warn "After initial solve, need to go again\n";
+	    $matched = 0;
+	    for (0 .. $gen-1) {
+		++$matched if $msg[$_] eq $symbol[$_];
+	    }
+	    # Check for corruption of original array
+	    for (0 .. $gen-1) {
+		die unless $msg[$_] eq $message[$_];
+	    }
+	    warn "Matched $matched source <=> decoded blocks\n";
+	}
+    };
+    warn "System has $holes holes after receiving $rp packets\n";
+
+    $matched = 0;
+    for (0 .. $gen-1) {
+	++$matched if $msg[$_] eq $symbol[$_];
+    }
+    # Check for corruption of original array
+    for (0 .. $gen-1) {
+	die unless $msg[$_] eq $message[$_];
+    }
+    warn "Matched $matched source <=> decoded blocks";
+    if ($debug) {
+	$in  = unpack("H*", $message[0]);
+	$out = unpack("H*", $symbol[0]);
+	warn "Input block 0 was $in\n";
+	warn "Output block 0 was $out\n";
+	$in  = unpack("H*", $message[$gen - 1]);
+	$out = unpack("H*", $symbol[$gen - 1]);
+	warn "Input block $gen-1 was $in\n";
+	warn "Output block $gen-1 was $out\n";
+    }
+    exit;
+}
+
 
 
 __END__
