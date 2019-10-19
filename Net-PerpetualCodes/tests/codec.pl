@@ -126,7 +126,7 @@ if (defined $cfile) {
     print "recsize (sender) is $recsize\n";
     while ($packets--) {
 	($i, $code, $sym) = encode_block_f256();
-	warn "i=$i\n";
+	#warn "i=$i\n";
 	$rec = pack "V",$i;	# little-endian unsigned 32-bit
 	die "Expected 4 bytes after pack\n" unless length($rec) == 4;
 	$rec .= "$code$sym";
