@@ -8,12 +8,9 @@
 struct perp_settings_2015 {
   size_t   blocksize;
   unsigned gen;
-  unsigned seed;
-  unsigned options;
   unsigned short alpha;
   unsigned short qbits;		/* field size (number of bits) */
   unsigned short q;		/* field size (number of elements) */
-  unsigned short deterministic;
   unsigned short code_size;	/* qbits * alpha / 8 */
 };
 
@@ -33,6 +30,9 @@ struct perp_settings_2015 {
 
 // 
 struct perp_encoder_2015 {
+  unsigned seed;
+  unsigned options;
+  unsigned short deterministic;
   unsigned char *message;
 };
 
@@ -53,9 +53,16 @@ struct perp_decoder_2015 {
   unsigned char *mat_rows;
 };
 
+void
+perp_init_decoder_2015(struct perp_settings_2015 *s, struct perp_decoder_2015 *d);
+
+void
+perp_init_encoder_2015(struct perp_settings_2015 *s, struct perp_encoder_2015 *e);
+
 unsigned pivot_bin(struct perp_settings_2015 *s, struct perp_decoder_2015 *d);
 unsigned pivot_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015 *d,
 		   unsigned i,
 		   unsigned char *code,
 		   unsigned char *sym
 		   );
+int solve_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015  *d);
