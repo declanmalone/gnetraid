@@ -648,11 +648,27 @@ sub pivot_f2 {
     return $remain;
 }
 
+
+# Since pivoting is expected to be the most expensive operation
+# overall, it makes sense to focus on porting it to C first. We'll
+# need to have an explicit initialisation step.
+sub pivot_256_c_init {
+
+}
+
+# Then we work completely with C structures
+sub pivot_256_c {
+    my ($i, $code, $sym) = @_;
+}
+
+# Even when pivoting is complete, we may need to re-enter it, though...
+
+
 sub pivot_f256 {
     my ($i, $code, $sym) = @_;
     my $zero_code = "\0" x $alpha;
-
     my $tries = 0;
+
     while (++$tries < $gen * 2) {
 	warn "Trying to pivot into row $i\n" if $debug;
 	if ($filled[$i] == 0) {
@@ -1640,7 +1656,7 @@ my (@rcodes, @rsymbols,@precoded);
 # Receiver-side variables
 my (@B_coding, @B_symbol);
 
-use POSIX qw(floor round);
+#use POSIX qw(floor round);
 
 
 sub rho {
