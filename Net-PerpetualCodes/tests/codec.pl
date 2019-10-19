@@ -40,11 +40,15 @@ my $gen       = 64;
 my $deterministic = 0;		# whether to use a predictable seed
 my $seed = undef;
 
+# if the below is set, we write out $packets records to a file
+my $cfile = undef;
+
 GetOptions ("blocksize=i"       => \$blocksize,
 	    "q|field=i"         => \$q,
 	    "packets=i"         => \$packets,
 	    "alpha|aperture=i"  => \$alpha,
 	    "infile=s"          => \$infile,
+	    "cfile=s"           => \$cfile,
 	    "test=s"            => \$test_what,
 	    "verbose"           => \$verbose,
 	    "hacky"             => \$hacky,
@@ -110,6 +114,28 @@ my @coding = ();
 my @symbol = ();
 my $remain = $gen;
 my @pivot_queue = ();
+
+# Create a file suitable for testing C decoder
+if (defined $cfile) {
+    die "You must specify how many packets to write with -p\n"
+	unless $packets > 0;
+    my $fh;
+    open $fh, ">", $cfile or die "cfile $cfile? $!\n";
+    my ($i, $code, $sym, $rec, $recsize);
+    $recsize = 4 + $alpha + $blocksize;
+    print "recsize (sender) is $recsize\n";
+    while ($packets--) {
+	($i, $code, $sym) = encode_block_f256();
+	warn "i=$i\n";
+	$rec = pack "V",$i;	# little-endian unsigned 32-bit
+	die "Expected 4 bytes after pack\n" unless length($rec) == 4;
+	$rec .= "$code$sym";
+	die "Wrong record size\n" unless length($rec) == $recsize;
+	die "Problem writing to cfile: $!\n" 
+	    unless $recsize == syswrite($fh, "$rec");
+    }
+    exit(0);
+}
 
 # Parameters and data structures for [2006]
 #
@@ -312,7 +338,7 @@ if ($test_what) {
 }
 
 # default test... just generate packets, but don't try to decode
-if ($packets) {
+if (0 and $packets) {
     my ($i, $vec, $sym);
     print "Benchmarking encode_block_f2.\n";
     print "Generating $packets packets equivalent to ",
