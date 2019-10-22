@@ -22,11 +22,14 @@ use Net::OnlineCode ':xor';
 
 use Getopt::Long;
 
+use OpenCLPivot;
+
 # General options that don't affect algorithm
 my $infile    = undef;
 my $blocksize = 32;
 my $verbose   = 0;
 my $hacky     = 0;
+my $opencl    = 0;		# whether to use OpenCL kernel for pivot
 my $packets   = 0;		# 0   -> run until decoded;
                                 # +ve -> stop after this many packets
 my $test_what = '';		# run internal tests
@@ -52,6 +55,7 @@ GetOptions ("blocksize=i"       => \$blocksize,
 	    "test=s"            => \$test_what,
 	    "verbose"           => \$verbose,
 	    "hacky"             => \$hacky,
+	    "opencl"            => \$opencl,
 	    "seed=i"            => \$seed,
 	    "generation=i"      => \$gen,
 	    "deterministic"     => \$deterministic)

@@ -287,6 +287,8 @@ sub new {
 	gen       => 2048,
 	blocksize => 1024,
 	swapsize  => 48,
+	# tuning/debugging (sets #define FOO in code, test using #ifdef)
+	defines   => [qw/SEND_INV/],
 	# variables used in main program
 	filled    => undef,
 	symbol    => undef,
@@ -310,8 +312,11 @@ sub new {
     unshift @src_lines, "#define GEN       $o{gen}\n";
     unshift @src_lines, "#define SWAPSIZE  $o{swapsize}\n";
     unshift @src_lines, "#define BLOCKSIZE $o{blocksize}\n";
+    unshift @src_lines, "#define $_\n" for (@{$o{defines}});
     my $src = join("", @src_lines);
 
+    print $src;
+    
     my $prog = $ctx->build_program ($src);
     my $kernel = $prog->kernel ("pivot_gf8");
 
@@ -388,6 +393,95 @@ sub pivot {
 
 }
 
+# Since the Pi QPUs don't have private constant storage space, and I
+# don't know the size of the private memory, I'll probably have to
+# calculate gf8 multiplications explicitly. This routine tests the
+# algorithm that I'm using, comparing the values with those from
+# Math::FastGF2
+
+# Polynomial is 0x11b = 0100011011, so rather than upgrading to shorts,
+# shift the poly right = 010001101 + 1 remainder = 0x8d
+#
+# Now do this XOR before the shift and add in the remainder afterward
+#
+# I'm not sure if there's anything to be gained by this
+# "optimisation", though. It adds an extra 7 additions compared to a
+# few type casts.
+
+sub _long_mul_gf8_v1 {
+    my ($a,$b,$prod) = @_;
+    # Optionally, return immediately if either operand is 0 or 1
+    if (0) {
+	return $a ? $b : 0 if ($a < 2);
+	return $b ? $a : 0 if ($b < 2);
+    }
+
+    $prod = ($b & 1) ? $a : 0;
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 2);
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 4);
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 8);
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 16);
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 32);
+    $a = ($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1;
+    $prod ^= $a if ($b & 64);
+    # Optimise last bit: don't update a unless we need to
+    return ($b & 128) == 0 ? $prod :
+	($prod ^ (($a & 128) ? ((($a ^ 0x8d) << 1) + 1) : $a << 1));
+}
+
+# This is the original version that uses 0x11b
+sub _long_mul_gf8_v2 {
+    my ($a,$b,$prod) = @_;
+    # Optionally, return immediately if either operand is 0 or 1
+    if (0) {
+	return $a ? $b : 0 if ($a < 2);
+	return $b ? $a : 0 if ($b < 2);
+    }
+
+    $prod = ($b & 1) ? $a : 0;
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 2);
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 4);
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 8);
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 16);
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 32);
+    $a = ($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1);
+    $prod ^= $a if ($b & 64);
+    # Optimise last bit: don't update a unless we need to
+    return ($b & 128) == 0 ? $prod :
+	($prod ^ (($a & 128) ? (($a << 1) ^  0x11b) : ($a << 1)));
+}
+
+sub test_gf8_maths {
+    for my $i (0..255) {
+	for my $j (0..255) {
+	    my $correct = gf2_mul(8,$i,$j);
+	    my $maybe = _long_mul_gf8_v1($i,$j);
+	    die "_long_mul_gf8_v1 incorrect with $i x $j\n"
+		if $maybe != $correct;
+	}
+    }
+    warn "v1 was fully correct\n";
+    for my $i (0..255) {
+	for my $j (0..255) {
+	    my $correct = gf2_mul(8,$i,$j);
+	    my $maybe = _long_mul_gf8_v2($i,$j);
+	    die "_long_mul_gf8_v2 incorrect with $i x $j\n"
+		if $maybe != $correct;
+	}
+    }
+    warn "v2 was fully correct\n";
+}
+
 1;
 
 __DATA__
@@ -402,34 +496,53 @@ __DATA__
 // (plus any flags for conditional compilation with #ifdef FLAG .. #endif)
 
 kernel void pivot_gf8(
-    // inputs
+    // inputs (all read-only)
            unsigned       host_i,
     global unsigned char *host_code,
     global unsigned char *host_sym,
-    global unsigned char *code_swap,
-    global unsigned char *sym_swap,
     global unsigned char *coding,
     global unsigned char *symbol,
     global unsigned char *filled,
-    // See if we can be passed an inverse table
-    global unsigned char *host_inv,
+
+    // input-output (host allocates, we write)
+    global unsigned char *code_swap,
+    global unsigned char *sym_swap,
+
     // outputs
     global unsigned      *new_i,
     global unsigned char *new_code,
     global unsigned char *new_sym,
     global unsigned      *swaps,
     global unsigned      *rc
+
+    // other inputs (lookup tables)
+
+    // I'm putting these at the end so that I can use conditional
+    // compilation to enable/disable them without messing up parameter
+    // indices. Listing in order from most important to least. Note
+    // the comma at the start of these blocks.
+
+#ifdef SEND_INV
+    , global unsigned char *host_inv
+#endif
+    // will not use optimised tables since they are fairly large
+#ifdef SEND_LOG_EXP
+    , global unsigned char *host_log
+    , global unsigned char *host_exp
+#endif
 ) {
     int id = get_global_id(0);
     unsigned tries = 0;
     unsigned i = host_i;
     unsigned char code[ALPHA];
     unsigned char sym[BLOCKSIZE];
+#ifdef SEND_INV
     unsigned char inv[256];
+#endif
     unsigned char *cp, *rp, *bp;
     unsigned char cancelled, zero_sym;
 
-    // copy code, sym and inv into private storage
+    // copy code, sym [and inv] into private storage
 
 
     return;
