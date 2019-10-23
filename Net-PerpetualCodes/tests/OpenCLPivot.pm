@@ -339,6 +339,12 @@ sub new {
 	symbol    => undef,
 	coding    => undef,
 	# OpenCL parameters?
+	groups    => 6,         # how many groups?
+	groupsize => 32,	# how many threads per group?
+	worksize  => 6,		# how many bytes does each work item process?
+	# The above should work for block size of 1024;
+	# 6 * 32 * 6 = 1152, so 6*32 threads each working on 6 bytes
+	# is more threads than we need to cover 1024 byte symbols...
 	@_);
 
     # OpenCL boilerplate
@@ -357,6 +363,7 @@ sub new {
     unshift @src_lines, "#define GEN       $o{gen}\n";
     unshift @src_lines, "#define SWAPSIZE  $o{swapsize}\n";
     unshift @src_lines, "#define BLOCKSIZE $o{blocksize}\n";
+    unshift @src_lines, "#define WORKSIZE  $o{worksize}\n";
     unshift @src_lines, "#define $_\n" for (@{$o{defines}});
     my $src = join("", @src_lines);
 
@@ -537,103 +544,8 @@ __DATA__
 // GEN
 // BLOCKSIZE
 // SWAPSIZE
+// WORKSIZE
 //
 // (plus any flags for conditional compilation with #ifdef FLAG .. #endif)
 
-#ifdef SWITCH_TABLES
-// include switch-based table lookups
-#include "gf8_log_exp.c"
-
-// Apparently "inline" is allowed
-inline unsigned char gf8_inv(unsigned char a) {
-    return gf8_exp(255-gf8_log(a));
-}
-
-inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
-    unsigned sum;
-    // tables can't handle case of a or b == 0
-    if ((a == 0) || (b == 0)) return 0;
-    sum  = gf8_log(a) + gf8_log(b);
-    sum -= (sum < 256) ? 0 : 256;
-    return gf8_exp(sum);
-}
-#endif
-
-#ifdef LONG_MULTIPLY
-unsigned char gf8_mul(unsigned int a, unsigned char b) {
-    unsigned char product = (b & 1) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 2) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 4) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 8) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 16) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 32) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 64) ? a : 0;
-    // Optimise last bit: don't update a unless we need to
-    return (b & 128) == 0 ? product :
-	(product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
-}
-#endif
-
-kernel void pivot_gf8(
-    // inputs (all read-only)
-           unsigned       host_i,
-    global unsigned char *host_code,
-    global unsigned char *host_sym,
-    global unsigned char *coding,
-    global unsigned char *symbol,
-    global unsigned char *filled,
-
-    // input-output (host allocates, we write)
-    global unsigned char *code_swap,
-    global unsigned char *sym_swap,
-
-    // outputs
-    global unsigned      *new_i,
-    global unsigned char *new_code,
-    global unsigned char *new_sym,
-    global unsigned      *swaps,
-    global unsigned      *rc
-
-    // other inputs (lookup tables)
-
-    // I'm putting these at the end so that I can use conditional
-    // compilation to enable/disable them without messing up parameter
-    // indices. Listing in order from most important to least. Note
-    // the comma at the start of these blocks.
-
-#ifdef SEND_INV
-    , global unsigned char *host_inv
-#endif
-    // will not use optimised tables since they are fairly large
-#ifdef SEND_LOG_EXP
-    , global unsigned char *host_log
-    , global unsigned char *host_exp
-#endif
-) {
-    int id = get_global_id(0);
-    unsigned tries = 0;
-    unsigned i = host_i;
-    unsigned char code[ALPHA];
-    unsigned char sym[BLOCKSIZE];
-#ifdef SEND_INV
-    unsigned char inv[256];
-#endif
-    unsigned char *cp, *rp, *bp;
-    unsigned char cancelled, zero_sym;
-
-    // Make sure #include worked (yes, no_such_thing gives an error)
-    cancelled = gf8_log(0);
-    // cancelled = no_such_thing(0);
-
-    // copy code, sym [and inv] into private storage
-
-
-    return;
-
-}
+#include "OpenCLPivot.c"
