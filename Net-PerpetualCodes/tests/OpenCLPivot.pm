@@ -333,7 +333,7 @@ sub new {
 	blocksize => 1024,
 	swapsize  => 48,
 	# tuning/debugging (sets #define FOO in code, test using #ifdef)
-	defines   => [qw/SEND_INV/],
+	defines   => [qw/SWITCH_TABLES/],
 	# variables used in main program
 	filled    => undef,
 	symbol    => undef,
@@ -540,6 +540,26 @@ __DATA__
 //
 // (plus any flags for conditional compilation with #ifdef FLAG .. #endif)
 
+#ifdef SWITCH_TABLES
+// include switch-based table lookups
+#include "gf8_log_exp.c"
+
+// Apparently "inline" is allowed
+inline unsigned char gf8_inv(unsigned char a) {
+    return gf8_exp(255-gf8_log(a));
+}
+
+inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
+    unsigned sum;
+    // tables can't handle case of a or b == 0
+    if ((a == 0) || (b == 0)) return 0;
+    sum  = gf8_log(a) + gf8_log(b);
+    sum -= (sum < 256) ? 0 : 256;
+    return gf8_exp(sum);
+}
+#endif
+
+#ifdef LONG_MULTIPLY
 unsigned char gf8_mul(unsigned int a, unsigned char b) {
     unsigned char product = (b & 1) ? a : 0;
     a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
@@ -558,6 +578,7 @@ unsigned char gf8_mul(unsigned int a, unsigned char b) {
     return (b & 128) == 0 ? product :
 	(product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
 }
+#endif
 
 kernel void pivot_gf8(
     // inputs (all read-only)
@@ -605,6 +626,10 @@ kernel void pivot_gf8(
 #endif
     unsigned char *cp, *rp, *bp;
     unsigned char cancelled, zero_sym;
+
+    // Make sure #include worked (yes, no_such_thing gives an error)
+    cancelled = gf8_log(0);
+    // cancelled = no_such_thing(0);
 
     // copy code, sym [and inv] into private storage
 
