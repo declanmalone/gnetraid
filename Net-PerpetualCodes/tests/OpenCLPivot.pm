@@ -185,6 +185,51 @@ use Math::FastGF2 qw/:ops/;
 # the memory bandwidth used, but it seems that at least we won't have
 # to splat the symbols.
 #
+# Addendum: trade-offs involved with copying structures into private
+# memory
+#
+# My instinct is that the routine should work better if we have
+# private lookup tables, but you also have to look at the cost of
+# copying the data plus how often we will look up those tables.
+#
+# Initially, I was thinking that the inverse table was the most
+# important structure to copy over, since it's a bit awkward to
+# calculate it "manually".
+#
+# Every time the pivot routine loops, it has to do:
+#
+# * an inversion on a single field element   (1 operation)
+# * a fused multiply-add on the code vector  (alpha operations)
+# * a fused multiply-add on the symbol       (blocksize operations)
+#
+# With parameters alpha = 24, gen = 2048 and blocksize = 1024,
+# profiling shows that these are in the region of:
+#
+# 42676 / 2248 = 18
+#
+# calls to each of those routines. This means that copying the inverse
+# table (256 elements) would probably not be worthwhile unless global
+# memory access (latency) is a factor of 16x worse than accessing
+# private memory.
+#
+# On the other hand, copying over (abbreviated) exp and log tables
+# should quickly recoup the initial copy overhead, since even doing a
+# single fma on code and symbol costs 3x (alpha + blocksize) memory
+# reads (two log table lookups, plus an exp table lookup), which is
+# roughly 6 times more than the cost of copying the log, exp tables.
+#
+# The other option, which I'm leaning towards implementing first, is
+# to embed the lookup tables in the code by means of a switch
+# statement. I'm not sure about the maximum kernel code size, or
+# whether the compiler will generate space-efficient code for this
+# (ideally it would be able to use a computed jump), but hopefully
+# this will work on the Pi.
+#
+# Another note on this: embedding exp/log tables as a switch statement
+# (or even transferring them to private arrays) lets us calculate
+# inverses, too, so a separate inv table wouldn't be needed. And if we
+# can embed the tables, we can simplify the calling interface, too.
+#
 # ALU
 #
 # Each QPU (compute unit) has two ALUs, but only one of them can be
@@ -494,6 +539,25 @@ __DATA__
 // SWAPSIZE
 //
 // (plus any flags for conditional compilation with #ifdef FLAG .. #endif)
+
+unsigned char gf8_mul(unsigned int a, unsigned char b) {
+    unsigned char product = (b & 1) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 2) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 4) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 8) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 16) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 32) ? a : 0;
+    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+    product ^=  (b & 64) ? a : 0;
+    // Optimise last bit: don't update a unless we need to
+    return (b & 128) == 0 ? product :
+	(product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
+}
 
 kernel void pivot_gf8(
     // inputs (all read-only)
