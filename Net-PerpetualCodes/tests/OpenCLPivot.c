@@ -46,16 +46,35 @@ unsigned char gf8_mul(unsigned int a, unsigned char b) {
 // ...
 
 // Main entry point
+//
+// Notes on rc_vec
+//
+// rc_vec[0] is generic status; host should set to 0xff before calling
+//
+// 0: success   - host should pivot new_code, new_sym into table row new_i
+// 1: cancelled - host needn't do anything (though do apply swapped rows)
+// 2: memory    - would have overwritten r/o memory; apply swap and try again
+// 3: stack     - out of stack space for swap; apply swap and try again
+// 4: tries     - exceeded max tries (apply swap and abandon)
+// ff: undefined
+//
+// rc_vec[1] is for symbol cancelling error; host should set to 0 before call
+//
+// If this value is set, then the value of rc_vec[0] is not reliable!
+//
+// rc_vec[2+] are not currently used
+
 kernel void pivot_gf8(
     // inputs (all read-only)
-           unsigned       i,
-    global unsigned char *host_code,
+ 	   unsigned       i,
+    global unsigned char *host_code, // actually, r/w: one copy per thread
     global unsigned char *host_sym,
     global unsigned char *coding,
     global unsigned char *symbol,
     global unsigned char *filled,
 
     // input-output (host allocates, we write)
+    global unsigned int  *i_swap,
     global unsigned char *code_swap,
     global unsigned char *sym_swap,
 
@@ -64,7 +83,7 @@ kernel void pivot_gf8(
     global unsigned char *new_code,
     global unsigned char *new_sym,
     global unsigned      *swaps,
-    global unsigned      *rc
+    global unsigned char *rc_vec, rc
 
     // other inputs (lookup tables)
 
@@ -85,20 +104,21 @@ kernel void pivot_gf8(
 ) {
 
   // private variables
-  unsigned int  tries = 0, quitting = 0;
+  unsigned int  tries = 0;
   signed   int  j, k;
   // allocating code[ALPHA] as a private array failed, so change it to
   // use global memory below:
-  global   unsigned char *code;
-   unsigned char sym[WORKSIZE];
+  global unsigned char *code;
+  // Also, sym[WORKSIZE] fails if WORKSIZE == 12 (and possible lower)
+  global unsigned char *sym = new_sym;
 #ifdef SEND_INV
   unsigned char inv[256];
 #endif
-  unsigned char bit, mask, temp;
+  unsigned char temp;
   unsigned char cancelled, zero_sym, did_swap;
-  unsigned int local_swaps = 0;
-  unsigned int since_swap = 0;
-  unsigned int ctz_row, ctz_code, clz_code;
+  unsigned int  local_swaps = 0;
+  unsigned int  since_swap = 0;
+  unsigned int  ctz_row, ctz_code, clz_code;
 
   // offset-related stuff
   int id = get_global_id(0);
@@ -120,10 +140,10 @@ kernel void pivot_gf8(
 
   // copy a range of bytes from symbol
   for (j = start_range; j < next_range; ++j)
-    sym[j - start_range] = host_sym[j];
+    sym[j] = host_sym[j];
 
   // Main loop
-  while ( (++tries < GEN * 2) && (since_swap < GEN - 1) ) {
+  while ( ++tries < GEN * 2 ) {
 
     // Check coding row to see if we need to swap
     ctz_code = ctz_row = 0;
@@ -141,25 +161,33 @@ kernel void pivot_gf8(
       // We need to remember if we swapped
       did_swap = 1;
 
+      // Host needs to know which rows to swap
+      if (id == 0)
+	i_swap[local_swaps] = i;
+
       // Store swapped values in code_swap and sym_swap
       // rotate code_swap row <- code <- coding row
       // low-numbered threads update one byte of code_swap each
-      if (id < ALPHA) code_swap[(local_swaps * ALPHA) + id] = code[id];
-      // and all of code
-      j = 0;
+      k = local_swaps * ALPHA;
+      if (id < ALPHA)
+	code_swap[k + id] = code[id];
+
+      // each thread updates all of its code
+      k = i * ALPHA;
       for (j = 0; j < ALPHA; ++j)
-	code[j] = coding[(i * ALPHA) + j ];
+	code[j] = coding[ k + j ];
 
-      // Similar rotation for symbols:
+      // Similar rotation for WORKSIZE symbols:
       // rotate sym_swap row <- sym <- symbol row
-      j = start_range;
-      do {
-	symbol[ (i * BLOCKSIZE) +j ] = sym   [ j - start_range ];
-	sym   [ j - start_range ]    = symbol[ (i * BLOCKSIZE) +j ];
-      } while (++j < next_range);
+      k = local_swaps * BLOCKSIZE;
+      for (j = start_range; j < next_range; ++j) {
+	sym_swap[ j + k ] = sym   [ j ];
+	sym     [ j ]     = symbol[ (i * BLOCKSIZE) +j ];
+      }
 
-      // Actually, we also need to copy stuff to output buffers below:
-      if (++local_swaps >= SWAPSIZE) ++quitting;
+      // Don't immediately break if we fill stack, since we can still
+      // update code/sym and attempt to pivot
+      ++local_swaps;
     }
 
     // subtract coding row (or swapped row) from code
@@ -180,24 +208,22 @@ kernel void pivot_gf8(
     if (did_swap) {
       k = (local_swaps - 1) * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j)
-	if (sym[j - start_range] ^= sym_swap[j + k])
+	if (sym[ j ] ^= sym_swap[j + k])
 	  zero_sym = 0;
     } else {
       k = (i * BLOCKSIZE);
       for (j = start_range; j < next_range; ++j)
-	if (sym[j - start_range] ^= sym_swap[j + k])
+	if (sym[ j ] ^= symbol[j + k])
 	  zero_sym = 0;
     }
 
     if (cancelled) {
-      // zero_sym is going to have to be set in the host since this
-      // thread only sees part of the symbol. To signal an error (ie,
-      // any part of the symbol not being cancelled as it should be),
-      // any/all threads may set this to 1. In the case of the symbol
-      // cancelling correctly, the variable should not be written to.
-      
-      // how to send back proper code or raise error?
-      if (zero_sym) return; // return remain; else error
+      if (zero_sym)
+	rc = 1;			// cancelled (kind of success)
+      else
+	rc_vec[1] = 1;		// any thread can set this error flag
+      break;
+      // goto RETURN;
     }
 
     // we've subtracted a coding row, but we need to normalise
@@ -207,18 +233,60 @@ kernel void pivot_gf8(
     temp = gf8_inv(code[clz_code]);
 
     // can combine code vector multiplication with shift left
-    for (j = 0; j < ALPHA - (clz_code + 1); ++j)
-      code[j] = gf8_mul(temp, code[j + clz_code + 1]);
+    k = clz_code + 1;
+    for (j = 0; j < ALPHA - k; ++j)
+      code[j] = gf8_mul(temp, code[j + k]);
     for (j = j; j < ALPHA; ++j)
       code[j] = 0;
 
     // multiply our part of the symbol
     for (j = start_range; j < next_range; ++j)
-      sym[j - start_range] = gf8_mul(temp, sym[j - start_range]);
+      sym[ j ] = gf8_mul(temp, sym[ j ]);
 
+    i  = i + k;
+    i -= (i >= GEN) ? GEN : 0;
 
-    // checking whether this row is filled (moved from top of loop)
+    // since_swap stays at zero if we haven't swapped anything
+    since_swap += local_swaps ? k : 0;
     
-    return;
+    // checking whether this row is filled (moved from top of loop)
+    temp = 1 << (i & 0x07);	/* bit mask from 1 .. 128 */
+    if (! (filled[(i >> 8)] & temp) ) {
+      // not filled, so we can return. Host handles copying code,sym
+      rc = 0;		/* 0: success, needs writing */
+      break;
+      // goto RETURN;
+    }
+
+    if (since_swap >= GEN -1) {
+      // We caught up with the first swap that we made, so return
+      // and let host persist the changes
+      rc = 2;		/* not yet (host will call us again) */
+      break;
+      // goto RETURN;
+    }
+
+    // Random (but still fine) place to check if our stack is full
+    if (local_swaps >= SWAPSIZE) {
+      rc = 4;
+      break;
+      // goto RETURN;
+    }
   }
+
+  if ( tries >= GEN * 2 )
+    rc = 4;			/* failure: tries */
+
+ RETURN:
+
+  // only first thread updates these:
+  if (id == 0) {
+    *new_i = i;
+    *swaps = local_swaps;
+    rc_vec[0] = rc;
+  }
+  // threads cooperate on filling new_code (new_sym already done)
+  if (id < ALPHA)
+    new_code[id] = code[id];
+  return;
 }
