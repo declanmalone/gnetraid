@@ -87,12 +87,14 @@ kernel void pivot_gf8(
   // private variables
   unsigned int  tries = 0, quitting = 0;
   signed   int  j, k;
-  __private unsigned char code[ALPHA];
-  __private unsigned char sym[WORKSIZE];
+  // allocating code[ALPHA] as a private array failed, so change it to
+  // use global memory below:
+  global   unsigned char *code;
+   unsigned char sym[WORKSIZE];
 #ifdef SEND_INV
   unsigned char inv[256];
 #endif
-  unsigned char bit, mask;
+  unsigned char bit, mask, temp;
   unsigned char cancelled, zero_sym, did_swap;
   unsigned int local_swaps = 0;
   unsigned int since_swap = 0;
@@ -103,6 +105,10 @@ kernel void pivot_gf8(
   int start_range = id * WORKSIZE;
   int next_range  = start_range + WORKSIZE;
 
+  // host has to set up max_work_items copies of code so that each
+  // thread can update its own code value independently.
+  code = host_code + id * ALPHA;
+
   if (start_range >= BLOCKSIZE) return;
   if (next_range > BLOCKSIZE)   next_range = BLOCKSIZE;
     
@@ -110,13 +116,11 @@ kernel void pivot_gf8(
   // cancelled = gf8_log(0);
   // cancelled = no_such_thing(0);
 
-  // copy full code into private storage
-  for (j = 0; j < ALPHA; ++j)
-    code[j] = host_code[j];
+  // don't copy code since host should prepare it for us
 
   // copy a range of bytes from symbol
-  for (j = 0; j < WORKSIZE; ++j)
-    sym[j] = host_sym[j + start_range];
+  for (j = start_range; j < next_range; ++j)
+    sym[j - start_range] = host_sym[j];
 
   // Main loop
   while ( (++tries < GEN * 2) && (since_swap < GEN - 1) ) {
@@ -174,14 +178,14 @@ kernel void pivot_gf8(
 
     // subtract our part of the symbol
     if (did_swap) {
-      k = (local_swaps - 1) * BLOCKSIZE + start_range;
-      for (j = 0; j < WORKSIZE; ++j)
-	if (sym[j] ^= sym_swap[j + k])
+      k = (local_swaps - 1) * BLOCKSIZE;
+      for (j = start_range; j < next_range; ++j)
+	if (sym[j - start_range] ^= sym_swap[j + k])
 	  zero_sym = 0;
     } else {
-      k = (i * BLOCKSIZE) + start_range;
-      for (j = 0; j < WORKSIZE; ++j)
-	if (sym[j] ^= sym_swap[j + k])
+      k = (i * BLOCKSIZE);
+      for (j = start_range; j < next_range; ++j)
+	if (sym[j - start_range] ^= sym_swap[j + k])
 	  zero_sym = 0;
     }
 
@@ -195,7 +199,26 @@ kernel void pivot_gf8(
       // how to send back proper code or raise error?
       if (zero_sym) return; // return remain; else error
     }
-      
+
+    // we've subtracted a coding row, but we need to normalise
+    clz_code = 0;
+    for (j = 0; j < ALPHA; ++j)
+      if (code[j]) break; else ++clz_code;
+    temp = gf8_inv(code[clz_code]);
+
+    // can combine code vector multiplication with shift left
+    for (j = 0; j < ALPHA - (clz_code + 1); ++j)
+      code[j] = gf8_mul(temp, code[j + clz_code + 1]);
+    for (j = j; j < ALPHA; ++j)
+      code[j] = 0;
+
+    // multiply our part of the symbol
+    for (j = start_range; j < next_range; ++j)
+      sym[j - start_range] = gf8_mul(temp, sym[j - start_range]);
+
+
+    // checking whether this row is filled (moved from top of loop)
+    
     return;
   }
 }
