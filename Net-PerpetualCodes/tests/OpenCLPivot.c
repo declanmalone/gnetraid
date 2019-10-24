@@ -42,6 +42,10 @@ unsigned char gf8_mul(unsigned int a, unsigned char b) {
 }
 #endif
 
+// Some alternative kernels to test lower-level functions?
+// ...
+
+// Main entry point
 kernel void pivot_gf8(
     // inputs (all read-only)
            unsigned       i,
@@ -79,112 +83,119 @@ kernel void pivot_gf8(
 #endif
 #endif
 ) {
-    unsigned tries = 0, quitting = 0;
-    unsigned char code[ALPHA];
-    unsigned char sym[WORKSIZE];
+
+  // private variables
+  unsigned int  tries = 0, quitting = 0;
+  signed   int  j, k;
+  __private unsigned char code[ALPHA];
+  __private unsigned char sym[WORKSIZE];
 #ifdef SEND_INV
-    unsigned char inv[256];
+  unsigned char inv[256];
 #endif
-    unsigned char *cp, *rp, *bp, bit, mask;
-    unsigned char cancelled, zero_sym;
-    unsigned int local_swaps = 0;
-    unsigned int since_swap = 0;
-    unsigned int ctz_row, ctz_code, clz_code;
+  unsigned char bit, mask;
+  unsigned char cancelled, zero_sym, did_swap;
+  unsigned int local_swaps = 0;
+  unsigned int since_swap = 0;
+  unsigned int ctz_row, ctz_code, clz_code;
 
-    // offset-related stuff
-    int id = get_global_id(0);
-    int start_range = id * WORKSIZE;
-    int next_range  = start_range + WORKSIZE;
+  // offset-related stuff
+  int id = get_global_id(0);
+  int start_range = id * WORKSIZE;
+  int next_range  = start_range + WORKSIZE;
 
-    if (start_range >= BLOCKSIZE) return;
-    if (next_range > BLOCKSIZE)   next_range = BLOCKSIZE;
+  if (start_range >= BLOCKSIZE) return;
+  if (next_range > BLOCKSIZE)   next_range = BLOCKSIZE;
     
-    // Make sure #include worked (yes, no_such_thing gives an error)
-    // cancelled = gf8_log(0);
-    // cancelled = no_such_thing(0);
+  // Make sure #include worked (yes, no_such_thing gives an error)
+  // cancelled = gf8_log(0);
+  // cancelled = no_such_thing(0);
 
-    // copy full code into private storage
-    cp = host_code;
-    rp = code;
-    bp = cp + ALPHA;
-    while (cp < bp) *(rp++) = *(cp++);
+  // copy full code into private storage
+  for (j = 0; j < ALPHA; ++j)
+    code[j] = host_code[j];
 
-    // copy a range of bytes from symbol
-    j = start_range;
-    while (j < next_range) sym[j - start_range] = host_sym[j];
+  // copy a range of bytes from symbol
+  for (j = 0; j < WORKSIZE; ++j)
+    sym[j] = host_sym[j + start_range];
 
-    while ( (++tries < GEN * 2) && (since_swap < GEN - 1) ) {
+  // Main loop
+  while ( (++tries < GEN * 2) && (since_swap < GEN - 1) ) {
 
-      // Check coding row to see if we need to swap
-      for (ctz_code = 0, cp=code + ALPHA - 1;
-	   cp >= code;
-	   --cp ) {
-	if (*cp != 0) break;
-	++ctz_code;
-      }
-      bp = coding + i * ALPHA;
-      for (ctz_row = 0, cp = bp + ALPHA - 1;
-	   cp >= bp;
-	   --cp ) {
-	if (*cp != 0) break;
-	++ctz_row;
-      }
-
-      did_swap = 0;
-      if (ctz_code > ctz_row) {
-	// We need to remember if we swapped
-	did_swap = 1;
-
-	// Store swapped values in code_swap and sym_swap
-	// rotate code_swap row <- code <- coding row
-	bp = code_swap + (local_swaps * ALPHA);
-	cp = code;
-	rp = coding + (i * ALPHA);
-	// low-numbered threads update one byte of code_swap each
-	if (id < ALPHA) bp[id] = code[id];
-	// and all of code
-	j = 0;
-	while (j++ < ALPHA) {
-	  *(cp++) = *(rp++);
-	}
-
-	// Similar rotation for symbols:
-	// rotate sym_swap row <- sym <- symbol row
-	j = start_range;
-	rp = symbol + (i * BLOCKSIZE);
-	bp = sym_swap + (local_swaps * ALPHA);
-	do {
-	  bp[j]                = sym[j - start_range];
-	  sym[j - start_range] = rp[j];
-	} while (++j < next_range);
-
-	// Actually, we also need to copy stuff to output buffers below:
-	if (++local_swaps >= SWAPSIZE) ++quitting;
-      }
-
-      // subtract coding row (or swapped row, since we only "half-swapped") 
-      cancelled = 1; zero_sym = 1;
-      cp = code;
-      rp = did_swap ? code_swap * (local_swaps - 1) : coding + i * ALPHA;
-      bp = rp + ALPHA;
-      while (rp < bp) {
-	if (*(cp++) ^= *(rp++)) cancelled = 0;
-      }
-
-      cp = sym;
-      rp = did_swap ?
-	sym_swap + (local_swaps - 1) + start_range :
-	symbol + (i * BLOCKSIZE) + start_range;
-      bp = rp + next_range;
-      while (rp < bp) {
-	if (*(cp++) ^= *(rp++)) zero_sym = 0;
-      }
-
-      if (cancelled) {
-	// how to send back proper code or raise error?
-	if (zero_sym) return; // return remain; else error
-      }
-      
-      return;
+    // Check coding row to see if we need to swap
+    ctz_code = ctz_row = 0;
+    for ( j = ALPHA - 1;  j >= 0; --j ) {
+      if ( code[j] != 0 ) break;
+      ++ctz_code;
     }
+    for (j = ALPHA - 1; j >= 0; --j ) {
+      if ( coding[(i * ALPHA) + j ]  != 0 ) break;
+      ++ctz_row;
+    }
+
+    did_swap = 0;
+    if (ctz_code > ctz_row) {
+      // We need to remember if we swapped
+      did_swap = 1;
+
+      // Store swapped values in code_swap and sym_swap
+      // rotate code_swap row <- code <- coding row
+      // low-numbered threads update one byte of code_swap each
+      if (id < ALPHA) code_swap[(local_swaps * ALPHA) + id] = code[id];
+      // and all of code
+      j = 0;
+      for (j = 0; j < ALPHA; ++j)
+	code[j] = coding[(i * ALPHA) + j ];
+
+      // Similar rotation for symbols:
+      // rotate sym_swap row <- sym <- symbol row
+      j = start_range;
+      do {
+	symbol[ (i * BLOCKSIZE) +j ] = sym   [ j - start_range ];
+	sym   [ j - start_range ]    = symbol[ (i * BLOCKSIZE) +j ];
+      } while (++j < next_range);
+
+      // Actually, we also need to copy stuff to output buffers below:
+      if (++local_swaps >= SWAPSIZE) ++quitting;
+    }
+
+    // subtract coding row (or swapped row) from code
+    cancelled = zero_sym = 1;
+    if (did_swap) {
+      k = (local_swaps - 1) * ALPHA;
+      for (j = 0; j < ALPHA; ++j)
+	if (code[j] ^= code_swap[j + k])
+	  cancelled = 0;
+    } else {
+      k = i * ALPHA;
+      for (j = 0; j < ALPHA; ++j)
+	if (code[j] ^= coding[j + k])
+	  cancelled = 0;
+    }
+
+    // subtract our part of the symbol
+    if (did_swap) {
+      k = (local_swaps - 1) * BLOCKSIZE + start_range;
+      for (j = 0; j < WORKSIZE; ++j)
+	if (sym[j] ^= sym_swap[j + k])
+	  zero_sym = 0;
+    } else {
+      k = (i * BLOCKSIZE) + start_range;
+      for (j = 0; j < WORKSIZE; ++j)
+	if (sym[j] ^= sym_swap[j + k])
+	  zero_sym = 0;
+    }
+
+    if (cancelled) {
+      // zero_sym is going to have to be set in the host since this
+      // thread only sees part of the symbol. To signal an error (ie,
+      // any part of the symbol not being cancelled as it should be),
+      // any/all threads may set this to 1. In the case of the symbol
+      // cancelling correctly, the variable should not be written to.
+      
+      // how to send back proper code or raise error?
+      if (zero_sym) return; // return remain; else error
+    }
+      
+    return;
+  }
 }
