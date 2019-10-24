@@ -62,7 +62,7 @@ unsigned char gf8_mul(unsigned int a, unsigned char b) {
 //
 // If this value is set, then the value of rc_vec[0] is not reliable!
 //
-// rc_vec[2+] are not currently used
+// rc_vec[2+] can be used for debugging
 
 kernel void pivot_gf8(
     // inputs (all read-only)
@@ -146,20 +146,22 @@ kernel void pivot_gf8(
   while ( ++tries < GEN * 2 ) {
 
     // Check coding row to see if we need to swap
-    ctz_code = ctz_row = 0;
+    ctz_code = 0;
     for ( j = ALPHA - 1;  j >= 0; --j ) {
       if ( code[j] != 0 ) break;
       ++ctz_code;
     }
+    ctz_row = 0;
     for (j = ALPHA - 1; j >= 0; --j ) {
       if ( coding[(i * ALPHA) + j ]  != 0 ) break;
       ++ctz_row;
     }
-
+    if (id == 0) {
+      rc_vec[3] = ctz_code;
+      rc_vec[4] = ctz_row;
+    }
     did_swap = 0;
     if (ctz_code > ctz_row) {
-      // We need to remember if we swapped
-      did_swap = 1;
 
       // Host needs to know which rows to swap
       if (id == 0)
@@ -188,6 +190,8 @@ kernel void pivot_gf8(
       // Don't immediately break if we fill stack, since we can still
       // update code/sym and attempt to pivot
       ++local_swaps;
+      // We need to remember if we swapped
+      did_swap = 1;
     }
 
     // subtract coding row (or swapped row) from code
@@ -251,7 +255,10 @@ kernel void pivot_gf8(
     
     // checking whether this row is filled (moved from top of loop)
     temp = 1 << (i & 0x07);	/* bit mask from 1 .. 128 */
-    if (! (filled[(i >> 8)] & temp) ) {
+    if (filled[(i >> 8)] & temp) {
+      // debug: check how many (up to uchar) filled slots we encountered
+      if (id == 0) rc_vec[2]++;
+    } else {
       // not filled, so we can return. Host handles copying code,sym
       rc = 0;		/* 0: success, needs writing */
       break;

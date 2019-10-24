@@ -6,6 +6,14 @@ use warnings;
 use OpenCL;
 use Math::FastGF2 qw/:ops/;
 
+# Reserve some rc slots for debugging
+our $retvals = 8;
+# 0 - main rc
+# 1 - symbol cancel problem (fatal error)
+# 2 - number of filled slots encountered
+# 3 - last ctz_code
+# 4 - last ctz_row
+
 # An OpenCL implementation of the pivot_f256 routine.
 #
 # I would like to use Perpetual Codes as part of a multicast/broadcast
@@ -367,7 +375,7 @@ sub new {
     unshift @src_lines, "#define $_\n" for (@{$o{defines}});
     my $src = join("", @src_lines);
 
-    print $src;
+    # print $src;
     
     my $prog = $ctx->build_program ($src);
     my $kernel = $prog->kernel ("pivot_gf8");
@@ -400,7 +408,7 @@ sub new {
     # string array or, better yet, a bit vector
     my $filled = (chr 0) x ($o{gen} / 8);
 
-    # I think I need MEM_USE_HOST_PTR so kernel sees latest data (or map?)
+    # I think I need MEM_USE_HOST_PTR so kernel sees latest data
     $bufs{filled}     = $ctx->buffer_sv (OpenCL::MEM_USE_HOST_PTR, $filled);
 
     # Swap stack-related
@@ -416,7 +424,7 @@ sub new {
     $bufs{new_i}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # 4 bytes
     $bufs{new_code}   = $ctx->buffer (0, $o{alpha});
     $bufs{new_sym}    = $ctx->buffer (0, $o{blocksize});
-    $bufs{rc_vec}     = $ctx->buffer (0, 4);
+    $bufs{rc_vec}     = $ctx->buffer (0, $retvals);
 
     # i -> set_uint(0, i)
     $kernel->set_buffer(1,  $bufs{host_code});
@@ -466,18 +474,34 @@ sub pivot {
     my $groups    = $self->{groups};
     my $groupsize = $self->{groupsize};
     my $threads   = $self->{threads};
-    my $rvec = map { chr $_ } (0xff,0,0,0);
+    my $rvec = pack "C*", 0xff,(0) x ($retvals - 1);
 
     my ($new_i, $new_code, $new_sym, $rc_str, $swaps);
+
+    die "bufs->{filled} not defined\n" unless defined $bufs->{filled};
+
+    my $filled = $queue->map_buffer(
+	$bufs->{filled}, 1,
+	OpenCL::MAP_READ|OpenCL::MAP_WRITE,
+	0, undef
+    );
+
+    my @status = qw(success cancelled memory stack tries);
+    $status[255] = "undefined";
+
+    print "Code length: " . length($code) . "\n";
+    $code =~ m|^.*?(\0*)$|;
+    print "Has " . length($1) . " trailing zeros\n";
 
     # Most things are now stored in OpenCL buffers so we need
     # read_buffer and write_buffer to access them
 
     while (1) {
-	# Can we access filled on host/device? Do they mapped to the
+	# Can we access filled on host/device? Do they map to the
 	# same memory?
-	if (0 == vec($self->{filled}, $i, 1)) {
-	    vec($self->{filled}, $i, 1) = 1;
+	if (0 == vec($$filled, $i, 1)) {
+	    warn "Filling hole in row $i (Perl)\n"; 
+	    vec($$filled, $i, 1) = 1;
 	    $queue->write_buffer($bufs->{coding},1,$i * $alpha, $code);
 	    $queue->write_buffer($bufs->{symbol},1,$i * $blocksize, $sym);
 	    return --($self->{remain});
@@ -501,7 +525,7 @@ sub pivot {
 	    $queue->nd_range_kernel($kernel, undef, [$threads], [$groupsize]);
 
 	    # Before I go on, just examine the outputs
-	    $queue->read_buffer($bufs->{rc_vec},1,0,4,$rc_str);
+	    $queue->read_buffer($bufs->{rc_vec},1,0,$retvals,$rc_str);
 	    my @rc = unpack("C*", $rc_str);
 
 	    $queue->read_buffer($bufs->{swaps},1,0,4,$swaps);
@@ -513,10 +537,21 @@ sub pivot {
 	    $queue->read_buffer($bufs->{new_code},1,0,4,$new_code);
 	    $queue->read_buffer($bufs->{new_sym},1,0,4,$new_sym);
 
-	    print "Return codes: " . (join ", ", @rc) . "\n";
-	    print "New i: $new_i";
+	    print "Return codes: " . (join ", ", @rc) .
+		" ($status[$rc[0]])\n";
+	    print "New i: $new_i\n";
+	    print "Swaps: $swaps\n";
+
+	    # unrecoverable error
+	    if ($rc[1]) {
+		die "Symbol wasn't cancelled even though code was\n";
+	    }
+
+	    # Update
+
+	    vec($$filled, $new_i, 1) = 1;
 	    
-	    exit;
+	    return;
 	}
     }
 }
