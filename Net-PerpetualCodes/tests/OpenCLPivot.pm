@@ -363,7 +363,7 @@ sub new {
     unshift @src_lines, "#define GEN       $o{gen}\n";
     unshift @src_lines, "#define SWAPSIZE  $o{swapsize}\n";
     unshift @src_lines, "#define BLOCKSIZE $o{blocksize}\n";
-    unshift @src_lines, "#define WORKSIZE  $o{worksize}\n";
+    unshift @src_lines, "#define WORKSIZE  $o{worksize}\n"; # stride
     unshift @src_lines, "#define $_\n" for (@{$o{defines}});
     my $src = join("", @src_lines);
 
@@ -372,6 +372,8 @@ sub new {
     my $prog = $ctx->build_program ($src);
     my $kernel = $prog->kernel ("pivot_gf8");
 
+    my $threads = $o{groups} * $o{groupsize};
+    
     # Some parameters won't change between calls
 
     # It seems that MEM_COPY_HOST_PTR will copy the data from the host
@@ -386,44 +388,64 @@ sub new {
     # In addition, pivot needs to call $queue->write_buffer to put
     # values into the host_code and host_sym buffers.
     my %bufs;
-    $bufs{host_i}     = undef;	# set with $kernel->set_uint($index,$value)
-    $bufs{host_code}  = $ctx->buffer (0, $o{alpha});
+    $bufs{i}          = undef;
+    $bufs{host_code}  = $ctx->buffer (0, $o{alpha} * $threads);
     $bufs{host_sym}   = $ctx->buffer (0, $o{blocksize});
 
+    # Allocate the coding and symbol arrays
+    $bufs{coding}     = $ctx->buffer (0, $o{gen} * $o{alpha});
+    $bufs{symbol}     = $ctx->buffer (0, $o{gen} * $o{blocksize});
+
+    # filled was an array in my Perl program, but it's better to use a
+    # string array or, better yet, a bit vector
+    my $filled = (chr 0) x ($o{gen} / 8);
+
+    # I think I need MEM_USE_HOST_PTR so kernel sees latest data (or map?)
+    $bufs{filled}     = $ctx->buffer_sv (OpenCL::MEM_USE_HOST_PTR, $filled);
+
+    # Swap stack-related
+    $bufs{i_swap}     = $ctx->buffer (0, $o{swapsize} * OpenCL::SIZEOF_UINT);
     $bufs{code_swap}  = $ctx->buffer (0, $o{swapsize} * $o{alpha});
     $bufs{sym_swap}   = $ctx->buffer (0, $o{swapsize} * $o{blocksize});
-    # swaps is an output variable
-    $bufs{swaps}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # should be 4 bytes!
 
-    # filled is an array in my Perl program, but it's better to use a
-    # string array or, better yet, a bit vector
-    my $filled_bv = (chr 0) x ($o{gen} / 8);
+    # swaps is an output-only variable
+    $bufs{swaps}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # 4 bytes
 
-    # I think I need MEM_USE_HOST_PTR so kernel sees latest data
-    $bufs{filled_bv}  = $ctx->buffer_sv (OpenCL::MEM_USE_HOST_PTR, $filled_bv);
-
-    my $inv_table = chr 0;
-    $inv_table .= chr(gf2_inv(8,$_)) for (1..255);
-    $bufs{host_inv}   = $ctx->buffer_sv (OpenCL::MEM_COPY_HOST_PTR, $inv_table);
+    # Outputs
     
-    $bufs{new_i}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # should be 4 bytes!
-    $bufs{new_code}   = $ctx->buffer (0, $o{alpha});	
+    $bufs{new_i}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # 4 bytes
+    $bufs{new_code}   = $ctx->buffer (0, $o{alpha});
     $bufs{new_sym}    = $ctx->buffer (0, $o{blocksize});
-    $bufs{rc}         = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # should be 4 bytes!
-    
+    $bufs{rc_vec}     = $ctx->buffer (0, 4);
+
+    # i -> set_uint(0, i)
+    $kernel->set_buffer(1,  $bufs{host_code});
+    $kernel->set_buffer(2,  $bufs{host_sym});
+    $kernel->set_buffer(3,  $bufs{coding});
+    $kernel->set_buffer(4,  $bufs{symbol});
+    $kernel->set_buffer(5,  $bufs{filled});
+    $kernel->set_buffer(6,  $bufs{i_swap});
+    $kernel->set_buffer(7,  $bufs{code_swap});
+    $kernel->set_buffer(8,  $bufs{sym_swap});
+    $kernel->set_buffer(9,  $bufs{new_i});
+    $kernel->set_buffer(10, $bufs{new_code});
+    $kernel->set_buffer(11, $bufs{new_sym});
+    $kernel->set_buffer(12, $bufs{swaps});
+    $kernel->set_buffer(13, $bufs{rc_vec});
     
     my $self = {
+	%o,
 	platform  => $platform,
 	dev       => $dev,
 	ctx       => $ctx,
 	queue     => $queue,
 	prog      => $prog,
 	kernel    => $kernel,
-	filled_bv => $filled_bv,
+	threads   => $threads,
+	filled    => $filled,
 	symbol    => $o{symbol},
 	coding    => $o{coding},
 	remain    => $o{gen},
-	options   => \%o,
 	buffers   => \%bufs,
     };
     bless $self, $class;
@@ -433,16 +455,70 @@ sub pivot {
     my $self = shift;
     my ($i, $code, $sym) = @_;
 
-    
-    # No point in doing this in OpenCL kernel
-    if (0 == vec($self->{filled_bv}, $i, 1)) {
-	vec($self->{filled_bv}, $i, 1) = 1;
-	$self->{coding}->[$i] = $code;
-	$self->{symbol}->[$i] = $sym;
-	return --($self->{remain});
-    }
-	
+    my $alpha     = $self->{alpha};
+    my $gen       = $self->{gen};
+    my $blocksize = $self->{blocksize};
 
+    my $kernel = $self->{kernel};
+    my $bufs   = $self->{buffers};
+    my $queue  = $self->{queue};
+
+    my $groups    = $self->{groups};
+    my $groupsize = $self->{groupsize};
+    my $threads   = $self->{threads};
+    my $rvec = map { chr $_ } (0xff,0,0,0);
+
+    my ($new_i, $new_code, $new_sym, $rc_str, $swaps);
+
+    # Most things are now stored in OpenCL buffers so we need
+    # read_buffer and write_buffer to access them
+
+    while (1) {
+	# Can we access filled on host/device? Do they mapped to the
+	# same memory?
+	if (0 == vec($self->{filled}, $i, 1)) {
+	    vec($self->{filled}, $i, 1) = 1;
+	    $queue->write_buffer($bufs->{coding},1,$i * $alpha, $code);
+	    $queue->write_buffer($bufs->{symbol},1,$i * $blocksize, $sym);
+	    return --($self->{remain});
+	}
+
+	while (1) {
+	    # Set up to call pivot kernel
+	    $kernel->set_uint(0, $i);
+
+	    $queue->write_buffer($bufs->{host_code},1,0,"$code" x $threads);
+	    $queue->write_buffer($bufs->{host_sym}, 1,0,$sym);
+
+	    # {coding}, {symbol} and {filled} shouldn't need setup
+
+	    # swap-related buffers shouldn't need setup
+
+	    # output i, code and sym shouldn't need setup
+
+	    $queue->write_buffer($bufs->{rc_vec},1,0,$rvec);
+
+	    $queue->nd_range_kernel($kernel, undef, [$threads], [$groupsize]);
+
+	    # Before I go on, just examine the outputs
+	    $queue->read_buffer($bufs->{rc_vec},1,0,4,$rc_str);
+	    my @rc = unpack("C*", $rc_str);
+
+	    $queue->read_buffer($bufs->{swaps},1,0,4,$swaps);
+	    $swaps=unpack("V", $swaps);
+
+	    $queue->read_buffer($bufs->{new_i},1,0,4,$new_i);
+	    $new_i = unpack("V", $new_i);
+	    
+	    $queue->read_buffer($bufs->{new_code},1,0,4,$new_code);
+	    $queue->read_buffer($bufs->{new_sym},1,0,4,$new_sym);
+
+	    print "Return codes: " . (join ", ", @rc) . "\n";
+	    print "New i: $new_i";
+	    
+	    exit;
+	}
+    }
 }
 
 # Since the Pi QPUs don't have private constant storage space, and I

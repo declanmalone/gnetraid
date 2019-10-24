@@ -83,7 +83,7 @@ kernel void pivot_gf8(
     global unsigned char *new_code,
     global unsigned char *new_sym,
     global unsigned      *swaps,
-    global unsigned char *rc_vec, rc
+    global unsigned char *rc_vec
 
     // other inputs (lookup tables)
 
@@ -114,7 +114,7 @@ kernel void pivot_gf8(
 #ifdef SEND_INV
   unsigned char inv[256];
 #endif
-  unsigned char temp;
+  unsigned char temp, rc;
   unsigned char cancelled, zero_sym, did_swap;
   unsigned int  local_swaps = 0;
   unsigned int  since_swap = 0;
