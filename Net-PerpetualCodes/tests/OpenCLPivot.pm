@@ -13,6 +13,7 @@ our $retvals = 8;
 # 2 - number of filled slots encountered
 # 3 - last ctz_code
 # 4 - last ctz_row
+# 5 - bit mask
 
 # An OpenCL implementation of the pivot_f256 routine.
 #
@@ -406,10 +407,11 @@ sub new {
 
     # filled was an array in my Perl program, but it's better to use a
     # string array or, better yet, a bit vector
-    my $filled = (chr 0) x ($o{gen} / 8);
+    my $filled = "\0" x ($o{gen} / 8);
 
-    # I think I need MEM_USE_HOST_PTR so kernel sees latest data
-    $bufs{filled}     = $ctx->buffer_sv (OpenCL::MEM_USE_HOST_PTR, $filled);
+    # Giving up on trying to map filled
+    $bufs{filled}     = $ctx->buffer_sv (OpenCL::MEM_COPY_HOST_PTR, $filled);
+    # $bufs{filled}     = $ctx->buffer (0, ($o{gen} / 8));
 
     # Swap stack-related
     $bufs{i_swap}     = $ctx->buffer (0, $o{swapsize} * OpenCL::SIZEOF_UINT);
@@ -478,31 +480,46 @@ sub pivot {
 
     my ($new_i, $new_code, $new_sym, $rc_str, $swaps);
 
-    die "bufs->{filled} not defined\n" unless defined $bufs->{filled};
-
-    my $filled = $queue->map_buffer(
-	$bufs->{filled}, 1,
-	OpenCL::MAP_READ|OpenCL::MAP_WRITE,
-	0, undef
-    );
+    if (0) {
+	# We get 'Use of uninitialized value in subroutine entry' below if
+	# we don't specify the size
+	my $fill_size = $gen / 8;
+	die "bufs->{filled} not defined\n" unless defined $bufs->{filled};
+	my $filled = $queue->map_buffer(
+	    $bufs->{filled} , 1,
+	    OpenCL::MAP_READ|OpenCL::MAP_WRITE,
+	0, $fill_size
+	);
+    }
+    my ($byte, $mask);
 
     my @status = qw(success cancelled memory stack tries);
     $status[255] = "undefined";
 
-    print "Code length: " . length($code) . "\n";
+    die "Wrong code length: " . length($code) . "\n" 
+	if length($code) != $alpha;
     # $code =~ m|^.*?(\0*)$|;
     # print "Has " . length($1) . " trailing zeros\n";
 
     # Most things are now stored in OpenCL buffers so we need
     # read_buffer and write_buffer to access them
 
-    warn "Attempting to pivot into row $i\n";
+    warn "accel->pivot called with i=$i\n";
     while (1) {
 	# Can we access filled on host/device? Do they map to the
 	# same memory?
-	if (0 == vec($$filled, $i, 1)) {
+	warn "RC: Perl Pivot [i=$i]\n";
+	warn "Attempting to pivot into row $i (Perl)\n";
+	($byte, $mask) = ($i >> 3, 1 << ($i & 7));
+	warn "Byte $byte; Mask $mask (Perl)\n";
+	my $bitvec;
+	$queue->read_buffer($bufs->{filled}, 1, $byte, 1, $bitvec);
+	$bitvec = ord $bitvec;
+	warn "Bitvec $bitvec\n";
+	if (0 == ($bitvec & $mask)) {
 	    warn "Filling hole in row $i (Perl)\n"; 
-	    vec($$filled, $i, 1) = 1;
+	    $bitvec = pack "C", ($bitvec | $mask);
+	    $queue->write_buffer($bufs->{filled},1, $byte, $bitvec);
 	    $queue->write_buffer($bufs->{coding},1,$i * $alpha, $code);
 	    $queue->write_buffer($bufs->{symbol},1,$i * $blocksize, $sym);
 	    return --($self->{remain});
@@ -510,6 +527,7 @@ sub pivot {
 
 	my $retries = 2;
 	while ($retries--) {
+	    warn "retries is now $retries (OpenCL)\n";
 	    # Set up to call pivot kernel
 	    $kernel->set_uint(0, $i);
 
@@ -532,7 +550,7 @@ sub pivot {
 	    my @rc = unpack("C*", $rc_str);
 
 	    $queue->read_buffer($bufs->{swaps},1,0,4,$swaps);
-	    $swaps=unpack("V", $swaps);
+	    $swaps = unpack("V", $swaps);
 
 	    $queue->read_buffer($bufs->{new_i},1,0,4,$new_i);
 	    $new_i = unpack("V", $new_i);
@@ -540,10 +558,10 @@ sub pivot {
 	    $queue->read_buffer($bufs->{new_code},1,0,$alpha,$new_code);
 	    $queue->read_buffer($bufs->{new_sym},1,0,$blocksize,$new_sym);
 
-	    print "Return codes: " . (join ", ", @rc) .
-		" ($status[$rc[0]])\n";
-	    print "New i: $new_i\n";
-	    print "Swaps: $swaps\n";
+	    warn "RC: " . (join ", ", @rc) .
+		" ($status[$rc[0]] old_i=$i; new_i=$new_i)\n";
+	    warn "New i: $new_i\n";
+	    warn "Swaps: $swaps\n";
 
 	    # unrecoverable error
 	    if ($rc[1]) {
@@ -555,14 +573,16 @@ sub pivot {
 	    while ($sp < $swaps) {
 		my ($swap_i,$swap_code,$swap_sym);
 		$queue->read_buffer(
-		    $bufs->{i_swap},1,$sp*4,4,$swap_i);
+		    $bufs->{i_swap},1,
+		    $sp*4,4,$swap_i);
+		$swap_i = unpack("V", $swap_i);
+		warn "Finishing swap of row $swap_i\n";
 		$queue->read_buffer(
 		    $bufs->{code_swap},1,
 		    $sp*$alpha,$alpha,$swap_code);
 		$queue->read_buffer(
 		    $bufs->{sym_swap},1,
 		    $sp*$blocksize,$blocksize,$swap_sym);
-		$swap_i = unpack("V", $swap_i);
 
 		# Write code,sym into the correct row
 		$queue->write_buffer(
@@ -574,32 +594,50 @@ sub pivot {
 		++$sp;
 	    }
 	    # Seems like we should also update i,code,sym
+	    my $old_i = $i;
 	    ($i,$code,$sym) = ($new_i,$new_code,$new_sym);
 
 	    warn "Checking return code\n";
 	    # Decide what to do based on main rc
 	    if ($rc[0] == 1) {
 		# cancelled, so no further action required
-		warn "Cancelled\n";
+		warn "RC: Cancelled [i=$i]\n";
 		return $self->{remain};
 
 	    } elsif ($rc[0] == 0) {
 		# success, so place new values in table
-		warn "Success\n";
-		die "Succeeded in pivoting, but row is full\n"
-		    if vec($$filled, $i, 1) == 1;
+		warn "RC: Success [old_i=$old_i; i=$i]\n";
+		($byte, $mask) = ($i >> 3, 1 << ($i & 7));
+		warn "Byte $byte; Mask $mask (OpenCL)\n";
+		my $bitvec;
+		$queue->read_buffer($bufs->{filled}, 1, $byte, 1, $bitvec);
+		$bitvec = ord $bitvec;
+		warn "Bitvec $bitvec\n";
 
-		vec($$filled, $i, 1) = 1;
-		$queue->write_buffer($bufs->{coding},1,$i * $alpha,    $code);
+		warn "Filling hole in row $i (OpenCL)\n"; 
+
+		die "Succeeded in pivoting, but row $i is full\n"
+		    if (1 == ($bitvec & $mask));
+
+		# Escape this inner loop and go back to Perl
+		last;
+
+		warn "Filling hole in row $i (OpenCL)\n"; 
+		$bitvec = pack "C", ($bitvec | $mask);
+		
+		$queue->write_buffer($bufs->{filled},1, $byte, $bitvec);
+		$queue->write_buffer($bufs->{coding},1,$i * $alpha, $code);
 		$queue->write_buffer($bufs->{symbol},1,$i * $blocksize, $sym);
 		return --($self->{remain});
 
 	    } elsif ($rc[0] == 4) {
+		warn "RC: Tries [i=$i]\n";
 		# tries, so warn and abandon
 		warn "Exceeded max tries; abandoning attempt to pivot\n";
 		return $self->{remain};
 
 	    } else {
+		warn "RC: Memory|Stack [i=$i]\n";
 		# memory or stack: try again with updated values
 		warn "Memory or stack: retrying\n";
 	    }

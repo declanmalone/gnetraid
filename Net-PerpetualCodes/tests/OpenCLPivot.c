@@ -247,28 +247,29 @@ kernel void pivot_gf8(
     for (j = start_range; j < next_range; ++j)
       sym[ j ] = gf8_mul(temp, sym[ j ]);
 
-    i  = i + k;
+    i += k;
     i -= (i >= GEN) ? GEN : 0;
 
     // since_swap stays at zero if we haven't swapped anything
     since_swap += local_swaps ? k : 0;
     
+    if (since_swap >= GEN -1) {
+      // We caught up with the first swap that we made, so return
+      // and let host persist the changes
+      rc = 2;		/* not yet (host will call us again) */
+      break;
+      // goto RETURN;
+    }
+
     // checking whether this row is filled (moved from top of loop)
     temp = 1 << (i & 0x07);	/* bit mask from 1 .. 128 */
-    if (filled[(i >> 8)] & temp) {
+    if (id == 0) rc_vec[5] = temp;
+    if (filled[(i >> 3)] & temp) {
       // debug: check how many (up to uchar) filled slots we encountered
       if (id == 0) rc_vec[2]++;
     } else {
       // not filled, so we can return. Host handles copying code,sym
       rc = 0;		/* 0: success, needs writing */
-      break;
-      // goto RETURN;
-    }
-
-    if (since_swap >= GEN -1) {
-      // We caught up with the first swap that we made, so return
-      // and let host persist the changes
-      rc = 2;		/* not yet (host will call us again) */
       break;
       // goto RETURN;
     }

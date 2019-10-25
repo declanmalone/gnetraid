@@ -5,7 +5,7 @@ use warnings;
 
 use v5.20;
 
-my $debug = 0;
+my $debug = 1;
 
 use lib '.';
 
@@ -438,11 +438,13 @@ sub codec_f256 {
 		warn "Re-pivoting\n";
 	    } else {
 		($i, $code, $sym) = encode_block_f256();
+		warn "created encoded block with i=$i\n" if $debug;
 		++$rp;		# received packets
 	    }
 	    check_symbol_f256($i,$code,$sym) if $debug>1;
+	    warn "Calling accel->pivot with i=$i\n";
 	    if ($accel->pivot($i, "$code", "$sym") == 0) {
-		warn "Trying to solve\n";
+		warn "Trying to solve after $rp packets\n";
 		# I need to copy out OpenCL symbol structure here
 		my $sym_array;
 		my $queue = $accel->{queue};
