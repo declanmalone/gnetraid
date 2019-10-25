@@ -177,10 +177,10 @@ kernel void pivot_gf8(
       if (id < ALPHA)
 	code_swap[k + id] = code[id];
 
-      // each thread updates all of its code
+      // each thread updates all of its code (half of a full swap)
       k = i * ALPHA;
       for (j = 0; j < ALPHA; ++j)
-	code[j] = coding[ k + j ];
+	code[j] = coding[ j + k ];
 
       // Similar rotation for WORKSIZE symbols:
       // rotate sym_swap row <- sym <- symbol row
@@ -190,9 +190,6 @@ kernel void pivot_gf8(
 	sym     [ j ]     = symbol[ (i * BLOCKSIZE) +j ];
       }
 
-      // Don't immediately break if we fill stack, since we can still
-      // update code/sym and attempt to pivot
-      ++local_swaps;
       // We need to remember if we swapped
       did_swap = 1;
     }
@@ -200,7 +197,7 @@ kernel void pivot_gf8(
     // subtract coding row (or swapped row) from code
     cancelled = zero_sym = 1;
     if (did_swap) {
-      k = (local_swaps - 1) * ALPHA;
+      k = local_swaps * ALPHA;
       for (j = 0; j < ALPHA; ++j)
 	if (code[j] ^= code_swap[j + k])
 	  cancelled = 0;
@@ -213,7 +210,7 @@ kernel void pivot_gf8(
 
     // subtract our part of the symbol
     if (did_swap) {
-      k = (local_swaps - 1) * BLOCKSIZE;
+      k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j)
 	if (sym[ j ] ^= sym_swap[j + k])
 	  zero_sym = 0;
@@ -223,6 +220,10 @@ kernel void pivot_gf8(
 	if (sym[ j ] ^= symbol[j + k])
 	  zero_sym = 0;
     }
+
+    // I delayed updating this
+    local_swaps += did_swap;
+
 
     if (cancelled) {
       if (zero_sym)
