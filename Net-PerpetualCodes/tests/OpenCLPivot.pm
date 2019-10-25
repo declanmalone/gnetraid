@@ -507,7 +507,8 @@ sub pivot {
 	    return --($self->{remain});
 	}
 
-	while (1) {
+	my $retries = 2;
+	while ($retries--) {
 	    # Set up to call pivot kernel
 	    $kernel->set_uint(0, $i);
 
@@ -523,6 +524,7 @@ sub pivot {
 	    $queue->write_buffer($bufs->{rc_vec},1,0,$rvec);
 
 	    $queue->nd_range_kernel($kernel, undef, [$threads], [$groupsize]);
+	    $queue->barrier;
 
 	    # Before I go on, just examine the outputs
 	    $queue->read_buffer($bufs->{rc_vec},1,0,$retvals,$rc_str);
@@ -534,8 +536,8 @@ sub pivot {
 	    $queue->read_buffer($bufs->{new_i},1,0,4,$new_i);
 	    $new_i = unpack("V", $new_i);
 	    
-	    $queue->read_buffer($bufs->{new_code},1,0,4,$new_code);
-	    $queue->read_buffer($bufs->{new_sym},1,0,4,$new_sym);
+	    $queue->read_buffer($bufs->{new_code},1,0,$alpha,$new_code);
+	    $queue->read_buffer($bufs->{new_sym},1,0,$blocksize,$new_sym);
 
 	    print "Return codes: " . (join ", ", @rc) .
 		" ($status[$rc[0]])\n";
@@ -547,13 +549,62 @@ sub pivot {
 		die "Symbol wasn't cancelled even though code was\n";
 	    }
 
-	    # Update
+	    # If no error, we should update dirty rows from swap
+	    my $sp = 0;
+	    while ($sp < $swaps) {
+		my ($swap_i,$swap_code,$swap_sym);
+		$queue->read_buffer(
+		    $bufs->{i_swap},1,$sp*4,4,$swap_i);
+		$queue->read_buffer(
+		    $bufs->{code_swap},1,
+		    $sp*$alpha,$alpha,$swap_code);
+		$queue->read_buffer(
+		    $bufs->{sym_swap},1,
+		    $sp*$blocksize,$blocksize,$swap_sym);
+		$swap_i = unpack("V", $swap_i);
 
-	    vec($$filled, $new_i, 1) = 1;
-	    
-	    return;
+		# Write code,sym into the correct row
+		$queue->write_buffer(
+		    $bufs->{coding},1,
+		    $swap_i * $alpha, $swap_code);
+		$queue->write_buffer(
+		    $bufs->{symbol},1,
+		    $swap_i * $blocksize, $swap_sym);
+		++$sp;
+	    }
+	    warn "Checking return code\n";
+	    # Decide what to do based on main rc
+	    if ($rc[0] == 1) {
+		# cancelled, so no further action required
+		warn "Cancelled\n";
+		return $self->{remain};
+
+	    } elsif ($rc[0] == 0) {
+		# success, so place new values in table
+		warn "Success\n";
+		die "Succeeded in pivoting, but row is full\n"
+		    if vec($$filled, $new_i, 1) == 1;
+
+		($i,$code,$sym) = ($new_i,$new_code,$new_sym);
+
+		vec($$filled, $i, 1) = 1;
+		$queue->write_buffer($bufs->{coding},1,$i * $alpha,    $code);
+		$queue->write_buffer($bufs->{symbol},1,$i * $blocksize, $sym);
+		return --($self->{remain});
+
+	    } elsif ($rc[0] == 4) {
+		# tries, so warn and abandon
+		warn "Exceeded max tries; abandoning attempt to pivot\n";
+		return $self->{remain};
+
+	    } else {
+		# memory or stack: try again with updated values
+		warn "Memory or stack: retrying\n";
+		($i,$code,$sym) = ($new_i,$new_code,$new_sym);
+	    }
 	}
     }
+    die;
 }
 
 # Since the Pi QPUs don't have private constant storage space, and I
