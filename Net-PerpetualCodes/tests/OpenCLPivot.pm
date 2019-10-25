@@ -490,12 +490,13 @@ sub pivot {
     $status[255] = "undefined";
 
     print "Code length: " . length($code) . "\n";
-    $code =~ m|^.*?(\0*)$|;
-    print "Has " . length($1) . " trailing zeros\n";
+    # $code =~ m|^.*?(\0*)$|;
+    # print "Has " . length($1) . " trailing zeros\n";
 
     # Most things are now stored in OpenCL buffers so we need
     # read_buffer and write_buffer to access them
 
+    warn "Attempting to pivot into row $i\n";
     while (1) {
 	# Can we access filled on host/device? Do they map to the
 	# same memory?
@@ -572,6 +573,9 @@ sub pivot {
 		    $swap_i * $blocksize, $swap_sym);
 		++$sp;
 	    }
+	    # Seems like we should also update i,code,sym
+	    ($i,$code,$sym) = ($new_i,$new_code,$new_sym);
+
 	    warn "Checking return code\n";
 	    # Decide what to do based on main rc
 	    if ($rc[0] == 1) {
@@ -583,9 +587,7 @@ sub pivot {
 		# success, so place new values in table
 		warn "Success\n";
 		die "Succeeded in pivoting, but row is full\n"
-		    if vec($$filled, $new_i, 1) == 1;
-
-		($i,$code,$sym) = ($new_i,$new_code,$new_sym);
+		    if vec($$filled, $i, 1) == 1;
 
 		vec($$filled, $i, 1) = 1;
 		$queue->write_buffer($bufs->{coding},1,$i * $alpha,    $code);
@@ -600,7 +602,6 @@ sub pivot {
 	    } else {
 		# memory or stack: try again with updated values
 		warn "Memory or stack: retrying\n";
-		($i,$code,$sym) = ($new_i,$new_code,$new_sym);
 	    }
 	}
     }

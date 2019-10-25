@@ -7,6 +7,8 @@ use v5.20;
 
 my $debug = 0;
 
+use lib '.';
+
 use Inline 'C';
 
 use Carp;
@@ -420,51 +422,113 @@ sub codec_f256 {
     warn "Seed: $seed\n";
     my @msg = @message;
     my ($in,$out);
-    while (1) {
-	my ($i, $code, $sym);
-	if (@pivot_queue) {
-	    my $new = shift @pivot_queue;
-	    ($i, $code, $sym) = @{$new};
-	    warn "Re-pivoting\n";
-	} else {
-	    ($i, $code, $sym) = encode_block_f256();
-	    ++$rp;		# received packets
-	}
-	check_symbol_f256($i,$code,$sym) if $debug>1;
-	if (pivot_f256($i, "$code", "$sym") == 0) {
-	    warn "Trying to solve\n";
-	    last if solve_f256() == 0;
-	    warn "After initial solve, need to go again\n";
-	    $matched = 0;
-	    for (0 .. $gen-1) {
-		++$matched if $msg[$_] eq $symbol[$_];
+    if ($opencl) {
+	my $accel = OpenCLPivot->new(
+	    alpha => $alpha,
+	    gen   => $gen,
+	    blocksize => $blocksize,
+	);
+	die "Failed to create OpenCL accelerator\n" unless ref $accel;
+
+	while (1) {
+	    my ($i, $code, $sym);
+	    if (@pivot_queue) {
+		my $new = shift @pivot_queue;
+		($i, $code, $sym) = @{$new};
+		warn "Re-pivoting\n";
+	    } else {
+		($i, $code, $sym) = encode_block_f256();
+		++$rp;		# received packets
 	    }
-	    # Check for corruption of original array
-	    for (0 .. $gen-1) {
-		die unless $msg[$_] eq $message[$_];
+	    check_symbol_f256($i,$code,$sym) if $debug>1;
+	    if ($accel->pivot($i, "$code", "$sym") == 0) {
+		warn "Trying to solve\n";
+		# I need to copy out OpenCL symbol structure here
+		my $sym_array;
+		my $queue = $accel->{queue};
+		my $sym_buf = $accel->{buffers}->{symbol};
+		$queue->read_buffer($sym_buf,1,0,$blocksize*$gen,$sym_buf);
+		@symbol = unpack "C$blocksize", $sym_buf;
+		last if solve_f256() == 0;
+		warn "After initial solve, need to go again\n";
+		$matched = 0;
+		for (0 .. $gen-1) {
+		    ++$matched if $msg[$_] eq $symbol[$_];
+		}
+		# Check for corruption of original array
+		for (0 .. $gen-1) {
+		    die unless $msg[$_] eq $message[$_];
+		}
+		warn "Matched $matched source <=> decoded blocks\n";
 	    }
-	    warn "Matched $matched source <=> decoded blocks\n";
+	};
+	warn "Fully decoded after $rp packets\n";
+	$matched = 0;
+	for (0 .. $gen-1) {
+	    ++$matched if $msg[$_] eq $symbol[$_];
 	}
-    };
-    warn "Fully decoded after $rp packets\n";
-    $matched = 0;
-    for (0 .. $gen-1) {
-	++$matched if $msg[$_] eq $symbol[$_];
-    }
-    # Check for corruption of original array
-    for (0 .. $gen-1) {
-	die unless $msg[$_] eq $message[$_];
-    }
-    warn "Matched $matched source <=> decoded blocks";
-    if ($debug) {
-	$in  = unpack("H*", $message[0]);
-	$out = unpack("H*", $symbol[0]);
-	warn "Input block 0 was $in\n";
-	warn "Output block 0 was $out\n";
-	$in  = unpack("H*", $message[$gen - 1]);
-	$out = unpack("H*", $symbol[$gen - 1]);
-	warn "Input block $gen-1 was $in\n";
-	warn "Output block $gen-1 was $out\n";
+	# Check for corruption of original array
+	for (0 .. $gen-1) {
+	    die unless $msg[$_] eq $message[$_];
+	}
+	warn "Matched $matched source <=> decoded blocks";
+	if ($debug) {
+	    $in  = unpack("H*", $message[0]);
+	    $out = unpack("H*", $symbol[0]);
+	    warn "Input block 0 was $in\n";
+	    warn "Output block 0 was $out\n";
+	    $in  = unpack("H*", $message[$gen - 1]);
+	    $out = unpack("H*", $symbol[$gen - 1]);
+	    warn "Input block $gen-1 was $in\n";
+	    warn "Output block $gen-1 was $out\n";
+	}
+    } else {
+	while (1) {
+	    my ($i, $code, $sym);
+	    if (@pivot_queue) {
+		my $new = shift @pivot_queue;
+		($i, $code, $sym) = @{$new};
+		warn "Re-pivoting\n";
+	    } else {
+		($i, $code, $sym) = encode_block_f256();
+		++$rp;		# received packets
+	    }
+	    check_symbol_f256($i,$code,$sym) if $debug>1;
+	    if (pivot_f256($i, "$code", "$sym") == 0) {
+		warn "Trying to solve\n";
+		last if solve_f256() == 0;
+		warn "After initial solve, need to go again\n";
+		$matched = 0;
+		for (0 .. $gen-1) {
+		    ++$matched if $msg[$_] eq $symbol[$_];
+		}
+		# Check for corruption of original array
+		for (0 .. $gen-1) {
+		    die unless $msg[$_] eq $message[$_];
+		}
+		warn "Matched $matched source <=> decoded blocks\n";
+	    }
+	};
+	warn "Fully decoded after $rp packets\n";
+	$matched = 0;
+	for (0 .. $gen-1) {
+	    ++$matched if $msg[$_] eq $symbol[$_];
+	}
+	# Check for corruption of original array
+	for (0 .. $gen-1) {
+	    die unless $msg[$_] eq $message[$_];
+	}
+	warn "Matched $matched source <=> decoded blocks";
+	if ($debug) {
+	    $in  = unpack("H*", $message[0]);
+	    $out = unpack("H*", $symbol[0]);
+	    warn "Input block 0 was $in\n";
+	    warn "Output block 0 was $out\n";
+	    $in  = unpack("H*", $message[$gen - 1]);
+	    $out = unpack("H*", $symbol[$gen - 1]);
+	    warn "Input block $gen-1 was $in\n";
+	    warn "Output block $gen-1 was $out\n";
+	}
     }
     exit;
 }
