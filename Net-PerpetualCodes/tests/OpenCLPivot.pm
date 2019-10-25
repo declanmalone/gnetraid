@@ -401,19 +401,27 @@ sub new {
     $bufs{host_code}  = $ctx->buffer (0, $o{alpha} * $threads);
     $bufs{host_sym}   = $ctx->buffer (0, $o{blocksize});
 
+    # I don't think that OpenCL guarantees that allocated buffers will
+    # be zeroed, so do it explicitly for some buffers.
+    my $zero_coding = "\0" x ($o{gen} * $o{alpha});
+    my $zero_symbol = "\0" x ($o{gen} * $o{blocksize});
+
     # Allocate the coding and symbol arrays
-    $bufs{coding}     = $ctx->buffer (0, $o{gen} * $o{alpha});
-    $bufs{symbol}     = $ctx->buffer (0, $o{gen} * $o{blocksize});
+    $bufs{coding}     = $ctx->buffer_sv (OpenCL::MEM_COPY_HOST_PTR,
+					 $zero_coding);
+    $bufs{symbol}     = $ctx->buffer_sv (OpenCL::MEM_COPY_HOST_PTR,
+					 $zero_symbol);
 
     # filled was an array in my Perl program, but it's better to use a
     # string array or, better yet, a bit vector
     my $filled = "\0" x ($o{gen} / 8);
 
+    
     # Giving up on trying to map filled
     $bufs{filled}     = $ctx->buffer_sv (OpenCL::MEM_COPY_HOST_PTR, $filled);
     # $bufs{filled}     = $ctx->buffer (0, ($o{gen} / 8));
 
-    # Swap stack-related
+    # Swap stack-related (no need to zero these)
     $bufs{i_swap}     = $ctx->buffer (0, $o{swapsize} * OpenCL::SIZEOF_UINT);
     $bufs{code_swap}  = $ctx->buffer (0, $o{swapsize} * $o{alpha});
     $bufs{sym_swap}   = $ctx->buffer (0, $o{swapsize} * $o{blocksize});
@@ -421,7 +429,7 @@ sub new {
     # swaps is an output-only variable
     $bufs{swaps}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # 4 bytes
 
-    # Outputs
+    # Outputs (no need to zero)
     
     $bufs{new_i}      = $ctx->buffer (0, OpenCL::SIZEOF_UINT); # 4 bytes
     $bufs{new_code}   = $ctx->buffer (0, $o{alpha});

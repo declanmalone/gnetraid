@@ -5,7 +5,7 @@ use warnings;
 
 use v5.20;
 
-my $debug = 1;
+my $debug = 2;
 
 use lib '.';
 
@@ -446,11 +446,14 @@ sub codec_f256 {
 	    if ($accel->pivot($i, "$code", "$sym") == 0) {
 		warn "Trying to solve after $rp packets\n";
 		# I need to copy out OpenCL symbol structure here
-		my $sym_array;
+		my ($code_array,$sym_array);
 		my $queue = $accel->{queue};
-		my $sym_buf = $accel->{buffers}->{symbol};
-		$queue->read_buffer($sym_buf,1,0,$blocksize*$gen,$sym_buf);
-		@symbol = unpack "C$blocksize", $sym_buf;
+		my $coding_buf = $accel->{buffers}->{coding};
+		my $symbol_buf = $accel->{buffers}->{symbol};
+		$queue->read_buffer($coding_buf,1,0,$alpha*$gen,$code_array);
+		$queue->read_buffer($symbol_buf,1,0,$blocksize*$gen,$sym_array);
+		@coding = unpack "a$alpha" x $gen, $code_array;
+		@symbol = unpack "a$blocksize"x $gen, $sym_array;
 		last if solve_f256() == 0;
 		warn "After initial solve, need to go again\n";
 		$matched = 0;
@@ -613,7 +616,7 @@ sub check_symbol_f2 {
 	my $bit = vec_bit($_);
 	my $j = ($i + $_ + 1) % $gen;
 	next unless vec($code,$bit,1) == 1;
-	warn "Checking: XORing in \$message[$j]\n";
+	warn "Checking: XORing in \$message[$j]\n" if $debug > 2;
 	$check ^= "$message[$j]";
     }
     die "Symbol not correct. $msg\n" unless $sym eq $check;
@@ -633,7 +636,7 @@ sub check_symbol_f256 {
 	$k = substr $code, $bit, 1;
 	next if "\0" eq $k;
 	my $khex = unpack "H2", $k;
-	warn "Checking: XORing in $khex times \$message[$j]\n";
+	warn "Checking: XORing in $khex times \$message[$j]\n" if $debug > 2;
 	gf256_vec_fma($check, "$message[$j]", ord $k);
     }
     die "Symbol not correct. $msg\n" unless $sym eq $check;

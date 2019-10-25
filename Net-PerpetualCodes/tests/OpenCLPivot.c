@@ -1,5 +1,8 @@
 /* OpenCL kernel for pivoting */
 
+
+#define DO_SWAP 0
+
 /* Sticking code into a proper .c file to get syntax highlighting, etc. */
 
 #ifdef SWITCH_TABLES
@@ -161,7 +164,7 @@ kernel void pivot_gf8(
       rc_vec[4] = ctz_row;
     }
     did_swap = 0;
-    if (ctz_code > ctz_row) {
+    if ((DO_SWAP) && (ctz_code > ctz_row)) {
 
       // Host needs to know which rows to swap
       if (id == 0)
