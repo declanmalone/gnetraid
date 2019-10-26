@@ -399,3 +399,21 @@ macro names a bit though.
 
 First test is good! Enabling LONG_MULTIPLY brought the run time down
 to 5.4 seconds.
+
+### Summary of Maths changes
+
+I changed around the preprocessor stuff so that now:
+
+* must specify *either* SWITCH_TABLES or HOST_TABLES
+* can optionally specify LONG_MULTIPLY
+
+All inversions are done via one of the table lookups, but there are
+three options for multiply:
+
+* if LONG_MULTIPLY is set, always do long multiply (no table lookup)
+* or else, use one of switch tables or host tables.
+
+There's not much difference in run time between LONG_MULTIPLY and
+HOST_TABLES.
+
+

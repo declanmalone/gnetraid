@@ -5,29 +5,21 @@
 
 /* Sticking code into a proper .c file to get syntax highlighting, etc. */
 
-#ifdef SWITCH_TABLES
-// include switch-based table lookups
-#include "gf8_log_exp.c"
-
-// Apparently "inline" is allowed
-inline unsigned char gf8_inv(unsigned char a) {
-  return gf8_exp(255-gf8_log(a));
-}
-
-#ifndef LONG_MULTIPLY
-inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
-  unsigned sum;
-  // tables can't handle case of a or b == 0
-  if ((a == 0) || (b == 0)) return 0;
-  sum  = gf8_log(a) + gf8_log(b);
-  sum -= (sum >= 255) ? 255 : 0;
-  return gf8_exp((unsigned char) sum);
-}
-#endif
-#endif
+// Only select one of SWITCH_TABLES, HOST_TABLES. LONG_MULTIPLY takes
+// precedence for multiplication.
 
 #ifdef LONG_MULTIPLY
-unsigned char gf8_mul(unsigned int a, unsigned char b) {
+#define GF8_MUL(a,b) (gf8_mul_long(((unsigned char) (a)),b))
+
+// Apparently I can't inline this. Strange.
+unsigned char gf8_mul_long(unsigned int a, unsigned char b) {
+
+#ifdef OPERAND_CHECK
+  // Checking if operands are 0 or 1 may (or may not) be faster
+  // (I expect it not to be)
+  if (a < 2) { return a ? b : 0; }
+  if (b < 2) { return b ? a : 0; }
+#endif
 
   unsigned char product = (b & 1) ? a : 0;
   a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
@@ -47,6 +39,55 @@ unsigned char gf8_mul(unsigned int a, unsigned char b) {
     (product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
 }
 #endif
+
+#ifdef HOST_TABLES
+
+#define GF8_INV(a) (gf8_inv_host(a, host_log, host_exp))
+inline unsigned char gf8_inv_host(unsigned char a,
+				  global unsigned char *host_log,
+				  global unsigned char *host_exp) {
+  return host_exp[255-host_log[a]];
+}
+
+#ifndef LONG_MULTIPLY
+#define GF8_MUL(a,b) (gf8_mul_host(a,b, host_log, host_exp))
+
+inline unsigned char gf8_mul_host(unsigned char a, unsigned char b,
+				  global unsigned char *host_log,
+				  global unsigned char *host_exp) {
+  unsigned sum;
+  if ((a == 0) || (b == 0)) return 0;
+  sum  = host_log[a] + host_log[b];
+  sum -= (sum >= 255) ? 255 : 0;
+  return host_exp[(unsigned char) sum];
+}
+#endif
+#endif
+
+#ifdef SWITCH_TABLES
+// include switch-based table lookups (gf8_exp() and gf8_log())
+#include "gf8_log_exp.c"
+
+#define GF8_INV(a) (gf8_inv_switch((a)))
+
+// Apparently "inline" is allowed
+inline unsigned char gf8_inv_switch(unsigned char a) {
+  return gf8_exp(255-gf8_log(a));
+}
+
+#ifndef LONG_MULTIPLY
+#define GF8_MUL(a,b) (gf8_mul_switch((a),(b)))
+inline unsigned char gf8_mul_switch(unsigned char a, unsigned char b) {
+  unsigned sum;
+  // tables can't handle case of a or b == 0
+  if ((a == 0) || (b == 0)) return 0;
+  sum  = gf8_log(a) + gf8_log(b);
+  sum -= (sum >= 255) ? 255 : 0;
+  return gf8_exp((unsigned char) sum);
+}
+#endif
+#endif
+
 
 // Some alternative kernels to test lower-level functions?
 // ...
@@ -99,7 +140,7 @@ kernel void pivot_gf8(
     // the comma at the start of these blocks.
 
 #ifndef SWITCH_TABLES
-#ifdef SEND_LOG_EXP
+#ifdef HOST_TABLES
     , global unsigned char *host_log
     , global unsigned char *host_exp
 #endif
@@ -150,16 +191,16 @@ kernel void pivot_gf8(
 
   // Sanity check maths
   if (id == 0) {
-    if (gf8_inv(0x53) != 0xca) {
+    if (GF8_INV(0x53) != 0xca) {
       rc_vec[6] = 1; return;
     }
-    if (gf8_mul(0x53,0xca) != 1) {
+    if (GF8_MUL(0x53,0xca) != 1) {
       rc_vec[6] = 2; return;
     }
-    if (gf8_mul(0x0b, 0xc0) != 1) {
+    if (GF8_MUL(0x0b, 0xc0) != 1) {
       rc_vec[6] = 3; return;
     }
-    if (gf8_mul(0x9d,0xc0) != 0xd4) {
+    if (GF8_MUL(0x9d,0xc0) != 0xd4) {
       rc_vec[6] = 4; return;
     }
   }
@@ -258,19 +299,19 @@ kernel void pivot_gf8(
     clz_code = 0;
     for (j = 0; j < ALPHA; ++j)
       if (code[j]) break; else ++clz_code;
-    temp = gf8_inv(code[clz_code]);
+    temp = GF8_INV(code[clz_code]);
     if (id == 0) rc_vec[7] = temp;
 
     // can combine code vector multiplication with shift left
     k = clz_code + 1;
     for (j = 0; j < ALPHA - k; ++j)
-      code[j] = gf8_mul(temp, code[j + k]);
+      code[j] = GF8_MUL(temp, code[j + k]);
     for (j = j; j < ALPHA; ++j)
       code[j] = 0;
 
     // multiply our part of the symbol
     for (j = start_range; j < next_range; ++j)
-      sym[ j ] = gf8_mul(temp, sym[ j ]);
+      sym[ j ] = GF8_MUL(temp, sym[ j ]);
 
     i += k;
     i -= (i >= GEN) ? GEN : 0;
