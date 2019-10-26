@@ -309,34 +309,46 @@ sub pivot {
 	    }
 
 	    # If no error, we should update dirty rows from swap
-	    my $sp = 0;
-	    while ($sp < $swaps) {
-		my ($swap_i,$swap_code,$swap_sym);
-		$queue->read_buffer(
-		    $bufs->{i_swap},1,
-		    $sp*4,4,$swap_i);
-		$swap_i = unpack("V", $swap_i);
-		warn "Finishing swap of row $swap_i\n"  if $debug;
-		$queue->read_buffer(
-		    $bufs->{code_swap},1,
-		    $sp*$alpha,$alpha,$swap_code);
-		$queue->read_buffer(
-		    $bufs->{sym_swap},1,
-		    $sp*$blocksize,$blocksize,$swap_sym);
+	    if ($swaps) {
+		warn "Need to swap $swaps rows back into tables\n"
+		    if $debug;
 
-		if (defined ($self->{message}) and $debug > 1) {
-		    $self->check_symbol_f256($swap_i,$swap_code,$swap_sym,
-		    "Row $swap_i taken from swap stack is invalid.");
+		my (@is,@codes,@syms,$buf);
+
+		$queue->read_buffer($bufs->{i_swap},1,
+				    0, $swaps * OpenCL::SIZEOF_UINT,$buf);
+		@is = unpack("V*", $buf);
+
+		$queue->read_buffer($bufs->{code_swap},1,
+				    0 ,$swaps * $alpha, $buf);
+		@codes = unpack("a[$alpha]" x $swaps, $buf);
+
+		$queue->read_buffer($bufs->{sym_swap},1,
+				    0 ,$swaps * $blocksize,$buf);
+		@syms = unpack("a[$blocksize]" x $swaps, $buf);
+
+		my ($this_i, $this_code, $this_sym);
+		while (@is) {
+		    $this_i    = shift @is;
+		    $this_code = shift @codes;
+		    $this_sym  = shift @syms;
+
+		    warn "Finishing swap of row $this_i\n" if $debug;
+
+		    if (defined ($self->{message}) and $debug > 1) {
+			$self->check_symbol_f256(
+			    $this_i,$this_code,$this_sym,
+			    "Row $this_i taken from swap stack is invalid.");
+		    }
+
+		    # Write code,sym into the correct row
+		    $queue->write_buffer(
+			$bufs->{coding},1,
+			$this_i * $alpha, $this_code);
+		    $queue->write_buffer(
+			$bufs->{symbol},1,
+			$this_i * $blocksize, $this_sym);
 		}
-
-		# Write code,sym into the correct row
-		$queue->write_buffer(
-		    $bufs->{coding},1,
-		    $swap_i * $alpha, $swap_code);
-		$queue->write_buffer(
-		    $bufs->{symbol},1,
-		    $swap_i * $blocksize, $swap_sym);
-		++$sp;
 	    }
 	    # Seems like we should also update i,code,sym
 	    my $old_i = $i;

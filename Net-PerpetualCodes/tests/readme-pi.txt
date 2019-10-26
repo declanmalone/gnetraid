@@ -367,4 +367,8 @@ vector), but probably not enough to offset the extra maths work done
 in each thread.
 
 I should also check to make sure that I'm actually running the kernels
-on the GPU. I think that I am, but I might be mistaken.
+on the GPU. I think that I am, but I might be mistaken. OK. I think
+that's checked for in the code now.
+
+I've implemented the change to swapped rows, which knocked a couple of
+seconds off the run time.
