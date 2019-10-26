@@ -6,6 +6,8 @@ use warnings;
 use OpenCL;
 use Math::FastGF2 qw/:ops/;
 
+our $debug = 0;
+
 # Reserve some rc slots for debugging
 our $retvals = 8;
 # 0 - main rc
@@ -221,22 +223,24 @@ sub pivot {
     # read_buffer and write_buffer to access them
 
     my $check_for_hole = 1;
-    warn "accel->pivot called with i=$i\n";
+    warn "accel->pivot called with i=$i\n" if $debug;
     my $retries = 2;
 
     while (1) {
 	# Can we access filled on host/device? Do they map to the
 	# same memory?
-	warn "RC: Perl Pivot [i=$i]\n";
-	warn "Attempting to pivot into row $i (Perl)\n";
+	if ($debug) {
+	    warn "RC: Perl Pivot [i=$i]\n";
+	    warn "Attempting to pivot into row $i (Perl)\n";
+	}
 	($byte, $mask) = ($i >> 3, 1 << ($i & 7));
-	warn "Byte $byte; Mask $mask (Perl)\n";
+	warn "Byte $byte; Mask $mask (Perl)\n" if $debug;
 	my $bitvec;
 	$queue->read_buffer($bufs->{filled}, 1, $byte, 1, $bitvec);
 	$bitvec = ord $bitvec;
-	warn "Bitvec $bitvec\n";
+	warn "Bitvec $bitvec\n" if $debug;
 	if (0 == ($bitvec & $mask)) {
-	    warn "Filling hole in row $i (Perl)\n"; 
+	    warn "Filling hole in row $i (Perl)\n" if $debug; 
 	    $bitvec = chr ($bitvec | $mask);
 	    $queue->write_buffer($bufs->{filled},1, $byte, $bitvec);
 	    $queue->write_buffer($bufs->{coding},1,$i * $alpha, $code);
@@ -245,7 +249,7 @@ sub pivot {
 	}
 
 	while ($retries--) {
-	    warn "retries is now $retries (OpenCL)\n";
+	    warn "retries is now $retries (OpenCL)\n" if $debug;
 	    # Set up to call pivot kernel
 	    $kernel->set_uint(0, $i);
 
@@ -278,15 +282,17 @@ sub pivot {
 	    $queue->read_buffer($bufs->{new_sym},1,0,$blocksize,$new_sym);
 
 	    warn "RC: " . (join ", ", @rc) .
-		" ($status[$rc[0]] old_i=$i; new_i=$new_i)\n";
+		" ($status[$rc[0]] old_i=$i; new_i=$new_i)\n"  if $debug;
 
 	    # unrecoverable error
 	    if ($rc[6]) {
 		die "Maths error";
 	    }
 	    # in case of maths error, the following are meaningless
-	    warn "New i: $new_i\n";
-	    warn "Swaps: $swaps\n";
+	    if ($debug) {
+		warn "New i: $new_i\n";
+		warn "Swaps: $swaps\n";
+	    }
 	    if ($rc[1]) {
 		die "Symbol wasn't cancelled even though code was\n";
 	    }
@@ -299,7 +305,7 @@ sub pivot {
 		    $bufs->{i_swap},1,
 		    $sp*4,4,$swap_i);
 		$swap_i = unpack("V", $swap_i);
-		warn "Finishing swap of row $swap_i\n";
+		warn "Finishing swap of row $swap_i\n"  if $debug;
 		$queue->read_buffer(
 		    $bufs->{code_swap},1,
 		    $sp*$alpha,$alpha,$swap_code);
@@ -307,7 +313,7 @@ sub pivot {
 		    $bufs->{sym_swap},1,
 		    $sp*$blocksize,$blocksize,$swap_sym);
 
-		if (defined ($self->{message}) ) {
+		if (defined ($self->{message}) and $debug > 1) {
 		    $self->check_symbol_f256($swap_i,$swap_code,$swap_sym,
 		    "Row $swap_i taken from swap stack is invalid.");
 		}
@@ -325,32 +331,32 @@ sub pivot {
 	    my $old_i = $i;
 	    ($i,$code,$sym) = ($new_i,$new_code,$new_sym);
 
-	    warn "Checking return code\n";
+	    warn "Checking return code\n" if $debug;
 	    # Decide what to do based on main rc
 	    if ($rc[0] == 1) {
 		# cancelled, so no further action required
-		warn "RC: Cancelled [i=$i]\n";
+		warn "RC: Cancelled [i=$i]\n" if $debug;
 		return $self->{remain};
 
 	    }
 
 	    # only check code,symbol if it wasn't cancelled
-	    if (defined ($self->{message}) ) {
+	    if (defined ($self->{message}) and $debug > 1 ) {
 		$self->check_symbol_f256($i,$code,$sym,
                    "code/symbol $i returned from pivot kernel.");
 	    }
 
 	    if ($rc[0] == 0) {
 		# success, so place new values in table
-		warn "RC: Success [old_i=$old_i; i=$i]\n";
+		warn "RC: Success [old_i=$old_i; i=$i]\n" if $debug;
 		($byte, $mask) = ($i >> 3, 1 << ($i & 7));
-		warn "Byte $byte; Mask $mask (OpenCL)\n";
+		warn "Byte $byte; Mask $mask (OpenCL)\n" if $debug;
 		my $bitvec;
 		$queue->read_buffer($bufs->{filled}, 1, $byte, 1, $bitvec);
 		$bitvec = ord $bitvec;
-		warn "Bitvec $bitvec\n";
+		warn "Bitvec $bitvec\n" if $debug;
 
-		warn "Filling hole in row $i (OpenCL)\n"; 
+		warn "Filling hole in row $i (OpenCL)\n" if $debug;
 
 		die "Succeeded in pivoting, but row $i is full\n"
 		    if (1 == ($bitvec & $mask));
@@ -358,7 +364,7 @@ sub pivot {
 		# Escape this inner loop and go back to Perl
 		last;
 
-		warn "Filling hole in row $i (OpenCL)\n"; 
+		warn "Filling hole in row $i (OpenCL)\n" if $debug; 
 		$bitvec = pack "C", ($bitvec | $mask);
 		
 		$queue->write_buffer($bufs->{filled},1, $byte, $bitvec);
@@ -367,7 +373,7 @@ sub pivot {
 		return --($self->{remain});
 
 	    } elsif ($rc[0] == 4) {
-		warn "RC: Tries [i=$i]\n";
+		warn "RC: Tries [i=$i]\n" if $debug;
 		# tries, so warn and abandon
 		warn "Exceeded max tries; abandoning attempt to pivot\n";
 		return $self->{remain};
