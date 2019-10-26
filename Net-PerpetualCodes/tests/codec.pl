@@ -5,7 +5,7 @@ use warnings;
 
 use v5.20;
 
-my $debug = 2;
+my $debug = 0;
 
 use lib '.';
 

@@ -325,13 +325,6 @@ sub pivot {
 	    my $old_i = $i;
 	    ($i,$code,$sym) = ($new_i,$new_code,$new_sym);
 
-	    # This seems like a good spot to check the returned
-	    # code and symbol
-	    if (defined ($self->{message}) ) {
-		$self->check_symbol_f256($i,$code,$sym,
-                  "code/symbol $i returned from pivot kernel.");
-	    }
-
 	    warn "Checking return code\n";
 	    # Decide what to do based on main rc
 	    if ($rc[0] == 1) {
@@ -339,7 +332,15 @@ sub pivot {
 		warn "RC: Cancelled [i=$i]\n";
 		return $self->{remain};
 
-	    } elsif ($rc[0] == 0) {
+	    }
+
+	    # only check code,symbol if it wasn't cancelled
+	    if (defined ($self->{message}) ) {
+		$self->check_symbol_f256($i,$code,$sym,
+                   "code/symbol $i returned from pivot kernel.");
+	    }
+
+	    if ($rc[0] == 0) {
 		# success, so place new values in table
 		warn "RC: Success [old_i=$old_i; i=$i]\n";
 		($byte, $mask) = ($i >> 3, 1 << ($i & 7));
