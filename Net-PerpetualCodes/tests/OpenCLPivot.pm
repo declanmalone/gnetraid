@@ -73,8 +73,19 @@ sub new {
 	warn "We have a 2nd device; using it.\n";
 	$dev=$dev2;
     }
-    my $ctx = $platform->context (undef, [$dev]); # create context out of those
+    # Create context from the above
+    # my $ctx = $platform->context (undef, [$dev]);
+
+    warn "OpenCL Platform: ". $platform->name() . "\n";
+    warn "Device: " . $dev->name() . "\n";
+
+    # Alternative: Make sure that we're running on GPU
+    my $ctx = $platform->context_from_type (undef,OpenCL::DEVICE_TYPE_GPU);
     my $queue = $ctx->queue ($dev);     # create a command queue for the device
+
+    my $pv = $dev->info(OpenCL::DEVICE_TYPE);
+    $pv = ord (substr $pv, 0, 1);
+    warn "Device appears to be a GPU\n" if $pv &OpenCL::DEVICE_TYPE_GPU;
 
     # configure and build the kernel
     my @src_lines = (<DATA>);

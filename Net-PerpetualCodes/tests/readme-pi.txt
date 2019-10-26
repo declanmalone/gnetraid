@@ -1,5 +1,5 @@
 
-An OpenCL implementation of the pivot_f256 routine.
+# An OpenCL implementation of the pivot_f256 routine.
 
 I would like to use Perpetual Codes as part of a multicast/broadcast
 step in a storage application. One or more senders will multicast
@@ -126,8 +126,7 @@ synchronisation to enforce read/write consistency on the coding and
 symbol tables. Also, it's unlikely that this method would get as
 good utilisation of the hardware.
 
-Pi-centric implementation
-=========================
+## Pi-centric implementation
 
 I'll be developing/testing this using Perl's OpenCL module, but for
 actual deployment, I'll shift over to using C. For one thing, it's
@@ -198,7 +197,7 @@ Every time the pivot routine loops, it has to do:
 With parameters alpha = 24, gen = 2048 and blocksize = 1024,
 profiling shows that these are in the region of:
 
-42676 / 2248 = 18
+    42676 / 2248 = 18
 
 calls to each of those routines. This means that copying the inverse
 table (256 elements) would probably not be worthwhile unless global
@@ -252,9 +251,9 @@ little bit less work than the others.
 
 With a block size of 1024, and 192 threads we can have:
 
-170 threads each working on 6 elements each (10.65 QPUs)
-1   thread working on 4 elements
-192 - 171 = 21 threads unused (one QPU + 5 threads)
+    170 threads each working on 6 elements each (10.65 QPUs)
+    1   thread working on 4 elements
+    192 - 171 = 21 threads unused (one QPU + 5 threads)
 
 Other schemes are possible, such as:
 
@@ -273,8 +272,7 @@ group size of 32. I'll have to look up the nd_range_kernel
 documentation to see if I can specify this. Perhaps I will need to
 use 2-D addressing.
 
-General OpenCL issues
-=====================
+## General OpenCL issues
 
 To avoid the need for global synchronisation (so that all threads
 have a consistent view of the data they're working on), I'll take
@@ -315,3 +313,58 @@ ctz, clz and shift operations locally.
 When returning the code vector, only the first alpha threads will
 contribute to writing it.
 
+## Results
+
+As of commit 82e230f0c29392d4bea10d12781ca4bedf85b41a the code seems
+to be working fine, but it's taking far too long.
+
+Checking the output of an NYTProf profile of the code, the bulk of the
+time is being spent here:
+
+    270ms   $queue->nd_range_kernel($kernel, undef, [$threads], [$groupsize]);
+    2.98ms  $queue->barrier;
+    9.21s   $queue->read_buffer($bufs->{rc_vec},1,0,$retvals,$rc_str);
+
+I interpret this not as the read_buffer taking nearly 10s, but as the
+code blocking there while waiting for the kernels to finish running.
+The actual read from the buffer probably is only in the order of 100ms
+in total, in line with costs of the other calls to read_buffer.
+
+There are more expensive calls in handling the swap arrays:
+
+    1.17s   $queue->read_buffer($bufs->{i_swap},1, $sp*4,4,$swap_i);
+   23.5ms   $swap_i = unpack("V", $swap_i);
+            $queue->read_buffer(
+    977ms   $bufs->{code_swap},1, $sp*$alpha,$alpha,$swap_code);
+    1.08s   $queue->read_buffer(
+            $bufs->{sym_swap},1, $sp*$blocksize,$blocksize,$swap_sym);
+
+Reading from buffers seems to be a lot more expensive than writing to
+them, as the following two writes only take 192ms and 161ms.
+
+While this bit of code only takes a few seconds, it still makes sense
+to optimise it. It seems that reading the whole buffer and unpacking
+it into a local Perl array should be a lot quicker than doing a
+read_buffer for each element.
+
+It should also be possible to write another kernel that handles
+writing swapped values back into the coding and symbol arrays, though
+I'm not sure if the calling overhead would be worth it, and I'd lose
+the ability to turn on checking of symbols if I need to debug that
+again (unless I keep both the OpenCL and Perl versions in the code).
+
+I can't profile the OpenCL code directly, so it's hard to know what's
+taking the most time. However, I have an alternative implementation of
+the field multiplication operations. I could plug that in and see what
+difference it makes. Also, profiling of the C version of the code can
+give a good sense of instruction counts, even though the OpenCL code
+is different in a few places.
+
+I could also try tuning some OpenCL parameters, for example using
+fewer work units and having each work unit do more work. This would
+relieve some memory access pressure (redundant writes to new_code
+vector), but probably not enough to offset the extra maths work done
+in each thread.
+
+I should also check to make sure that I'm actually running the kernels
+on the GPU. I think that I am, but I might be mistaken.
