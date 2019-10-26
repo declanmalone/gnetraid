@@ -235,13 +235,18 @@ kernel void pivot_gf8(
       // low-numbered threads update one byte of code_swap each
       // Actually, no... do all the bytes since we read from code_swap later
       k = local_swaps * ALPHA;
-      for (j = 0; j < ALPHA; ++j)
-	code_swap[j + k] = code[j];
-
-      // each thread updates all of its code (half of a full swap)
-      k = i * ALPHA;
-      for (j = 0; j < ALPHA; ++j)
-	code[j] = coding[ j + k ];
+      if (0) {
+	for (j = 0; j < ALPHA; ++j)
+	  code_swap[j + k] = code[j];
+      } else {
+	code_swap[k + id] = code[id];
+      }
+      if (0) {
+	// each thread updates all of its code (half of a full swap)
+	k = i * ALPHA;
+	for (j = 0; j < ALPHA; ++j)
+	  code[j] = coding[ j + k ];
+      }
 
       // Similar rotation for WORKSIZE symbols:
       // rotate sym_swap row <- sym <- symbol row
@@ -257,7 +262,7 @@ kernel void pivot_gf8(
 
     // subtract coding row (or swapped row) from code
     cancelled = 1;
-    if (did_swap) {
+    if (0 && did_swap) {
       k = local_swaps * ALPHA;
       for (j = 0; j < ALPHA; ++j)
 	if (code[j] ^= code_swap[j + k])
