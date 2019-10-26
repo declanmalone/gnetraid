@@ -230,63 +230,37 @@ kernel void pivot_gf8(
       if (id == 0)
 	i_swap[local_swaps] = i;
 
-      // Store swapped values in code_swap and sym_swap
-      // rotate code_swap row <- code <- coding row
-      // low-numbered threads update one byte of code_swap each
-      // Actually, no... do all the bytes since we read from code_swap later
+      // We only need to write to the swap arrays
       k = local_swaps * ALPHA;
-      if (0) {
-	for (j = 0; j < ALPHA; ++j)
-	  code_swap[j + k] = code[j];
-      } else {
+      if (id < ALPHA)
 	code_swap[k + id] = code[id];
-      }
-      if (0) {
-	// each thread updates all of its code (half of a full swap)
-	k = i * ALPHA;
-	for (j = 0; j < ALPHA; ++j)
-	  code[j] = coding[ j + k ];
-      }
-
-      // Similar rotation for WORKSIZE symbols:
-      // rotate sym_swap row <- sym <- symbol row
       k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j) {
 	sym_swap[ j + k ] = sym   [ j ];
-	// sym     [ j     ] = symbol[ (i * BLOCKSIZE) + j ];
       }
 
-      // We need to remember if we swapped
+      // Set variable so we can update local_swaps later
       did_swap = 1;
     }
 
+    // The code below doesn't care that we didn't actually swap code
+    // with coding row or sym with symbol row
+    
     // subtract coding row (or swapped row) from code
     cancelled = 1;
-    if (0 && did_swap) {
-      k = local_swaps * ALPHA;
-      for (j = 0; j < ALPHA; ++j)
-	if (code[j] ^= code_swap[j + k])
-	  cancelled = 0;
-    } else {
-      k = i * ALPHA;
-      for (j = 0; j < ALPHA; ++j)
-	if (code[j] ^= coding[j + k])
-	  cancelled = 0;
-    }
+    // reuse zero_sym here to mean number of non-zero elements
+    zero_sym = ALPHA - (did_swap? ctz_row : ctz_code);
+    k = i * ALPHA;
+    for (j = 0; j < zero_sym ; ++j)
+      if (code[j] ^= coding[j + k])
+	cancelled = 0;
 
     // subtract our part of the symbol
     zero_sym = 1;
-    if (0 && did_swap) {
-      k = local_swaps * BLOCKSIZE;
-      for (j = start_range; j < next_range; ++j)
-	if (sym[ j ] ^= sym_swap[j + k])
-	  zero_sym = 0;
-    } else {
-      k = (i * BLOCKSIZE);
-      for (j = start_range; j < next_range; ++j)
-	if (sym[ j ] ^= symbol[j + k])
-	  zero_sym = 0;
-    }
+    k = (i * BLOCKSIZE);
+    for (j = start_range; j < next_range; ++j)
+      if (sym[ j ] ^= symbol[j + k])
+	zero_sym = 0;
 
     // I delayed updating this
     local_swaps += did_swap;
@@ -321,7 +295,7 @@ kernel void pivot_gf8(
     i += k;
     i -= (i >= GEN) ? GEN : 0;
 
-    // since_swap stays at zero if we haven't swapped anything
+    // since_swap stays at zero until we swapped something
     since_swap += (local_swaps ? k : 0);
     
     if (since_swap >= GEN -1) {
@@ -347,7 +321,7 @@ kernel void pivot_gf8(
 
     // Random (but still fine) place to check if our stack is full
     if (local_swaps >= SWAPSIZE) {
-      rc = 4;
+      rc = 3;
       break;
       // goto RETURN;
     }
