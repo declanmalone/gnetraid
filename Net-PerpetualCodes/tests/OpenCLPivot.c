@@ -11,37 +11,40 @@
 
 // Apparently "inline" is allowed
 inline unsigned char gf8_inv(unsigned char a) {
-    return gf8_exp(255-gf8_log(a));
+  return gf8_exp(255-gf8_log(a));
 }
 
+#ifndef LONG_MULTIPLY
 inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
-    unsigned sum;
-    // tables can't handle case of a or b == 0
-    if ((a == 0) || (b == 0)) return 0;
-    sum  = gf8_log(a) + gf8_log(b);
-    sum -= (sum >= 255) ? 255 : 0;
-    return gf8_exp((unsigned char) sum);
+  unsigned sum;
+  // tables can't handle case of a or b == 0
+  if ((a == 0) || (b == 0)) return 0;
+  sum  = gf8_log(a) + gf8_log(b);
+  sum -= (sum >= 255) ? 255 : 0;
+  return gf8_exp((unsigned char) sum);
 }
+#endif
 #endif
 
 #ifdef LONG_MULTIPLY
 unsigned char gf8_mul(unsigned int a, unsigned char b) {
-    unsigned char product = (b & 1) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 2) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 4) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 8) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 16) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 32) ? a : 0;
-    a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
-    product ^=  (b & 64) ? a : 0;
-    // Optimise last bit: don't update a unless we need to
-    return (b & 128) == 0 ? product :
-	(product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
+
+  unsigned char product = (b & 1) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 2) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 4) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 8) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 16) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 32) ? a : 0;
+  a = (a & 128) ? ((a << 1) ^  0x11b) : (a << 1);
+  product ^=  (b & 64) ? a : 0;
+  // Optimise last bit: don't update a unless we need to
+  return (b & 128) == 0 ? product :
+    (product ^ ((a & 128) ? ((a << 1) ^  0x11b) : (a << 1)));
 }
 #endif
 

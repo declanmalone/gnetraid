@@ -372,3 +372,30 @@ that's checked for in the code now.
 
 I've implemented the change to swapped rows, which knocked a couple of
 seconds off the run time.
+
+### DO_SWAP
+
+Turning this off brings run time up from 18.4s to 28.1s.
+
+### Alternative Maths Implementation
+
+I think that I have an inversion routine somewhere, but it's a
+complicated algorithm, so besides implementing that, my options are:
+
+* use log/exp functions (however they're implemented)
+* send a pointer to an inv table
+
+This is only called once for each row that we pivot into, though, so
+it's not worth bothering with it.
+
+For log/exp, there are three ways to try:
+
+* look up values using switch statement (the current implementation)
+* look up in global table
+* don't use (apart for inverse), but do long multiply
+
+These shouldn't take long to implement. I might need to normalise the
+macro names a bit though.
+
+First test is good! Enabling LONG_MULTIPLY brought the run time down
+to 5.4 seconds.

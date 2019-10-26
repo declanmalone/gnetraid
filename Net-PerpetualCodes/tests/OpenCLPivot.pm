@@ -48,7 +48,7 @@ sub new {
 	blocksize => 1024,
 	swapsize  => 48,
 	# tuning/debugging (sets #define FOO in code, test using #ifdef)
-	defines   => [qw/SWITCH_TABLES/],
+	defines   => [qw/SWITCH_TABLES LONG_MULTIPLY/],
 	# variables used in main program
 	filled    => undef,
 	symbol    => undef,
