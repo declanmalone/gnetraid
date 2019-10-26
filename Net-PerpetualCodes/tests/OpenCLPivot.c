@@ -19,8 +19,8 @@ inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
     // tables can't handle case of a or b == 0
     if ((a == 0) || (b == 0)) return 0;
     sum  = gf8_log(a) + gf8_log(b);
-    sum -= (sum > 255) ? 256 : 0;
-    return gf8_exp(sum);
+    sum -= (sum >= 255) ? 255 : 0;
+    return gf8_exp((unsigned char) sum);
 }
 #endif
 

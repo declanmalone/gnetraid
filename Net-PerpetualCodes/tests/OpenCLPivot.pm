@@ -279,15 +279,16 @@ sub pivot {
 
 	    warn "RC: " . (join ", ", @rc) .
 		" ($status[$rc[0]] old_i=$i; new_i=$new_i)\n";
-	    warn "New i: $new_i\n";
-	    warn "Swaps: $swaps\n";
 
 	    # unrecoverable error
-	    if ($rc[1]) {
-		die "Symbol wasn't cancelled even though code was\n";
-	    }
 	    if ($rc[6]) {
 		die "Maths error";
+	    }
+	    # in case of maths error, the following are meaningless
+	    warn "New i: $new_i\n";
+	    warn "Swaps: $swaps\n";
+	    if ($rc[1]) {
+		die "Symbol wasn't cancelled even though code was\n";
 	    }
 
 	    # If no error, we should update dirty rows from swap
