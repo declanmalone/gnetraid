@@ -253,7 +253,7 @@ kernel void pivot_gf8(
       k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j) {
 	sym_swap[ j + k ] = sym   [ j ];
-	sym     [ j     ] = symbol[ (i * BLOCKSIZE) + j ];
+	// sym     [ j     ] = symbol[ (i * BLOCKSIZE) + j ];
       }
 
       // We need to remember if we swapped
@@ -276,7 +276,7 @@ kernel void pivot_gf8(
 
     // subtract our part of the symbol
     zero_sym = 1;
-    if (did_swap) {
+    if (0 && did_swap) {
       k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j)
 	if (sym[ j ] ^= sym_swap[j + k])
