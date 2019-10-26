@@ -1,7 +1,7 @@
 /* OpenCL kernel for pivoting */
 
 
-#define DO_SWAP 0
+#define DO_SWAP 1
 
 /* Sticking code into a proper .c file to get syntax highlighting, etc. */
 
@@ -19,7 +19,7 @@ inline unsigned char gf8_mul(unsigned char a, unsigned char b) {
     // tables can't handle case of a or b == 0
     if ((a == 0) || (b == 0)) return 0;
     sum  = gf8_log(a) + gf8_log(b);
-    sum -= (sum < 256) ? 0 : 256;
+    sum -= (sum > 255) ? 256 : 0;
     return gf8_exp(sum);
 }
 #endif
@@ -145,6 +145,22 @@ kernel void pivot_gf8(
   for (j = start_range; j < next_range; ++j)
     sym[j] = host_sym[j];
 
+  // Sanity check maths
+  if (id == 0) {
+    if (gf8_inv(0x53) != 0xca) {
+      rc_vec[6] = 1; return;
+    }
+    if (gf8_mul(0x53,0xca) != 1) {
+      rc_vec[6] = 2; return;
+    }
+    if (gf8_mul(0x0b, 0xc0) != 1) {
+      rc_vec[6] = 3; return;
+    }
+    if (gf8_mul(0x9d,0xc0) != 0xd4) {
+      rc_vec[6] = 4; return;
+    }
+  }
+  
   // Main loop
   while ( ++tries < GEN * 2 ) {
 
@@ -173,9 +189,10 @@ kernel void pivot_gf8(
       // Store swapped values in code_swap and sym_swap
       // rotate code_swap row <- code <- coding row
       // low-numbered threads update one byte of code_swap each
+      // Actually, no... do all the bytes since we read from code_swap later
       k = local_swaps * ALPHA;
-      if (id < ALPHA)
-	code_swap[k + id] = code[id];
+      for (j = 0; j < ALPHA; ++j)
+	code_swap[j + k] = code[j];
 
       // each thread updates all of its code (half of a full swap)
       k = i * ALPHA;
@@ -187,7 +204,7 @@ kernel void pivot_gf8(
       k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j) {
 	sym_swap[ j + k ] = sym   [ j ];
-	sym     [ j ]     = symbol[ (i * BLOCKSIZE) +j ];
+	sym     [ j     ] = symbol[ (i * BLOCKSIZE) + j ];
       }
 
       // We need to remember if we swapped
@@ -195,7 +212,7 @@ kernel void pivot_gf8(
     }
 
     // subtract coding row (or swapped row) from code
-    cancelled = zero_sym = 1;
+    cancelled = 1;
     if (did_swap) {
       k = local_swaps * ALPHA;
       for (j = 0; j < ALPHA; ++j)
@@ -209,6 +226,7 @@ kernel void pivot_gf8(
     }
 
     // subtract our part of the symbol
+    zero_sym = 1;
     if (did_swap) {
       k = local_swaps * BLOCKSIZE;
       for (j = start_range; j < next_range; ++j)
@@ -224,7 +242,6 @@ kernel void pivot_gf8(
     // I delayed updating this
     local_swaps += did_swap;
 
-
     if (cancelled) {
       if (zero_sym)
 	rc = 1;			// cancelled (kind of success)
@@ -239,6 +256,7 @@ kernel void pivot_gf8(
     for (j = 0; j < ALPHA; ++j)
       if (code[j]) break; else ++clz_code;
     temp = gf8_inv(code[clz_code]);
+    if (id == 0) rc_vec[7] = temp;
 
     // can combine code vector multiplication with shift left
     k = clz_code + 1;
@@ -255,7 +273,7 @@ kernel void pivot_gf8(
     i -= (i >= GEN) ? GEN : 0;
 
     // since_swap stays at zero if we haven't swapped anything
-    since_swap += local_swaps ? k : 0;
+    since_swap += (local_swaps ? k : 0);
     
     if (since_swap >= GEN -1) {
       // We caught up with the first swap that we made, so return

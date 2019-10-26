@@ -14,7 +14,28 @@ our $retvals = 8;
 # 3 - last ctz_code
 # 4 - last ctz_row
 # 5 - bit mask
-# 
+# 6 - maths error
+# 7 - inverse
+
+sub check_symbol_f256 {
+    my ($self,$i,$code,$sym,$msg) = @_;
+    my $message = $self->{message};
+    my $fma =     $self->{fma};
+    $msg = "" unless defined $msg;
+    warn "Checking: i is $i\n";
+    warn "Checking: Code is " . (unpack "H*", $code) . "\n";
+    my $check = "$message->[$i]";
+    my $k;
+    for my $byte (0..$self->{alpha}-1) {
+	my $j = ($i + $byte + 1) % $self->{gen};
+	$k = substr $code, $byte, 1;
+	next if "\0" eq $k;
+	my $khex = unpack "H2", $k;
+	#warn "Checking: XORing in $khex times \$message[$j]\n" if $debug > 2;
+	$fma->($check, "$message->[$j]", ord $k);
+    }
+    die "Symbol not correct. $msg\n" unless $sym eq $check;
+}
 
 sub new {
     my $class = shift;
@@ -37,6 +58,10 @@ sub new {
 	# The above should work for block size of 1024;
 	# 6 * 32 * 6 = 1152, so 6*32 threads each working on 6 bytes
 	# is more threads than we need to cover 1024 byte symbols...
+	#
+	# if message is passed in, we can use it to check symbols
+	message   => undef,
+	fma       => undef,
 	@_);
 
     # OpenCL boilerplate
@@ -235,6 +260,7 @@ sub pivot {
 
 	    $queue->write_buffer($bufs->{rc_vec},1,0,$rvec);
 
+	    #$queue->barrier;
 	    $queue->nd_range_kernel($kernel, undef, [$threads], [$groupsize]);
 	    $queue->barrier;
 
@@ -260,6 +286,9 @@ sub pivot {
 	    if ($rc[1]) {
 		die "Symbol wasn't cancelled even though code was\n";
 	    }
+	    if ($rc[6]) {
+		die "Maths error";
+	    }
 
 	    # If no error, we should update dirty rows from swap
 	    my $sp = 0;
@@ -277,6 +306,11 @@ sub pivot {
 		    $bufs->{sym_swap},1,
 		    $sp*$blocksize,$blocksize,$swap_sym);
 
+		if (defined ($self->{message}) ) {
+		    $self->check_symbol_f256($swap_i,$swap_code,$swap_sym,
+		    "Row $swap_i taken from swap stack is invalid.");
+		}
+
 		# Write code,sym into the correct row
 		$queue->write_buffer(
 		    $bufs->{coding},1,
@@ -289,6 +323,13 @@ sub pivot {
 	    # Seems like we should also update i,code,sym
 	    my $old_i = $i;
 	    ($i,$code,$sym) = ($new_i,$new_code,$new_sym);
+
+	    # This seems like a good spot to check the returned
+	    # code and symbol
+	    if (defined ($self->{message}) ) {
+		$self->check_symbol_f256($i,$code,$sym,
+                  "code/symbol $i returned from pivot kernel.");
+	    }
 
 	    warn "Checking return code\n";
 	    # Decide what to do based on main rc
@@ -328,7 +369,6 @@ sub pivot {
 		# tries, so warn and abandon
 		warn "Exceeded max tries; abandoning attempt to pivot\n";
 		return $self->{remain};
-
 	    } else {
 		warn "RC: Memory|Stack [i=$i]\n";
 		# memory or stack: try again with updated values

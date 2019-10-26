@@ -427,6 +427,8 @@ sub codec_f256 {
 	    alpha => $alpha,
 	    gen   => $gen,
 	    blocksize => $blocksize,
+	    message => \@message,
+	    fma => sub { gf256_vec_fma(@_) },
 	);
 	die "Failed to create OpenCL accelerator\n" unless ref $accel;
 
