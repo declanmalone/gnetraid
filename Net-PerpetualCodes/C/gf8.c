@@ -48,6 +48,31 @@ void gf256_vec_fma(unsigned char *d, unsigned char *s, unsigned char val,
     }
 }
 
+// roll (possible) swapping, adding and multiplying into one call
+void gf256_vec_fam_with_swap(unsigned char *d, unsigned char *s,
+			unsigned char val, unsigned len,
+			int do_swap) {
+  const static char         *exp =  exp_table + 512;
+  const static signed short *log =  log_table;
+  signed short log_a = log[(unsigned char) val];
+
+  unsigned char sv, xor;
+  unsigned char *bp = d + len;
+  if (do_swap) {
+    while (d < bp) {
+      xor = (sv = *d) ^ *s;
+      *(s++) = sv;
+      *(d++) = exp[log_a + log[(unsigned char) xor]];
+    }
+  } else {
+    while (d < bp) {
+      sv = *(s++) ^ *d;
+      *(d++) = exp[log_a + log[(unsigned char) sv]];
+    }
+  }
+}
+
+
 const static unsigned char exp_table[] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,

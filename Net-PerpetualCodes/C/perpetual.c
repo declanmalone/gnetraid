@@ -197,7 +197,6 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     // Subtract matrix "row" from our code, symbol
     // fprintf(stderr, "Substituting row %u into code, sym\n", i);
     cancelled = 1;		/* incidentally, check if code became zero */
-    zero_sym  = 1;		/* same for symbol (for debugging) */
     cp = code;
     rp = d->coding + i * code_size;
     bp = rp + code_size;
@@ -214,26 +213,25 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
 	if (*(cp++) ^= *(rp++)) cancelled = 0;
       }
     }
-    cp = sym;
-    rp = d->symbol + i * blocksize;
-    bp = rp + blocksize;
-    if (need_swap) {
-      unsigned char sv, xor;
-      while (rp < bp) {
-	if (xor = (sv = *cp) ^ *rp) zero_sym = 0;
-	*(rp++) = sv;
-	*(cp++) = xor;
-      }
-    } else {
-      while (rp < bp) {
-	if (*(cp++) ^= *(rp++)) zero_sym = 0;
-      }
-    }
+
+    // Defer operating on symbol so that we can do a fused operation later
+
     // fprintf(stderr, "New code is: ");
     // hex_print(code, code_size);
 
     if (cancelled) {
       // fprintf(stderr, "Code was cancelled\n");
+      zero_sym  = 1;		/* did symbol cancel? (for debugging) */
+      cp = sym;
+      rp = d->symbol + i * blocksize;
+      bp = rp + blocksize;
+      // we don't care if need_swap is set because a ^ b == b ^ a
+      while (rp < bp) {
+	if (*(cp++) ^ *(rp++)) {
+	  zero_sym = 0;
+	  break;
+	}
+      }
       if (zero_sym) return d->remain;
       fprintf(stderr,  "failed: zero code vector => zero symbol (i=%d)\n", i);
       exit(1);
@@ -253,7 +251,8 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     temp = gf256_inv_elem(*cp);
     ++cp;			// skip past implicit 1
     gf256_vec_mul(cp,  temp, code_size - clz_code - 1);
-    gf256_vec_mul(sym, temp, blocksize);
+    // roll (possible) swapping, adding and multiplying into one call
+    gf256_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksize, need_swap);
 
     // shift left
     rp = code;
