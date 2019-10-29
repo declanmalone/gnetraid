@@ -160,38 +160,38 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     }
     // fprintf (stderr, "ctz_row is %u\n", ctz_row);
 
+    short need_swap = 0;
     if (ctz_code > ctz_row) {
 
-      // fprintf(stderr, "pivot_gf8: Swapping code with row %u\n", i);
+      if (0) {
+	// fprintf(stderr, "pivot_gf8: Swapping code with row %u\n", i);
 
-      // swap code vectors (skipping last ctz_row zeroes, which are equal)
-      cp = code + code_size - 1 - ctz_row;
-      rp = d->coding + ((i+1) * code_size) - 1 - ctz_row;
-      while (cp >= code) {
-	temp = *cp;
-	*cp  = *rp;
-	*rp  = temp;
-	--cp; --rp;
+	// swap code vectors (skipping last ctz_row zeroes, which are equal)
+	cp = code + code_size - 1 - ctz_row;
+	rp = d->coding + ((i+1) * code_size) - 1 - ctz_row;
+	while (cp >= code) {
+	  temp = *cp;
+	  *cp  = *rp;
+	  *rp  = temp;
+	  --cp; --rp;
+	}
+
+	// swap symbols (we could use indirect tables, allowing us to
+	// swap pointers instead of memory)
+	cp = sym;
+	rp = d->symbol + i * blocksize;
+	bp = rp + blocksize;
+	while (rp < bp) {
+	  temp = *cp;
+	  *cp  = *rp;
+	  *rp  = temp;
+	  ++cp; ++rp;
+	}
+      } else {
+	// I'm going to rewrite the loops below to be aware of whether
+	// we should swap or not
+	need_swap++;
       }
-
-      // swap symbols (we could use indirect tables, allowing us to
-      // swap pointers instead of memory)
-      cp = sym;
-      rp = d->symbol + i * blocksize;
-      bp = rp + blocksize;
-      while (rp < bp) {
-	temp = *cp;
-	*cp  = *rp;
-	*rp  = temp;
-	++cp; ++rp;
-      }
-
-      // update ctz_code
-      // ctz_code = ctz_row;
-
-      // Actually, this optimisation won't work if the subtraction
-      // below cancels out trailing elements in code, so disable it
-      // ctz_code = -1;
     }
 
     // Subtract matrix "row" from our code, symbol
@@ -201,14 +201,33 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     cp = code;
     rp = d->coding + i * code_size;
     bp = rp + code_size;
-    while (rp < bp) {
-      if (*(cp++) ^= *(rp++)) cancelled = 0;
+
+    if (need_swap) {
+      unsigned char cv, xor;
+      while (rp < bp) {
+	if (xor = (cv = *cp) ^ *rp) cancelled = 0;
+	*(rp++) = cv;
+	*(cp++) = xor;
+      }
+    } else {
+      while (rp < bp) {
+	if (*(cp++) ^= *(rp++)) cancelled = 0;
+      }
     }
     cp = sym;
     rp = d->symbol + i * blocksize;
     bp = rp + blocksize;
-    while (rp < bp) {
-      if (*(cp++) ^= *(rp++)) zero_sym = 0;
+    if (need_swap) {
+      unsigned char sv, xor;
+      while (rp < bp) {
+	if (xor = (sv = *cp) ^ *rp) zero_sym = 0;
+	*(rp++) = sv;
+	*(cp++) = xor;
+      }
+    } else {
+      while (rp < bp) {
+	if (*(cp++) ^= *(rp++)) zero_sym = 0;
+      }
     }
     // fprintf(stderr, "New code is: ");
     // hex_print(code, code_size);
@@ -216,7 +235,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     if (cancelled) {
       // fprintf(stderr, "Code was cancelled\n");
       if (zero_sym) return d->remain;
-      fprintf(stderr,  "failed: zero code vector => zero symbol (i=$d)\n", i);
+      fprintf(stderr,  "failed: zero code vector => zero symbol (i=%d)\n", i);
       exit(1);
     }
 
