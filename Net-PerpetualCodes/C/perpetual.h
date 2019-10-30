@@ -32,9 +32,10 @@ struct perp_settings_2015 {
 // 
 struct perp_encoder_2015 {
   unsigned seed;
-  unsigned options;
+  // unsigned options;
   unsigned short deterministic;
-  gf8_t *message;
+  void *message;
+  unsigned packets;
 };
 
 struct perp_repivot_queue {
