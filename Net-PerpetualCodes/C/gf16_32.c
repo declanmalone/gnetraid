@@ -1283,15 +1283,66 @@ gf32_t gf32_inv_elem (gf32_t x) {
   return z;
 }
 
-
-void gf16_vec_mul(gf16_t *s, gf16_t val, unsigned len);
-void gf16_vec_fma(gf16_t *d, gf16_t *s, gf16_t val, unsigned len );
+// I could make these slightly more efficient in the same way that I
+// did with gf8_vec_* routines (by optimising for loop invariant
+// values), but it's not worth doing that right now.
+void gf16_vec_mul(gf16_t *s, gf16_t val, unsigned len) {
+  while (len--) {
+    *(s) = gf16_mul_elems(*s, val);
+    ++s;
+  }
+}
+    
+  
+void gf16_vec_fma(gf16_t *d, gf16_t *s, gf16_t val, unsigned len ) {
+  while (len--) {
+    *(d) = *(s++) ^ gf16_mul_elems(*d, val);
+    ++d;
+  }
+}
 void gf16_vec_fam_with_swap(gf16_t *d, gf16_t *s,
-                             gf16_t val, unsigned len,
-                             int do_swap);
+			    gf16_t val, unsigned len, int do_swap) {
+  gf16_t sv, xor;
+  if (do_swap) {
+    while (len--) {
+      xor = (sv = *d) ^ *s;
+      *(s++) = sv;
+      *(d++) = gf16_mul_elems(val,xor);
+    }
+  } else {
+    while (len--) {
+      sv = *(s++) ^ *d;
+      *(d++) = gf16_mul_elems(val,xor);
+    }
+  }
+}
+  
 
-void gf32_vec_mul(gf32_t *s, gf32_t val, unsigned len);
-void gf32_vec_fma(gf32_t *d, gf32_t *s, gf32_t val, unsigned len );
+void gf32_vec_mul(gf32_t *s, gf32_t val, unsigned len) {
+  while (len--) {
+    *(s) = gf32_mul_elems(*s, val);
+    ++s;
+  }
+}
+void gf32_vec_fma(gf32_t *d, gf32_t *s, gf32_t val, unsigned len ) {
+  while (len--) {
+    *(d) = *(s++) ^ gf32_mul_elems(*d, val);
+    ++d;
+  }
+}
 void gf32_vec_fam_with_swap(gf32_t *d, gf32_t *s,
-                             gf32_t val, unsigned len,
-                             int do_swap);
+			    gf32_t val, unsigned len, int do_swap) {
+  gf32_t sv, xor;
+  if (do_swap) {
+    while (len--) {
+      xor = (sv = *d) ^ *s;
+      *(s++) = sv;
+      *(d++) = gf16_mul_elems(val,xor);
+    }
+  } else {
+    while (len--) {
+      sv = *(s++) ^ *d;
+      *(d++) = gf16_mul_elems(val,xor);
+    }
+  }
+}

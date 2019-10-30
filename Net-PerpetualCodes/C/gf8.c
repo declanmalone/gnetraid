@@ -67,15 +67,14 @@ void gf8_vec_fam_with_swap(gf8_t *d, gf8_t *s,
   signed short log_a = log[(gf8_t) val];
 
   gf8_t sv, xor;
-  gf8_t *bp = d + len;
   if (do_swap) {
-    while (d < bp) {
+    while (len--) {
       xor = (sv = *d) ^ *s;
       *(s++) = sv;
       *(d++) = exp[log_a + log[(gf8_t) xor]];
     }
   } else {
-    while (d < bp) {
+    while (len--) {
       sv = *(s++) ^ *d;
       *(d++) = exp[log_a + log[(gf8_t) sv]];
     }
