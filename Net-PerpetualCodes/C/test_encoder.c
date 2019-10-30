@@ -146,76 +146,61 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  // Output file will have fixed-sized records
-  unsigned recsize = sizeof(unsigned) + settings.code_size + settings.blocksize;
-  fprintf(stderr, "Record size is %u\n", recsize);
-  gf8_t *buf = malloc(recsize);
-  if (buf == 0) {
-    fprintf(stderr, "Problem allocating buffer of size '%u'\n", recsize);
+  // allocate space for message
+  size_t message_size = settings.gen * settings.blocksize;
+  if (0 == (encoder.message = malloc(message_size))) {
+    fprintf(stderr, "Failed to allocate memory to read input file\n");
     exit(1);
   }
 
-  unsigned i;
-  char     *code, *sym;
-  unsigned packets = 0;
+  // Slurp input file
   int  eof = 0;
-  while (1) {
-    int bytes_read = 0;
-    while (bytes_read < recsize) {
-      int this_read = read(fh, buf + bytes_read, recsize - bytes_read);
-      if (this_read == 0) { eof = 1; break; }
-      if (this_read <  0) {
-	fprintf(stderr, "I/O problem on infile: %s\n", strerror(errno));
-	exit(1);
-      }
-      bytes_read += this_read;
+  char *buf = encoder.message;
+  int bytes_read = 0;
+  while (bytes_read < message_size) {
+    int this_read = read(fh, buf + bytes_read, message_size - bytes_read);
+    if (this_read == 0) { eof = 1; break; }
+    if (this_read <  0) {
+      fprintf(stderr, "I/O problem on infile: %s\n", strerror(errno));
+      exit(1);
     }
-    ++packets;
-    i = *(unsigned *)buf;
-    // fprintf(stderr, "i=%u\n", i);
-    code = buf + sizeof(unsigned);
-    sym  = code + settings.code_size;
-    if (eof) break;
-    //continue;
-    int rc;
-    switch(settings.qbits) {
-    case  8: rc = pivot_gf8 (&settings, &encoder, i,
-			     (gf8_t *)  code, (gf8_t *)  sym); break;
-    case 16: rc = pivot_gf16(&settings, &encoder, i,
-			     (gf16_t *) code, (gf16_t *) sym); break;
-    case 32: rc = pivot_gf32(&settings, &encoder, i,
-			     (gf32_t *) code, (gf32_t *) sym); break;
-    }
-    if (0 == rc) {
-      fprintf(stderr, "Completed pivoting after %d packets\n",packets);
-      switch(settings.qbits) {
-      case  8: rc = solve_gf8 (&settings, &decoder); break;
-      case 16: rc = solve_gf16(&settings, &decoder); break;
-      case 32: rc = solve_gf32(&settings, &decoder); break;
-      }
-      if (0 == rc) {
-        // dump_decoded(&settings, &decoder);
-	int bytes_written = 0;
-	int bytes_left = settings.gen * settings.blocksize;
-	while (bytes_written < bytes_left) {
-	  int rc = write(1, decoder.symbol + bytes_written, bytes_left);
-	  if (rc < 0) {
-	    fprintf(stderr, "Problem writing to output: %s\n",
-		    strerror(errno));
-	  } else {
-	    bytes_left -= rc;
-	    bytes_written += rc;
-	  }
-	}
-	
-	break;
-      } else {
-	fprintf(stderr, "Failed to decode\n");
-	exit(1);
-      }
-    }
-    if (eof) break;
+    bytes_read += this_read;
   }
-  fprintf(stderr, "Fully decoded after %d packets\n", packets);
+  if (bytes_read < message_size) {
+    fprintf(stderr, "Premature EOF on infile. Quitting.\n");
+    exit(1);
+  }
+    
+  // Output file (fd 1 = stdout) will have fixed-sized records
+  unsigned recsize = sizeof(unsigned) + settings.code_size + settings.blocksize;
+  fprintf(stderr, "Record size is %u\n", recsize);
+  gf8_t *outbuf = malloc(recsize);
+  if (outbuf == 0) {
+    fprintf(stderr, "Problem allocating record buffer\n");
+    exit(1);
+  }
+
+  while (encoder.packets--) {
+  
+    unsigned *i    = (unsigned *) outbuf;
+    char     *code = outbuf + sizeof(unsigned);
+    char     *sym  = code + settings.code_size;
+
+    encode_block(&settings, &encoder, i, code, sym);
+    
+    int bytes_written = 0;
+    int bytes_left = recsize;
+    while (bytes_written < recsize) {
+      int rc = write(1, outbuf + bytes_written, recsize - bytes_written);
+      if (rc < 0) {
+	fprintf(stderr, "Problem writing to output: %s\n",
+		strerror(errno));
+	exit(1);
+      } else {
+	bytes_written += rc;
+      }
+    }
+  }
+
   exit(0);
 }
