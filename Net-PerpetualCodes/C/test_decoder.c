@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     case 'h':
     default: /* '?' */
       fprintf(stderr,
-	      "Usage:\n  %s -b blocksize -g gen -a alpha -q bits infile\n\n",
+	      "Usage:\n  %s -b blocksize -g gen -a alpha -q bits infile > outfile\n\n",
 	      argv[0]);
       exit(EXIT_FAILURE);
     }
@@ -108,7 +108,12 @@ int main(int argc, char *argv[]) {
     }
     if (0 == rc) {
       fprintf(stderr, "Completed pivoting after %d packets\n",packets);
-      if (0 == solve_gf8(&settings, &decoder)) {
+      switch(settings.qbits) {
+      case  8: rc = solve_gf8 (&settings, &decoder); break;
+      case 16: rc = solve_gf16(&settings, &decoder); break;
+      case 32: rc = solve_gf32(&settings, &decoder); break;
+      }
+      if (0 == rc) {
         // dump_decoded(&settings, &decoder);
 	int bytes_written = 0;
 	int bytes_left = settings.gen * settings.blocksize;
