@@ -60,6 +60,13 @@ void perp_init_decoder_2015(struct perp_settings_2015 *s,
     exit(1);
   }
 
+  if (blocksize % (qbits >> 3)) {
+    fprintf (stderr, "Blocksize %d not a multiple of field size\n", blocksize);
+    exit(1);
+  } else {
+    s->blocksyms = blocksize / (qbits >> 3);
+  }
+
   if (alpha >= gen) {
     fprintf (stderr, "Invalid alpha value %d (must be < gen %d)\n", alpha, gen);
     exit(1);
@@ -117,6 +124,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
   gf8_t *cp, *bp, *rp;
   unsigned short code_size = s->code_size;
   unsigned short blocksize = s->blocksize;
+  unsigned short blocksyms = s->blocksyms;
   unsigned short cancelled, zero_sym;
 
   if (i >= s->gen) {
@@ -196,7 +204,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
       zero_sym  = 1;		/* did symbol cancel? (for debugging) */
       cp = sym;
       rp = d->symbol + i * blocksize;
-      bp = rp + blocksize;
+      bp = rp + blocksyms;
       // we don't care if need_swap is set because a ^ b == b ^ a
       while (rp < bp) {
 	if (*(cp++) ^ *(rp++)) {
@@ -224,7 +232,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     ++cp;			// skip past implicit 1
     gf8_vec_mul(cp,  temp, code_size - clz_code - 1);
     // roll (possible) swapping, adding and multiplying into one call
-    gf8_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksize, need_swap);
+    gf8_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksyms, need_swap);
 
     // shift code vector left
     rp = code;

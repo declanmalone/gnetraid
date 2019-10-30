@@ -6,12 +6,13 @@
 
 // Start by implementing the 2015 paper
 struct perp_settings_2015 {
-  size_t   blocksize;
+  size_t   blocksize;		/* size in bytes */
+  size_t   blocksyms;		/* size in symbols */
   unsigned gen;
-  unsigned short alpha;
+  unsigned short alpha;	        /* size of code in symbols */
   unsigned short qbits;		/* field size (number of bits) */
   unsigned short q;		/* field size (number of elements) */
-  unsigned short code_size;	/* qbits * alpha / 8 */
+  unsigned short code_size;	/* qbits * alpha / 8 (size in bytes) */
 };
 
 // Field sizes and what they mean:
