@@ -256,194 +256,202 @@ static void hex_print_mrows(gf8_t *mat, int rows, int cols) {
   }
 }
 
-
-int solve_gf8(struct perp_settings_2015 *s,
-	      struct perp_decoder_2015  *d) {
-
-  /* I could try implementing a more complicated scheme for doing */
-  /* matrix operations in-place (on d->coding) as much as possible, */
-  /* but I don't think that it's worth it. */
-
-  signed   short i, j;
-  gf8_t *cp, *rp, *bp, k, temp;
-  unsigned short alpha     = s->alpha;
-  unsigned short gen       = s->gen;
-  unsigned short code_size = s->code_size;
-  unsigned int   blocksize = s->blocksize;
-  gf8_t *mat_rows  = d->mat_rows;
-  unsigned short diag, swap_row, down_row;
-
-  /* rp -> destination (j'th row of mat_rows) */
-  rp = mat_rows;
-  j = 0;
-  do {
-    /* cp -> start of code being upgraded */
-    cp = d->coding + (gen - alpha + j) * code_size;
-    /* bp -> -j'th byte of the code vector */
-    bp = cp + code_size - ++j;
-
-    /* Layout of the new row: */
-    
-    /* (end)      (zeros)          (1)   (start) */
-    /*  (j)  + (gen - alpha - 1) + (1) (alpha - j) = gen */
-
-    for (i=1;  i <= j;            ++i)   *(rp++) = *(bp++);
-    for (i=1;  i <  gen - alpha;  ++i)   *(rp++) = 0;
-                                         *(rp++) = 1;
-    for (i=1;  i <= alpha - j;    ++i)   *(rp++) = *(cp++);
-  } while (j != alpha);
-
-  /* fprintf(stderr, "Solving. Last coding vectors are:\n"); */
-  for (i = 0; i < alpha; ++i) {
-    /* hex_print(d->coding + (gen - alpha + i) * alpha, alpha); */
-  }
-  /* hex_print_mrows(mat_rows, alpha, gen); */
-
-   /* forward propagation */
-  for (diag = 0; diag < gen - alpha; ++diag) {
-    rp = mat_rows + diag;	/* work down the diag'th column */
-    for (j = 0; j < alpha; ++j, rp += gen) {
-
-      /* We seem to be getting too many zeros */
-      /* fprintf(stderr, "<-"); */
-      /* hex_print(mat_rows + j * gen, gen); */
-
-      k = *rp;
-      if (k == 0) continue;
-      
-      /* coding vector (fma would clear non-zero at *rp if 1 above was explicit) */
-      *rp = 0;
-      gf8_vec_fma(rp + 1, d->coding + diag * alpha, k, alpha);
-      /* symbol */
-      gf8_vec_fma(d->symbol + (gen - alpha + j) * blocksize,
-		    d->symbol + (diag)            * blocksize,
-		    k, blocksize);
-
-      /* fprintf(stderr, "->"); */
-      /* hex_print(mat_rows + j * gen, gen); */
-    }
-    /* fprintf(stderr, "<-"); */
-    /* hex_print(mat_rows + j * gen, gen); */
-  }
-
-   /* fprintf(stderr, "After forward propagation. Matrix is:\n"); */
-   /* hex_print_mrows(mat_rows, alpha, gen); */
-
-  /* Step 2: get 0's, 1's in lower-left corner of lower-right side */
-
-  /* Arithmetic is easier if we convert to an alpha * alpha submatrix */
-  rp = mat_rows;
-  cp = rp + gen - alpha;
-  for (i = 0; i < alpha; ++i) {
-    for (j = 0; j < alpha; ++j) *(rp++) = *(cp++);
-    cp += gen - alpha;
-  }
-  /* fprintf(stderr, "Reduced matrix is:\n"); */
-  /* hex_print_mrows(mat_rows, alpha, alpha); */
-  
-  for (diag = 0; diag < alpha; ++diag) {
-
-    /* somehow deal with zero on diagonal  */
-    swap_row = diag;
-    if ((k = mat_rows[diag * alpha + diag]) == 0) {
-      for (i = diag + 1; i < alpha; ++i) {
-	if (mat_rows[i * alpha + diag] == 0) continue;
-	swap_row = i;
-	break;
-      }
-      if (swap_row == diag) {
-
-	/* My Perl code currently has '...' (unimplemented) at the top */
-	/* of this branch, but it seems like I have actually implemented */
-	/* it below that. */
-
-
-	/* looks like it was a copy/paste of the f2 code, so I'll just */
-	/* die for now */
-	fprintf(stderr, "Zero column %u not implemented yet...\n",diag);
-	exit(1);
-      
-	continue;
-      } else {
-
-	/* We found a row to swap with. */
-
-	/* There's scratchpad space after the alpha * alpha matrix, even */
-	/* in the worst case that alpha == gen - 1 (which would give us */
-	/* exactly alpha bytes) */
-	memcpy(mat_rows + alpha * alpha, mat_rows + swap_row * alpha, alpha);
-	memcpy(mat_rows + swap_row * alpha, mat_rows + diag * alpha, alpha);
-	memcpy(mat_rows + diag * alpha, mat_rows + alpha * alpha, alpha);
-	
-	/* We don't have scratch space for the symbol, though. */
-	cp = d->symbol + (gen - alpha + diag) * blocksize;
-	bp = cp + blocksize;
-	rp = d->symbol + (gen - alpha + swap_row) * blocksize;
-	while (cp < bp) {
-	  temp    = *cp;
-	  *(cp++) = *rp;
-	  *(rp++) = temp;
-	}
-	
-	k = mat_rows[diag * alpha + diag];
-      }
-    }
-  }
-
-   /* Normalise the diagonal */
-  if (k != 1) {
-    k = gf8_inv_elem(k);
-    gf8_vec_mul(mat_rows + diag * alpha, k, alpha);
-    gf8_vec_mul(d->symbol + (gen - alpha + diag) * blocksize, k, blocksize);
-  }
-
-  /* Propagate down from diagonal to clear non-zeros underneath */
-  for (i = swap_row + 1; i < alpha; ++i) {
-    k = mat_rows[i * alpha + diag];
-    if (k == 0) continue;
-
-    gf8_vec_fma(mat_rows + i * alpha, mat_rows + diag * alpha, k, alpha);
-    gf8_vec_fma(d->symbol + (gen - alpha + i)    * blocksize,
-		  d->symbol + (gen - alpha + diag) * blocksize,
-		  k, blocksize);
-  }
-
-   /* Step 3a: convert coding sub-matrix back to original form */
-  cp = d->coding + (gen - alpha) * code_size;
-  rp = mat_rows + 1;
-  for (i = 1; i <= alpha; ++i) {
-    for (j = 0; j < alpha - i; ++j)  *(cp++) = *(rp++);
-    for (j = j; j < alpha;     ++j)  *(cp++) = 0;
-    rp += i + 1;
-  }
-
-  /* Step 3b: back-substitution */
-  diag = gen - 1;
-  do {
-    j = alpha < diag ? alpha : diag;
-    if (j) {
-      i = diag - 1;
-      temp = 0;
-      do {
-	k = d->coding[i * code_size + temp];
-	if (k == 0) { } 
-	else if (k == 1) {
-	  rp = d->symbol + i * blocksize;
-	  bp = rp + blocksize;
-	  cp = d->symbol + diag * blocksize;
-	  while (rp < bp) {
-	    *(rp++) ^= *(cp++);
-	  };
-	  d->coding[i * code_size + temp] = 0;
-	} else {
-	  gf8_vec_fma(d->symbol + i * blocksize,
-			d->symbol + diag * blocksize,
-			k, blocksize);
-	  d->coding[i * code_size + temp] = 0;
-	}
-      } while (++temp, --i, --j);
-    }
-  } while (--diag);
-
-  return 0;			/* success */
+#define typed_solver(N) \
+int solve_gf ## N(struct perp_settings_2015 *s, \
+                  struct perp_decoder_2015  *d) { \
+ \
+  /* I could try implementing a more complicated scheme for doing */ \
+  /* matrix operations in-place (on d->coding) as much as possible, */ \
+  /* but I don't think that it's worth it. */ \
+ \
+  signed   short i, j; \
+  unsigned short alpha     = s->alpha; \
+  unsigned short code_size = s->code_size; \
+  unsigned int   blocksize = s->blocksize; \
+  unsigned int   blocksyms = s->blocksyms; \
+  unsigned short gen       = s->gen; \
+  gf ## N ## _t *cp, *rp, *bp, k, temp; \
+  gf ## N ## _t *mat_rows  = d->mat_rows; \
+  /* also copy coding, symbol table pointers, casting them to gf*_t * */ \
+  gf ## N ## _t *coding  = d->coding; \
+  gf ## N ## _t *symbol  = d->symbol; \
+  unsigned short diag, swap_row, down_row; \
+ \
+  /* rp -> destination (j'th row of mat_rows) */ \
+  rp = mat_rows; \
+  j = 0; \
+  do { \
+    /* cp -> start of code being upgraded */ \
+    cp = coding + (gen - alpha + j) * alpha; \
+    /* bp -> -j'th byte of the code vector */ \
+    bp = cp + alpha - ++j; \
+ \
+    /* Layout of the new row: */ \
+     \
+    /* (end)      (zeros)          (1)   (start) */ \
+    /*  (j)  + (gen - alpha - 1) + (1) (alpha - j) = gen */ \
+ \
+    for (i=1;  i <= j;            ++i)   *(rp++) = *(bp++); \
+    for (i=1;  i <  gen - alpha;  ++i)   *(rp++) = 0; \
+                                         *(rp++) = 1; \
+    for (i=1;  i <= alpha - j;    ++i)   *(rp++) = *(cp++); \
+  } while (j != alpha); \
+ \
+  /* fprintf(stderr, "Solving. Last coding vectors are:\n"); */ \
+  for (i = 0; i < alpha; ++i) { \
+    /* hex_print(d->coding + (gen - alpha + i) * alpha, alpha); */ \
+  } \
+  /* hex_print_mrows(mat_rows, alpha, gen); */ \
+ \
+   /* forward propagation */ \
+  for (diag = 0; diag < gen - alpha; ++diag) { \
+    rp = mat_rows + diag;	/* work down the diag'th column */ \
+    for (j = 0; j < alpha; ++j, rp += gen) { \
+ \
+      /* We seem to be getting too many zeros */ \
+      /* fprintf(stderr, "<-"); */ \
+      /* hex_print(mat_rows + j * gen, gen); */ \
+ \
+      k = *rp; \
+      if (k == 0) continue; \
+       \
+      /* coding vector (fma would clear non-zero at *rp if 1 above was explicit) */ \
+      *rp = 0; \
+      gf ## N ## _vec_fma(rp + 1, coding + diag * alpha, k, alpha); \
+      /* symbol */ \
+      gf ## N ## _vec_fma(symbol + (gen - alpha + j) * blocksyms, \
+		    symbol       + (diag           ) * blocksyms, \
+		    k, blocksyms); \
+ \
+      /* fprintf(stderr, "->"); */ \
+      /* hex_print(mat_rows + j * gen, gen); */ \
+    } \
+    /* fprintf(stderr, "<-"); */ \
+    /* hex_print(mat_rows + j * gen, gen); */ \
+  } \
+ \
+   /* fprintf(stderr, "After forward propagation. Matrix is:\n"); */ \
+   /* hex_print_mrows(mat_rows, alpha, gen); */ \
+ \
+  /* Step 2: get 0's, 1's in lower-left corner of lower-right side */ \
+ \
+  /* Arithmetic is easier if we convert to an alpha * alpha submatrix */ \
+  rp = mat_rows; \
+  cp = rp + gen - alpha; \
+  for (i = 0; i < alpha; ++i) { \
+    for (j = 0; j < alpha; ++j) *(rp++) = *(cp++); \
+    cp += gen - alpha; \
+  } \
+  /* fprintf(stderr, "Reduced matrix is:\n"); */ \
+  /* hex_print_mrows(mat_rows, alpha, alpha); */ \
+   \
+  for (diag = 0; diag < alpha; ++diag) { \
+ \
+    /* somehow deal with zero on diagonal  */ \
+    swap_row = diag; \
+    if ((k = mat_rows[diag * alpha + diag]) == 0) { \
+      for (i = diag + 1; i < alpha; ++i) { \
+	if (mat_rows[i * alpha + diag] == 0) continue; \
+	swap_row = i; \
+	break; \
+      } \
+      if (swap_row == diag) { \
+ \
+	/* My Perl code currently has '...' (unimplemented) at the top */ \
+	/* of this branch, but it seems like I have actually implemented */ \
+	/* it below that. */ \
+ \
+ \
+	/* looks like it was a copy/paste of the f2 code, so I'll just */ \
+	/* die for now */ \
+	fprintf(stderr, "Zero column %u not implemented yet...\n",diag); \
+	exit(1); \
+       \
+	continue; \
+      } else { \
+ \
+	/* We found a row to swap with. */ \
+ \
+	/* There's scratchpad space after the alpha * alpha matrix, even */ \
+	/* in the worst case that alpha == gen - 1 (which would give us */ \
+	/* exactly alpha bytes) */ \
+	memcpy(mat_rows + alpha * alpha, mat_rows + swap_row * alpha, alpha); \
+	memcpy(mat_rows + swap_row * alpha, mat_rows + diag * alpha, alpha); \
+	memcpy(mat_rows + diag * alpha, mat_rows + alpha * alpha, alpha); \
+	 \
+	/* We don't have scratch space for the symbol, though. */ \
+	cp = symbol + (gen - alpha + diag) * blocksyms; \
+	bp = cp + blocksyms; \
+	rp = symbol + (gen - alpha + swap_row) * blocksyms; \
+	while (cp < bp) { \
+	  temp    = *cp; \
+	  *(cp++) = *rp; \
+	  *(rp++) = temp; \
+	} \
+	 \
+	k = mat_rows[diag * alpha + diag]; \
+      } \
+    } \
+  } \
+ \
+   /* Normalise the diagonal */ \
+  if (k != 1) { \
+    k = gf ## N ## _inv_elem(k); \
+    gf ## N ## _vec_mul(mat_rows + diag * alpha, k, alpha); \
+    gf ## N ## _vec_mul(symbol + (gen - alpha + diag) * blocksyms, k, blocksyms); \
+  } \
+ \
+  /* Propagate down from diagonal to clear non-zeros underneath */ \
+  for (i = swap_row + 1; i < alpha; ++i) { \
+    k = mat_rows[i * alpha + diag]; \
+    if (k == 0) continue; \
+ \
+    gf ## N ##_vec_fma(mat_rows + i * alpha, mat_rows + diag * alpha, k, alpha); \
+    gf ## N ##_vec_fma(symbol + (gen - alpha + i)    * blocksyms, \
+		  symbol + (gen - alpha + diag) * blocksyms, \
+		  k, blocksyms); \
+  } \
+ \
+   /* Step 3a: convert coding sub-matrix back to original form */ \
+  cp = coding + (gen - alpha) * alpha; \
+  rp = mat_rows + 1; \
+  for (i = 1; i <= alpha; ++i) { \
+    for (j = 0; j < alpha - i; ++j)  *(cp++) = *(rp++); \
+    for (j = j; j < alpha;     ++j)  *(cp++) = 0; \
+    rp += i + 1; \
+  } \
+ \
+  /* Step 3b: back-substitution */ \
+  diag = gen - 1; \
+  do { \
+    j = alpha < diag ? alpha : diag; \
+    if (j) { \
+      i = diag - 1; \
+      temp = 0; \
+      do { \
+	k = coding[i * alpha + temp];	\
+	if (k == 0) { }  \
+	else if (k == 1) { \
+	  rp = symbol + i * blocksyms; \
+	  bp = rp + blocksyms; \
+	  cp = symbol + diag * blocksyms; \
+	  while (rp < bp) { \
+	    *(rp++) ^= *(cp++); \
+	  }; \
+	  coding[i * alpha + temp] = 0; \
+	} else { \
+	  gf ## N ## _vec_fma(symbol + i * blocksyms, \
+			symbol + diag * blocksyms, \
+			k, blocksyms); \
+	  coding[i * alpha + temp] = 0; \
+	} \
+      } while (++temp, --i, --j); \
+    } \
+  } while (--diag); \
+ \
+  return 0;			/* success */ \
 }
+
+typed_solver(8)
+typed_solver(16)
+typed_solver(32)

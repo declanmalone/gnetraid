@@ -39,19 +39,19 @@ struct perp_encoder_2015 {
 
 struct perp_repivot_queue {
   unsigned i;
-  gf8_t *code;
-  gf8_t *symbol;
+  void *code;
+  void *symbol;
 };
 
 struct perp_decoder_2015 {
-  gf8_t *filled;
-  gf8_t *coding;
-  gf8_t *symbol;
+  unsigned char *filled;
+  void *coding;
+  void *symbol;
   unsigned remain;
   unsigned repivot;
   struct perp_repivot_queue *queue;
   // I expect I can eliminate the need to allocate full matrix rows later
-  gf8_t *mat_rows;
+  void *mat_rows;
 };
 
 void
