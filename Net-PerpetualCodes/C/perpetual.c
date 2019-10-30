@@ -160,39 +160,10 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     }
     // fprintf (stderr, "ctz_row is %u\n", ctz_row);
 
+    // Rather than doing swap as a single step, just set a flag. The
+    // loops below have been rewritten to deal with it correctly.
     short need_swap = 0;
-    if (ctz_code > ctz_row) {
-
-      if (0) {
-	// fprintf(stderr, "pivot_gf8: Swapping code with row %u\n", i);
-
-	// swap code vectors (skipping last ctz_row zeroes, which are equal)
-	cp = code + code_size - 1 - ctz_row;
-	rp = d->coding + ((i+1) * code_size) - 1 - ctz_row;
-	while (cp >= code) {
-	  temp = *cp;
-	  *cp  = *rp;
-	  *rp  = temp;
-	  --cp; --rp;
-	}
-
-	// swap symbols (we could use indirect tables, allowing us to
-	// swap pointers instead of memory)
-	cp = sym;
-	rp = d->symbol + i * blocksize;
-	bp = rp + blocksize;
-	while (rp < bp) {
-	  temp = *cp;
-	  *cp  = *rp;
-	  *rp  = temp;
-	  ++cp; ++rp;
-	}
-      } else {
-	// I'm going to rewrite the loops below to be aware of whether
-	// we should swap or not
-	need_swap++;
-      }
-    }
+    if (ctz_code > ctz_row) need_swap++;
 
     // Subtract matrix "row" from our code, symbol
     // fprintf(stderr, "Substituting row %u into code, sym\n", i);
@@ -254,7 +225,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     // roll (possible) swapping, adding and multiplying into one call
     gf256_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksize, need_swap);
 
-    // shift left
+    // shift code vector left
     rp = code;
     while (cp < bp) { *(rp++) = *(cp++); }
     while (rp < bp) { *(rp++) = 0; }
