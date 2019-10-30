@@ -374,10 +374,13 @@ int solve_gf ## N(struct perp_settings_2015 *s, \
  \
 	/* There's scratchpad space after the alpha * alpha matrix, even */ \
 	/* in the worst case that alpha == gen - 1 (which would give us */ \
-	/* exactly alpha bytes) */ \
-	memcpy(mat_rows + alpha * alpha, mat_rows + swap_row * alpha, alpha); \
-	memcpy(mat_rows + swap_row * alpha, mat_rows + diag * alpha, alpha); \
-	memcpy(mat_rows + diag * alpha, mat_rows + alpha * alpha, alpha); \
+	/* exactly alpha symbols) */ \
+	memcpy(mat_rows + alpha * alpha, mat_rows + swap_row * alpha, \
+	       alpha * sizeof(gf ## N ## _t));				\
+	memcpy(mat_rows + swap_row * alpha, mat_rows + diag * alpha, \
+	       alpha * sizeof(gf ## N ## _t));				\
+	memcpy(mat_rows + diag * alpha, mat_rows + alpha * alpha, \
+	       alpha * sizeof(gf ## N ## _t));				\
 	 \
 	/* We don't have scratch space for the symbol, though. */ \
 	cp = symbol + (gen - alpha + diag) * blocksyms; \
