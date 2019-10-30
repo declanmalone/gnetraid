@@ -112,138 +112,139 @@ unsigned pivot_bin(struct perp_settings_2015 *s, struct perp_decoder_2015 *d) {
   return d->remain;
 }
 
-unsigned pivot_gf8(struct perp_settings_2015 *s,
-		   struct perp_decoder_2015 *d,
-		   unsigned i,
-		   gf8_t *code,
-		   gf8_t *sym)
-{
-  unsigned tries = 0;
-  short ctz_row, ctz_code, clz_code;
-  gf8_t temp;
-  gf8_t *cp, *bp, *rp;
-  unsigned short code_size = s->code_size;
-  unsigned short blocksize = s->blocksize;
-  unsigned short blocksyms = s->blocksyms;
-  unsigned short cancelled, zero_sym;
-
-  if (i >= s->gen) {
-    fprintf(stderr, "pivot_gf8: i value %u out of range\n", i);
-    exit(1);
-  }
-
-  if (0) {
-    fprintf (stderr, "Remain is %u\n", d->remain);
-    fprintf (stderr, "Code is: ");
-    hex_print(code,code_size);
-  }
-
-  while (++tries < s->gen * 2) {
-    
-    if (d->filled[i] == 0) {
-      // fprintf(stderr,"filling hole in row %u\n", i);
-      d->filled[i] = 1;
-      memcpy(d->coding + code_size * i, code, code_size);
-      memcpy(d->symbol + blocksize * i, sym,  blocksize);
-      return --(d->remain);
-    }
-
-    // fprintf(stderr,"Row %u already has data: ", i);
-    // hex_print(d->coding + code_size * i, code_size);
-    
-    for (ctz_code = 0, cp=code + code_size - 1;
-	 cp >= code;
-	 --cp ) {
-      if (*cp != 0) break;
-      ++ctz_code;
-    }
-    // fprintf (stderr, "ctz_code is %u\n", ctz_code);
-
-    // We could memoise ctz_row, but for now I'll just calculate it
-    bp = d->coding + i * code_size;
-    for (ctz_row = 0, cp = bp + code_size - 1;
-	 cp >= bp;
-	 --cp ) {
-      if (*cp != 0) break;
-      ++ctz_row;
-    }
-    // fprintf (stderr, "ctz_row is %u\n", ctz_row);
-
-    // Rather than doing swap as a single step, just set a flag. The
-    // loops below have been rewritten to deal with it correctly.
-    short need_swap = 0;
-    if (ctz_code > ctz_row) need_swap++;
-
-    // Subtract matrix "row" from our code, symbol
-    // fprintf(stderr, "Substituting row %u into code, sym\n", i);
-    cancelled = 1;		/* incidentally, check if code became zero */
-    cp = code;
-    rp = d->coding + i * code_size;
-    bp = rp + code_size;
-
-    if (need_swap) {
-      gf8_t cv, xor;
-      while (rp < bp) {
-	if (xor = (cv = *cp) ^ *rp) cancelled = 0;
-	*(rp++) = cv;
-	*(cp++) = xor;
-      }
-    } else {
-      while (rp < bp) {
-	if (*(cp++) ^= *(rp++)) cancelled = 0;
-      }
-    }
-
-    // Defer operating on symbol so that we can do a fused operation later
-
-    // fprintf(stderr, "New code is: ");
-    // hex_print(code, code_size);
-
-    if (cancelled) {
-      // fprintf(stderr, "Code was cancelled\n");
-      zero_sym  = 1;		/* did symbol cancel? (for debugging) */
-      cp = sym;
-      rp = d->symbol + i * blocksize;
-      bp = rp + blocksyms;
-      // we don't care if need_swap is set because a ^ b == b ^ a
-      while (rp < bp) {
-	if (*(cp++) ^ *(rp++)) {
-	  zero_sym = 0;
-	  break;
-	}
-      }
-      if (zero_sym) return d->remain;
-      fprintf(stderr,  "failed: zero code vector => zero symbol (i=%d)\n", i);
-      exit(1);
-    }
-
-    // count leading zeros to find new i value
-    clz_code = 0;
-    cp = code; bp = code + code_size;
-    while (cp < bp) {
-      if (*cp) break;
-      ++clz_code;
-      ++cp;
-    }
-    // fprintf(stderr, "clz of new code is %u\n", clz_code);
-
-    // cp now points to first non-zero value
-    temp = gf8_inv_elem(*cp);
-    ++cp;			// skip past implicit 1
-    gf8_vec_mul(cp,  temp, code_size - clz_code - 1);
-    // roll (possible) swapping, adding and multiplying into one call
-    gf8_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksyms, need_swap);
-
-    // shift code vector left
-    rp = code;
-    while (cp < bp) { *(rp++) = *(cp++); }
-    while (rp < bp) { *(rp++) = 0; }
-
-    // update i value
-    i = (i + clz_code + 1) % s->gen;
-  }
-  fprintf(stderr, "Bailing after 2 * gen attempts to pivot\n");
+#define typed_pivot(N) \
+unsigned pivot_gf ## N (struct perp_settings_2015 *s, \
+struct perp_decoder_2015 *d, \
+		   unsigned i, \
+		   gf ## N ## _t *code, \
+		   gf ## N ## _t *sym) \
+{ \
+  unsigned tries = 0; \
+  short ctz_row, ctz_code, clz_code; \
+  gf ## N ## _t temp; \
+  gf ## N ## _t *cp, *bp, *rp; \
+  unsigned short alpha     = s->alpha;     /* elements */ \
+  unsigned short code_size = s->code_size; /* bytes */ \
+  unsigned short blocksyms = s->blocksyms; /* elements */ \
+  unsigned short blocksize = s->blocksize; /* bytes */ \
+  unsigned short cancelled, zero_sym; \
+\
+  if (i >= s->gen) { \
+    fprintf(stderr, "pivot_gf8: i value %u out of range\n", i); \
+    exit(1); \
+  } \
+\
+  while (++tries < s->gen * 2) { \
+\
+    if (d->filled[i] == 0) { \
+      /* fprintf(stderr,"filling hole in row %u\n", i); */	\
+      d->filled[i] = 1; \
+      memcpy(d->coding + code_size * i, code, code_size); \
+      memcpy(d->symbol + blocksize * i, sym,  blocksize); \
+      return --(d->remain); \
+    } \
+\
+    /* fprintf(stderr,"Row %u already has data: ", i); */	\
+    /* hex_print(d->coding + code_size * i, code_size);      */	\
+\
+    for (ctz_code = 0, cp=code + alpha - 1; \
+	 cp >= code; \
+	 --cp ) { \
+      if (*cp != 0) break; \
+      ++ctz_code; \
+    } \
+    /* fprintf (stderr, "ctz_code is %u\n", ctz_code); */	\
+\
+    /* We could memoise ctz_row, but for now I'll just calculate it */	\
+    bp = (gf ## N ## _t *) d->coding + i * code_size;			\
+    for (ctz_row = 0, cp = bp + alpha - 1; \
+	 cp >= bp; \
+	 --cp ) { \
+      if (*cp != 0) break; \
+      ++ctz_row; \
+    } \
+    /* fprintf (stderr, "ctz_row is %u\n", ctz_row); */	\
+\
+    /* Rather than doing swap as a single step, just set a flag. The */	\
+    /* loops below have been rewritten to deal with it correctly. */   \
+    short need_swap = 0; \
+    if (ctz_code > ctz_row) need_swap++; \
+\
+    /* Subtract matrix "row" from our code, symbol		  */ \
+    /* fprintf(stderr, "Substituting row %u into code, sym\n", i);*/	\
+    cancelled = 1;		/* incidentally, check if code became zero */ \
+    cp = code; \
+    rp = (gf ## N ## _t *) d->coding + i * code_size; \
+    bp = rp + code_size; \
+\
+    if (need_swap) { \
+      gf ## N ## _t cv, xor; \
+      while (rp < bp) { \
+	if (xor = (cv = *cp) ^ *rp) cancelled = 0; \
+	*(rp++) = cv; \
+	*(cp++) = xor; \
+      } \
+    } else { \
+      while (rp < bp) { \
+	if (*(cp++) ^= *(rp++)) cancelled = 0; \
+      } \
+    } \
+\
+    /* Defer operating on symbol so that we can do a fused operation later */\
+\
+    /* fprintf(stderr, "New code is: "); */	\
+    /* hex_print(code, code_size); */	   \
+\
+    if (cancelled) { \
+      /* fprintf(stderr, "Code was cancelled\n");		*/	\
+      zero_sym  = 1;		/* did symbol cancel? (for debugging) */ \
+      cp = sym; \
+      rp = (gf ## N ## _t *) d->symbol + i * blocksize; \
+      bp = rp + blocksize; \
+      /* we don't care if need_swap is set because a ^ b == b ^ a */ \
+      while (rp < bp) { \
+	if (*(cp++) ^ *(rp++)) { \
+	  zero_sym = 0; \
+	  break; \
+	} \
+      } \
+      if (zero_sym) return d->remain; \
+      fprintf(stderr,  "failed: zero code vector => zero symbol (i=%d)\n", i); \
+      exit(1); \
+    } \
+\
+/* count leading zeros to find new i value */	\
+    clz_code = 0; \
+    cp = code; bp = code + code_size; \
+    while (cp < bp) { \
+      if (*cp) break; \
+      ++clz_code; \
+      ++cp; \
+    } \
+/* fprintf(stderr, "clz of new code is %u\n", clz_code); */	\
+\
+/* cp now points to first non-zero value */	\
+    temp = gf8_inv_elem(*cp); \
+    ++cp;			/* skip past implicit 1 */\
+    gf ## N ## _vec_mul(cp,  temp, alpha - clz_code - 1); \
+/* roll (possible) swapping, adding and multiplying into one call */	\
+    gf ## N ## _vec_fam_with_swap(sym, (gf ## N ## _t *) d->symbol + i * blocksize, \
+				  temp, blocksyms, need_swap);		\
+\
+/* shift code vector left		*/	\
+    rp = code; \
+    while (cp < bp) { *(rp++) = *(cp++); } \
+    while (rp < bp) { *(rp++) = 0; } \
+\
+/* update i value */		     \
+    i = (i + clz_code + 1) % s->gen; \
+  } \
+  fprintf(stderr, "Bailing after 2 * gen attempts to pivot\n"); \
 }
+
+typed_pivot(8)
+typed_pivot(16)
+typed_pivot(32)
 
 static void hex_print_mrows(gf8_t *mat, int rows, int cols) {
   while (rows--) {

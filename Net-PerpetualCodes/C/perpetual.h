@@ -66,4 +66,16 @@ unsigned pivot_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015 *d,
 		   gf8_t *code,
 		   gf8_t *sym
 		   );
+unsigned pivot_gf16(struct perp_settings_2015 *s, struct perp_decoder_2015 *d,
+		   unsigned i,
+		   gf16_t *code,
+		   gf16_t *sym
+		   );
+unsigned pivot_gf32(struct perp_settings_2015 *s, struct perp_decoder_2015 *d,
+		   unsigned i,
+		   gf32_t *code,
+		   gf32_t *sym
+		   );
 int solve_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015  *d);
+int solve_gf16(struct perp_settings_2015 *s, struct perp_decoder_2015  *d);
+int solve_gf32(struct perp_settings_2015 *s, struct perp_decoder_2015  *d);

@@ -94,10 +94,19 @@ int main(int argc, char *argv[]) {
     i = *(unsigned *)buf;
     // fprintf(stderr, "i=%u\n", i);
     code = buf + sizeof(unsigned);
-    sym  = code + settings.alpha;
+    sym  = code + settings.code_size;
     if (eof) break;
     //continue;
-    if (0 == pivot_gf8(&settings, &decoder, i, code, sym)) {
+    int rc;
+    switch(settings.qbits) {
+    case  8: rc = pivot_gf8 (&settings, &decoder, i,
+			     (gf8_t *)  code, (gf8_t *)  sym); break;
+    case 16: rc = pivot_gf16(&settings, &decoder, i,
+			     (gf16_t *) code, (gf16_t *) sym); break;
+    case 32: rc = pivot_gf32(&settings, &decoder, i,
+			     (gf32_t *) code, (gf32_t *) sym); break;
+    }
+    if (0 == rc) {
       fprintf(stderr, "Completed pivoting after %d packets\n",packets);
       if (0 == solve_gf8(&settings, &decoder)) {
         // dump_decoded(&settings, &decoder);
