@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <string.h>
 
+#include "gf_types.h"
 #include "perpetual.h"
 
 struct perp_settings_2015 settings = {
@@ -68,7 +69,7 @@ int main(int argc, char *argv[]) {
   // Input file will have fixed-sized records
   unsigned recsize = sizeof(unsigned) + settings.alpha + settings.blocksize;
   fprintf(stderr, "Record size is %u\n", recsize);
-  unsigned char *buf = malloc(recsize);
+  gf8_t *buf = malloc(recsize);
   if (buf == 0) {
     fprintf(stderr, "Problem allocating buffer of size '%u'\n", recsize);
     exit(1);

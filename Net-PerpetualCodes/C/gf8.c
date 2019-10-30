@@ -4,19 +4,29 @@
 
 #include "gf8.h"
 
+// I'm using a mix of gf8_t and other types. The original code used
+// unsigned char for the field. I've changed them all to gf8_t, but
+// I've left the other types (like signed chars, shorts) untouched
+// because there's no need to give them their own typedefs since:
+//
+// * char (signed/unsigned) are guaranteed to be 1 byte in C
+// * short should be larger (though it's not guaranteed)
+// * I only want to define gf8_t, gf16_t and gf32_t and not
+//   larger/signed "working variable" types.
+
 // Field operations (single/pair of elements)
-const static unsigned char exp_table[];
+const static gf8_t exp_table[];
 const static signed short log_table[];
 
-unsigned char gf256_mul_elems(unsigned char a, unsigned char b) {
+gf8_t gf8_mul_elems(gf8_t a, gf8_t b) {
     const static signed short *log =  log_table;
     const static char         *exp =  exp_table + 512;
     return exp[log[a] + log[b]];
 }
 
-unsigned char gf256_inv_elem(unsigned char a) {
+gf8_t gf8_inv_elem(gf8_t a) {
     const static signed   short *log =  log_table;
-    const static unsigned char  *exp =  exp_table + 512;
+    const static gf8_t  *exp =  exp_table + 512;
     return exp[255-log[a]];
 }
 
@@ -24,56 +34,56 @@ unsigned char gf256_inv_elem(unsigned char a) {
 
 // These come from my Inline::C implementations
 
-void gf256_vec_mul(unsigned char *s, unsigned char val, unsigned len) {
+void gf8_vec_mul(gf8_t *s, gf8_t val, unsigned len) {
     const static char         *exp =  exp_table + 512;
     const static signed short *log =  log_table;
-    signed short log_a = log[(unsigned char) val];
+    signed short log_a = log[(gf8_t) val];
 
     while (len--) {
-        *s = exp[log_a + log[(unsigned char) *s]];
+        *s = exp[log_a + log[(gf8_t) *s]];
         ++s;
     }
 }
 
 // multiply all elements of a vector by a constant, then add another
 // vector of the same length (ie, "fused multiply-add")
-void gf256_vec_fma(unsigned char *d, unsigned char *s, unsigned char val,
+void gf8_vec_fma(gf8_t *d, gf8_t *s, gf8_t val,
 		   unsigned len ) {
     const static char         *exp =  exp_table + 512;
     const static signed short *log =  log_table;
-    signed short log_a = log[(unsigned char) val];
+    signed short log_a = log[(gf8_t) val];
 
     while (len--) {
-        *(d++) ^= exp[log_a + log[(unsigned char) *(s++)]];
+        *(d++) ^= exp[log_a + log[(gf8_t) *(s++)]];
     }
 }
 
 // roll (possible) swapping, adding and multiplying into one call
-void gf256_vec_fam_with_swap(unsigned char *d, unsigned char *s,
-			unsigned char val, unsigned len,
+void gf8_vec_fam_with_swap(gf8_t *d, gf8_t *s,
+			gf8_t val, unsigned len,
 			int do_swap) {
   const static char         *exp =  exp_table + 512;
   const static signed short *log =  log_table;
-  signed short log_a = log[(unsigned char) val];
+  signed short log_a = log[(gf8_t) val];
 
-  unsigned char sv, xor;
-  unsigned char *bp = d + len;
+  gf8_t sv, xor;
+  gf8_t *bp = d + len;
   if (do_swap) {
     while (d < bp) {
       xor = (sv = *d) ^ *s;
       *(s++) = sv;
-      *(d++) = exp[log_a + log[(unsigned char) xor]];
+      *(d++) = exp[log_a + log[(gf8_t) xor]];
     }
   } else {
     while (d < bp) {
       sv = *(s++) ^ *d;
-      *(d++) = exp[log_a + log[(unsigned char) sv]];
+      *(d++) = exp[log_a + log[(gf8_t) sv]];
     }
   }
 }
 
 
-const static unsigned char exp_table[] = {
+const static gf8_t exp_table[] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,

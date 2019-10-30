@@ -33,24 +33,24 @@ struct perp_encoder_2015 {
   unsigned seed;
   unsigned options;
   unsigned short deterministic;
-  unsigned char *message;
+  gf8_t *message;
 };
 
 struct perp_repivot_queue {
   unsigned i;
-  unsigned char *code;
-  unsigned char *symbol;
+  gf8_t *code;
+  gf8_t *symbol;
 };
 
 struct perp_decoder_2015 {
-  unsigned char *filled;
-  unsigned char *coding;
-  unsigned char *symbol;
+  gf8_t *filled;
+  gf8_t *coding;
+  gf8_t *symbol;
   unsigned remain;
   unsigned repivot;
   struct perp_repivot_queue *queue;
   // I expect I can eliminate the need to allocate full matrix rows later
-  unsigned char *mat_rows;
+  gf8_t *mat_rows;
 };
 
 void
@@ -62,7 +62,7 @@ perp_init_encoder_2015(struct perp_settings_2015 *s, struct perp_encoder_2015 *e
 unsigned pivot_bin(struct perp_settings_2015 *s, struct perp_decoder_2015 *d);
 unsigned pivot_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015 *d,
 		   unsigned i,
-		   unsigned char *code,
-		   unsigned char *sym
+		   gf8_t *code,
+		   gf8_t *sym
 		   );
 int solve_gf8(struct perp_settings_2015 *s, struct perp_decoder_2015  *d);

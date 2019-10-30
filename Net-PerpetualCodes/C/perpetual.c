@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 
+#include "gf_types.h"
 #include "perpetual.h"
 #include "gf8.h"
 
@@ -66,19 +67,19 @@ void perp_init_decoder_2015(struct perp_settings_2015 *s,
 
   s->code_size = alpha;
 
-  if (0 == (d->filled = (unsigned char *) malloc(gen))) {
+  if (0 == (d->filled = (gf8_t *) malloc(gen))) {
     fprintf (stderr, "Failed to alloc %d bytes for gen\n", gen);
     exit(1);
   } else {
     memset(d->filled, 0, gen);
   }
 
-  if (0 == (d->coding = (unsigned char *) malloc(gen * alpha))) {
+  if (0 == (d->coding = (gf8_t *) malloc(gen * alpha))) {
     fprintf (stderr, "Failed to alloc %d bytes for coding\n", gen * alpha);
     exit(1);
   }
 
-  if (0 == (d->symbol = (unsigned char *) malloc(gen * blocksize))) {
+  if (0 == (d->symbol = (gf8_t *) malloc(gen * blocksize))) {
     fprintf (stderr, "Failed to alloc %d bytes for symbol\n", gen * blocksize);
     exit(1);
   }
@@ -95,7 +96,7 @@ void perp_init_decoder_2015(struct perp_settings_2015 *s,
 
 };
 
-static void hex_print(unsigned char *s, int len) {
+static void hex_print(gf8_t *s, int len) {
   while (len--) 
     fprintf(stderr, "%02x", *(s++));
   fprintf(stderr, "\n");
@@ -107,13 +108,13 @@ unsigned pivot_bin(struct perp_settings_2015 *s, struct perp_decoder_2015 *d) {
 unsigned pivot_gf8(struct perp_settings_2015 *s,
 		   struct perp_decoder_2015 *d,
 		   unsigned i,
-		   unsigned char *code,
-		   unsigned char *sym)
+		   gf8_t *code,
+		   gf8_t *sym)
 {
   unsigned tries = 0;
   short ctz_row, ctz_code, clz_code;
-  unsigned char temp;
-  unsigned char *cp, *bp, *rp;
+  gf8_t temp;
+  gf8_t *cp, *bp, *rp;
   unsigned short code_size = s->code_size;
   unsigned short blocksize = s->blocksize;
   unsigned short cancelled, zero_sym;
@@ -173,7 +174,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     bp = rp + code_size;
 
     if (need_swap) {
-      unsigned char cv, xor;
+      gf8_t cv, xor;
       while (rp < bp) {
 	if (xor = (cv = *cp) ^ *rp) cancelled = 0;
 	*(rp++) = cv;
@@ -219,11 +220,11 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
     // fprintf(stderr, "clz of new code is %u\n", clz_code);
 
     // cp now points to first non-zero value
-    temp = gf256_inv_elem(*cp);
+    temp = gf8_inv_elem(*cp);
     ++cp;			// skip past implicit 1
-    gf256_vec_mul(cp,  temp, code_size - clz_code - 1);
+    gf8_vec_mul(cp,  temp, code_size - clz_code - 1);
     // roll (possible) swapping, adding and multiplying into one call
-    gf256_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksize, need_swap);
+    gf8_vec_fam_with_swap(sym, d->symbol + i * blocksize, temp, blocksize, need_swap);
 
     // shift code vector left
     rp = code;
@@ -236,7 +237,7 @@ unsigned pivot_gf8(struct perp_settings_2015 *s,
   fprintf(stderr, "Bailing after 2 * gen attempts to pivot\n");
 }
 
-static void hex_print_mrows(unsigned char *mat, int rows, int cols) {
+static void hex_print_mrows(gf8_t *mat, int rows, int cols) {
   while (rows--) {
     fprintf(stderr, "| ");
     hex_print(mat, cols);
@@ -254,12 +255,12 @@ int solve_gf8(struct perp_settings_2015 *s,
   // but I don't think that it's worth it.
 
   signed   short i, j;
-  unsigned char *cp, *rp, *bp, k, temp;
+  gf8_t *cp, *rp, *bp, k, temp;
   unsigned short alpha     = s->alpha;
   unsigned short gen       = s->gen;
   unsigned short code_size = s->code_size;
   unsigned int   blocksize = s->blocksize;
-  unsigned char *mat_rows  = d->mat_rows;
+  gf8_t *mat_rows  = d->mat_rows;
   unsigned short diag, swap_row, down_row;
 
   // rp -> destination (j'th row of mat_rows)
@@ -302,9 +303,9 @@ int solve_gf8(struct perp_settings_2015 *s,
       
       // coding vector (fma would clear non-zero at *rp if 1 above was explicit)
       *rp = 0;
-      gf256_vec_fma(rp + 1, d->coding + diag * alpha, k, alpha);
+      gf8_vec_fma(rp + 1, d->coding + diag * alpha, k, alpha);
       // symbol
-      gf256_vec_fma(d->symbol + (gen - alpha + j) * blocksize,
+      gf8_vec_fma(d->symbol + (gen - alpha + j) * blocksize,
 		    d->symbol + (diag)            * blocksize,
 		    k, blocksize);
 
@@ -382,9 +383,9 @@ int solve_gf8(struct perp_settings_2015 *s,
 
   // Normalise the diagonal
   if (k != 1) {
-    k = gf256_inv_elem(k);
-    gf256_vec_mul(mat_rows + diag * alpha, k, alpha);
-    gf256_vec_mul(d->symbol + (gen - alpha + diag) * blocksize, k, blocksize);
+    k = gf8_inv_elem(k);
+    gf8_vec_mul(mat_rows + diag * alpha, k, alpha);
+    gf8_vec_mul(d->symbol + (gen - alpha + diag) * blocksize, k, blocksize);
   }
 
   // Propagate down from diagonal to clear non-zeros underneath
@@ -392,8 +393,8 @@ int solve_gf8(struct perp_settings_2015 *s,
     k = mat_rows[i * alpha + diag];
     if (k == 0) continue;
 
-    gf256_vec_fma(mat_rows + i * alpha, mat_rows + diag * alpha, k, alpha);
-    gf256_vec_fma(d->symbol + (gen - alpha + i)    * blocksize,
+    gf8_vec_fma(mat_rows + i * alpha, mat_rows + diag * alpha, k, alpha);
+    gf8_vec_fma(d->symbol + (gen - alpha + i)    * blocksize,
 		  d->symbol + (gen - alpha + diag) * blocksize,
 		  k, blocksize);
   }
@@ -426,7 +427,7 @@ int solve_gf8(struct perp_settings_2015 *s,
 	  };
 	  d->coding[i * code_size + temp] = 0;
 	} else {
-	  gf256_vec_fma(d->symbol + i * blocksize,
+	  gf8_vec_fma(d->symbol + i * blocksize,
 			d->symbol + diag * blocksize,
 			k, blocksize);
 	  d->coding[i * code_size + temp] = 0;
