@@ -1336,12 +1336,12 @@ void gf32_vec_fam_with_swap(gf32_t *d, gf32_t *s,
     while (len--) {
       xor = (sv = *d) ^ *s;
       *(s++) = sv;
-      *(d++) = gf16_mul_elems(val,xor);
+      *(d++) = gf32_mul_elems(val,xor);
     }
   } else {
     while (len--) {
       xor = *(s++) ^ *d;
-      *(d++) = gf16_mul_elems(val,xor);
+      *(d++) = gf32_mul_elems(val,xor);
     }
   }
 }
