@@ -25,9 +25,9 @@ int main (int argc, char *argv[]) {
   memset(ve32, 0, vec_size);
 
   // just some random numbers to test with
-  a32 = 0x8421;
-  b32 = 0xfedc;
-  e32 = 0xcafe;
+  a32 = 0x87654321;
+  b32 = 0xfedcba98;
+  e32 = 0xdeadbeef;
 
   for (i=0; a32; a32 >>= 1, b32 <<= 1) {
     c32 = gf32_mul_elems(a32,b32);
@@ -76,13 +76,13 @@ int main (int argc, char *argv[]) {
   }
 
   // check vector multiplication (a x constant)
-  gf32_vec_mul(vd32, e32, vec_size / 2);
+  gf32_vec_mul(vd32, e32, vec_size / 4);
 
   if (0 != memcmp(vc32, vd32, vec_size))
     printf("gf32_vec_mul failed\n");
 
   // want to calculate a + b.e, which is stored in ve32
-  gf32_vec_fma(va32, vb32, e32, vec_size / 2);
+  gf32_vec_fma(va32, vb32, e32, vec_size / 4);
   if (0 != memcmp(va32, ve32, vec_size))
     printf("gf32_vec_fma failed\n");
   
