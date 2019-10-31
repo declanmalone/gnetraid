@@ -12,5 +12,8 @@ profiled: test_decoder.c gf8.c gf16_32.c perpetual.c
 clean:
 	rm *.o test_decoder
 
-test_maths: test_maths.c gf16_32.c
-	gcc -no-pie -fprofile-arcs -ftest-coverage -pg -o test_maths $^
+test_gf16: test_gf16.c gf16_32.c
+	gcc -no-pie -fprofile-arcs -ftest-coverage -pg -o test_gf16 $^
+
+test_gf32: test_gf32.c gf16_32.c
+	gcc -no-pie -fprofile-arcs -ftest-coverage -pg -o test_gf32 $^
