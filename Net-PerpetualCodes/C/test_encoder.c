@@ -57,25 +57,31 @@ void encode_block(struct perp_settings_2015 *s,
 
   // iterate over code (field elements) and FMA message blocks (bytes),
   // casting to field types as needed
+  unsigned message_size = gen * blocksize;
   switch (qbits) {
   case 8:
-    for (mp8 += blocksize, j = 0; j < alpha; ++j) {
+    for (j = 0; j < alpha; ++j) {
       v8 = code[j];
-      gf8_vec_fma(sym, mp8, v8, blocksize);
+      gf8_vec_fma(sym, e->message + ((*i + j + 1) % gen) * blocksize,
+		  v8, blocksize);
     }
     break;
   case 16:
     p16 = (gf16_t *) code;
-    for (mp8 += blocksize, j = 0; j < alpha; ++j) {
+    for (j = 0; j < alpha; ++j) {
       v16 = p16[j];
-      gf16_vec_fma((gf16_t *) sym, (gf16_t *) mp8, v16, blocksize >> 1);
+      gf16_vec_fma((gf16_t *) sym,
+		   (gf16_t *)  (e->message + ((*i + j + 1) % gen) * blocksize),
+		   v16, blocksize >> 1);
     }
     break;
   case 32:
     p32 = (gf32_t *) code;
-    for (mp8 += blocksize, j = 0; j < alpha; ++j) {
+    for (j = 0; j < alpha; ++j) {
       v32 = p32[j];
-      gf32_vec_fma((gf32_t *) sym, (gf32_t *) mp8, v32, blocksize >> 2);
+      gf32_vec_fma((gf32_t *) sym,
+		   (gf32_t *) (e->message + ((*i + j + 1) % gen) * blocksize),
+		   v32, blocksize >> 2);
     }
     break;
   default:
@@ -134,6 +140,10 @@ int main(int argc, char *argv[]) {
 
   // Check options, set up arrays
   perp_init_encoder_2015(&settings, &encoder);
+
+  // Some debug messages after setup
+  fprintf(stderr, "code_size is %d\n", settings.code_size);
+
 
   if (optind == argc) {
     fprintf(stderr, "You need to supply an infile\n");

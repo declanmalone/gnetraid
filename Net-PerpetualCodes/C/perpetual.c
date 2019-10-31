@@ -2,6 +2,8 @@
 /* Implementation of Perptual Codes */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "gf_types.h"
 #include "perpetual.h"
@@ -24,28 +26,31 @@
 
 */
 
-void perp_init_encoder_2015(struct perp_settings_2015 *s,
-			    struct perp_encoder_2015 *e) {
-
-  
-  
-
-}
-
-void perp_init_decoder_2015(struct perp_settings_2015 *s,
-			    struct perp_decoder_2015 *d) {
+static void _check_common_settings(struct perp_settings_2015 *s) {
   unsigned       blocksize = s->blocksize;
   unsigned       gen       = s->gen;
   unsigned short alpha     = s->alpha;
   unsigned short qbits     = s->qbits; /* field size (number of bits) */
   unsigned short q         = s->q; /* field size (number of elements) */
-  
 
-  if ((q != 256) || (qbits != 8)) {
-    fprintf (stderr, "Only GF(2**8) is implemented (did you set q/qbits?)\n");
+  switch(qbits) {
+  case 0:
+    fprintf (stderr, "q/qbits not set (required).\n");
+    exit(1);
+  case 1:
+    fprintf (stderr, "Binary field not implemented yet.\n");
+    exit(1);
+  case 4:
+    fprintf (stderr, "GF(2**4) not implemented yet.\n");
+    exit(1);
+  case 8:
+  case 16:
+  case 32:
+    break;
+  default:
+    fprintf (stderr, "Unknown qbits value %d.\n",qbits);
     exit(1);
   }
-
   if (alpha == 0) {
     fprintf (stderr, "Invalid alpha value %d (must be > 0)\n", alpha);
     exit(1);
@@ -73,7 +78,39 @@ void perp_init_decoder_2015(struct perp_settings_2015 *s,
     exit(1);
   }
 
-  s->code_size = alpha;
+  s->code_size = alpha * (qbits >> 3);
+
+}
+
+void perp_init_encoder_2015(struct perp_settings_2015 *s,
+			    struct perp_encoder_2015 *e) {
+
+  unsigned       blocksize = s->blocksize;
+  unsigned       gen       = s->gen;
+  unsigned short alpha     = s->alpha;
+  unsigned short qbits     = s->qbits; /* field size (number of bits) */
+  unsigned short q         = s->q; /* field size (number of elements) */
+
+  _check_common_settings(s);
+
+  if (e->deterministic) {
+    srand(1);
+  } else if (e->seed) {
+    srand(e->seed);
+  } else {
+    srand(time(0));
+  }
+}
+
+void perp_init_decoder_2015(struct perp_settings_2015 *s,
+			    struct perp_decoder_2015 *d) {
+  unsigned       blocksize = s->blocksize;
+  unsigned       gen       = s->gen;
+  unsigned short alpha     = s->alpha;
+  unsigned short qbits     = s->qbits; /* field size (number of bits) */
+  unsigned short q         = s->q; /* field size (number of elements) */
+
+  _check_common_settings(s);
 
   if (0 == (d->filled = (gf8_t *) malloc(gen))) {
     fprintf (stderr, "Failed to alloc %d bytes for gen\n", gen);
