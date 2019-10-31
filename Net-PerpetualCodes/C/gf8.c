@@ -60,8 +60,8 @@ void gf8_vec_fma(gf8_t *d, gf8_t *s, gf8_t val,
 
 // roll (possible) swapping, adding and multiplying into one call
 void gf8_vec_fam_with_swap(gf8_t *d, gf8_t *s,
-			gf8_t val, unsigned len,
-			int do_swap) {
+			   gf8_t val, unsigned len,
+			   int do_swap) {
   const static char         *exp =  exp_table + 512;
   const static signed short *log =  log_table;
   signed short log_a = log[(gf8_t) val];
@@ -75,8 +75,8 @@ void gf8_vec_fam_with_swap(gf8_t *d, gf8_t *s,
     }
   } else {
     while (len--) {
-      sv = *(s++) ^ *d;
-      *(d++) = exp[log_a + log[(gf8_t) sv]];
+      xor = *(s++) ^ *d;
+      *(d++) = exp[log_a + log[(gf8_t) xor]];
     }
   }
 }

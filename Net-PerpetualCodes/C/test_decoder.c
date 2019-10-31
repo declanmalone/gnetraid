@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Input file will have fixed-sized records
-  unsigned recsize = sizeof(unsigned) + settings.alpha + settings.blocksize;
+  unsigned recsize = sizeof(unsigned) + settings.code_size + settings.blocksize;
   fprintf(stderr, "Record size is %u\n", recsize);
   gf8_t *buf = malloc(recsize);
   if (buf == 0) {
@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     }
     ++packets;
     i = *(unsigned *)buf;
-    // fprintf(stderr, "i=%u\n", i);
+    fprintf(stderr, "i=%u\n", i);
     code = buf + sizeof(unsigned);
     sym  = code + settings.code_size;
     if (eof) break;
