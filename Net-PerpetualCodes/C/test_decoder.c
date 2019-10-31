@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
     }
     ++packets;
     i = *(unsigned *)buf;
-    fprintf(stderr, "i=%u\n", i);
+    // fprintf(stderr, "i=%u\n", i);
     code = buf + sizeof(unsigned);
     sym  = code + settings.code_size;
     if (eof) break;

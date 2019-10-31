@@ -192,9 +192,9 @@ int main(int argc, char *argv[]) {
 
   while (encoder.packets--) {
   
-    unsigned *i    = (unsigned *) outbuf;
-    char     *code = outbuf + sizeof(unsigned);
-    char     *sym  = code + settings.code_size;
+    unsigned      *i    = (unsigned *) outbuf;
+    unsigned char *code = outbuf + sizeof(unsigned);
+    unsigned char *sym  = code + settings.code_size;
 
     encode_block(&settings, &encoder, i, code, sym);
     
