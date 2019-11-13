@@ -23,17 +23,19 @@ Usage:
 Worker options:
 
  -n  number of workers in work group (ie, stride)
- -m  offset within work group
+ -m  offset within work group (check n'th + m entries)
+ -s  skip this many entries at the start
 
-Manually run n processes, each with a different m value in the range:
+Suitable for running n processes in parallel. Each should have a
+different m value in the range:
 
  0 <= m < n
 
 EOT
 
 # getopts
-our ($opt_h, $opt_m, $opt_n) = (0,-1,-1);
-getopts("m:n:h");
+our ($opt_h, $opt_m, $opt_n,$opt_s) = (0,-1,-1,undef);
+getopts("m:n:s:h");
 die $usage if $opt_h;
 
 # Check options
@@ -52,6 +54,15 @@ if (($opt_n == -1) || ($opt_m == -1)) {
 die "n must be 1 or greater\n" unless $opt_n >= 1;
 die "m must be in the range 0..n-1 (0.." . ($opt_n - 1) . ")\n"
     unless $opt_m >= 0 and $opt_m < $opt_n;
+
+# Check or set up skip option
+if (defined $opt_s) {
+    die "Invalid skip (-s) value '$opt_s'\n" unless $opt_s =~ /^\d+$/;
+    die "Skip value mod n must equal m\n" unless $opt_m == $opt_s % $opt_n;
+} else {
+    $opt_s = $opt_m;
+}
+
 
 # Remaining options
 die "Missing YAML file argument\n" if @ARGV == 0;
@@ -72,7 +83,7 @@ warn "YAML file has $nshares replicas\n";
 # an all-correct result ("1" for all n shares listed)
 my $all_ok =  "1" x $n;
 my $no_file = "-" x $n;
-for (my $i = $opt_m; $i < $nshares; $i += $opt_n) {
+for (my $i = $opt_s; $i < $nshares; $i += $opt_n) {
 
     # Unpack row contents
     my ($replica,$sharefile_size, @tests) = @{$shares->[$i]};
