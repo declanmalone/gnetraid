@@ -3,8 +3,6 @@
 DIR=$1
 FILE=$2
 
-IDA_SCRIPT=worker-validate.pl
-
 # I can't be bothered with passing all parameters on the command line,
 # so I'll set them up as environment variables.
 #
@@ -72,7 +70,7 @@ See comments at the top of this script for the meanings of these
 environment variables.
 "
 
-# Set up default values if not set
+# Set up default values if not supplied
 [ "x$IDA_SCRIPT"  == "x" ] && IDA_SCRIPT="worker-validate.pl"
 [ "x$IDA_SKIP"    == "x" ] && IDA_SKIP="0"
 [ "x$IDA_WORKERS" == "x" ] && IDA_WORKERS="4"
@@ -84,11 +82,23 @@ for o in $IDA_OFFSETS; do
     offsets=$(( $offsets + 1 ))
 done
 if [ "x$offsets" != "x$IDA_WORKERS" ]; then
-    echo "IDA_OFFSETS ('$IDA_OFFSETS') should be a string with $IDA_WORKERS elements"
+    echo "IDA_OFFSETS ('$IDA_OFFSETS') should be a string" \
+	 "with $IDA_WORKERS elements"
     echo "Got $offsets elements"
     exit 1;
 fi
 
+if [ "x$IDA_SCRIPT_PATH"  != "x" ]; then
+    # prepend path if supplied (else rely on PATH to find it)
+    IDA_SCRIPT="$IDA_SCRIPT_PATH/$IDA_SCRIPT";
+fi
+
+if [ ! -d "$IDA_REPORT_PATH" ]; then
+    echo "IDA_REPORT_PATH is not a directory"
+    exit 1;
+fi
+
+# Check command-line arguments
 ARGS_OK=1
 if [ "x$DIR"  == "x" ]; then ARGS_OK=0; fi
 if [ "x$FILE" == "x" ]; then ARGS_OK=0; fi
@@ -107,6 +117,24 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
+# Filenames in report are relative to root of replica store, so we
+# need to chdir there.
 cd "$DIR" || exit 1;
 
-echo $OLDPWD
+# Launch sub processes
+pids=""
+for offset in $IDA_OFFSETS; do
+    "$IDA_SCRIPT" -n $IDA_WORKERS -m $offset \
+		  -s $(($offset + $IDA_SKIP)) \
+		  "$FILE" \
+		  2>> "$IDA_REPORT_PATH/validate-errors-${offset}.log" \
+		  >> "$IDA_REPORT_PATH/validate-report-${offset}.log" &
+    thispid=$!
+    pids="$pids $thispid"
+    echo "Launched worker $offset [pid]"
+done
+
+echo "Waiting for pids $pids"
+wait $pids
+
+echo All workers exited.

@@ -119,8 +119,9 @@ for (my $i = $opt_s; $i < $nshares; $i += $opt_n) {
 
 	# This is where we will normally report, suppressing reporting
 	# for files that don't exist
+	print join "\0", ($i, $replica_size, $replica_hash, $res, "\n");
+
     }
 
     # for now, report all files checked, even if they don't exist
-    print join "\0", ($i, $replica_size, $replica_hash, $res, "\n");
 }
