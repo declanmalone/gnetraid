@@ -105,6 +105,11 @@ if [ "x$IDA_SCRIPT_PATH"  != "x" ]; then
     IDA_SCRIPT="$IDA_SCRIPT_PATH/$IDA_SCRIPT";
 fi
 
+if [ "x$IDA_REPORT_PREFIX"  == "x" ]; then
+    echo "IDA_REPORT_PREFIX is not set"
+    exit 1;
+fi
+
 if [ ! -d "$IDA_REPORT_PATH" ]; then
     echo "IDA_REPORT_PATH is not a directory"
     exit 1;
@@ -137,13 +142,14 @@ cd "$DIR" || exit 1;
 pids=""
 for offset in $IDA_OFFSETS; do
     "$IDA_SCRIPT" -n $IDA_WORKERS -m $offset \
-		  -s $(($offset + $IDA_SKIP)) \
-		  "$FILE" \
-		  2>> "$IDA_REPORT_PATH/validate-errors-${offset}.log" \
-		  >> "$IDA_REPORT_PATH/validate-report-${offset}.log" &
+      -s $(($offset + $IDA_SKIP)) \
+      -p "$IDA_REPORT_PREFIX" \
+      "$FILE" \
+      2>> "$IDA_REPORT_PATH/$IDA_REPORT_PREFIX-validate-errors-${offset}.log" \
+      >> "$IDA_REPORT_PATH/$IDA_REPORT_PREFIX-validate-report-${offset}.log" &
     thispid=$!
     pids="$pids $thispid"
-    echo "Launched worker $offset [pid]"
+    echo "Launched worker $offset [$thispid]"
 done
 
 echo "Waiting for pids $pids"
