@@ -13,9 +13,13 @@ use open ':std', ':encoding(UTF-8)';
 # option -y new_yaml_file
 use Getopt::Std;
 
-our ($opt_y);
-getopts("y:");
-my $output_yaml = $opt_y;
+# input/output YAML files (input as in merge-xform-row-data.pl)
+our ($opt_i, $opt_o) = ("merged-share-data.yaml",undef);
+getopts("i:o:");
+
+# Read input YAML file
+my $yaml = LoadFile($opt_i);
+my $output_yaml = $opt_o;
 
 # Use the same file names that I used in group-validate, but with disk
 # names matching those in the YAML file prepended (I renamed the
@@ -31,9 +35,6 @@ sub report_name {
 
 # worker numbers: matching how I ran group-validate.sh
 my @workers = (0..3);
-
-# YAML filename matches that in merge-xform-row-data.pl
-my $yaml = LoadFile("merged-share-data.yaml");
 
 my $replicas = @{$yaml->{shares}};
 sub empty_hash { { ok => 0, errs => 0 } };
