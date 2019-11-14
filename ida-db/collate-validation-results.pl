@@ -3,8 +3,12 @@
 use strict;
 use warnings;
 
-use YAML::XS qw(LoadFile);
-use IO::All;
+# We need the -encoding option or YAML::XS::DumpFile writes mojibake
+use YAML::XS qw(:all);
+use IO::All -encoding => "UTF-8";
+
+# Eliminate "wide character" messages
+use open ':std', ':encoding(UTF-8)';
 
 # Use the same file names that I used in group-validate, but with disk
 # names matching those in the YAML file prepended (I renamed the
@@ -44,6 +48,8 @@ for my $silo (@{$yaml->{silo_names}}) {
 	    my ($row,$replica_size,$replica_hash,$status,$junk)
 		= split "\0", $line;
 	    my $replica_name = $yaml->{shares}->[$row]->[0];
+	    die "$silo row $row has no status (report truncated)\n"
+		unless defined $status;
 	    if ($status ne "1111") {
 		warn "$silo: $replica_name: share mismatch (status $status)\n";
 		$coverage[$row]->{errs}++;
@@ -60,7 +66,7 @@ for my $silo (@{$yaml->{silo_names}}) {
 }
 
 # Now check coverage
-$report_errors = 0;		# different report, same variable
+$report_errors = 0;		# different report, reuse variable
 for my $row (0.. $replicas -1) {
     # see if an error with one replica was corrected elsewhere
     my $replica_name = $yaml->{shares}->[$row]->[0];
@@ -71,6 +77,6 @@ for my $row (0.. $replicas -1) {
     }
     unless ($coverage[$row]->{ok}) {
 	++$report_errors;
-	warn "Not covered: $replica_name\n";
+	warn "Not covered ($row): $replica_name\n";
     }
 }
