@@ -3,9 +3,22 @@
 use strict;
 use warnings;
 
-use IO::All;
+# It appears that if I don't use IO::All with the -encoding option,
+# the YAML output files have mojibake in them. I comment on various
+# attempts to get it working below...
 
+# This doesn't seems to have any effect on proper UTF-8 in files
+use v5.20;
+
+# It doesn't seem to matter if we include YAML::XS before or after the
+# IO::All include below
 use YAML::XS qw(DumpFile);
+
+# Attempts at getting UTF-8 YAML output files:
+
+#use IO::All;                     # doesn't work: get mojibake
+use IO::All -encoding => "UTF-8"; # works
+#use open qw(:utf8);              # doesn't work: get mojibake
 
 sub silo_to_infile_name {
     my $silo = shift;
@@ -96,6 +109,9 @@ sub merge_files {
 
 	push @{$yaml->{shares}}, \@rec;
     }
+    # YAML output doesn't seem to preserve Unicode characters if I
+    # just use DumpFile.
+    # First try: use IO::All -encoding at top of script
     DumpFile($of,$yaml);
 }
 
