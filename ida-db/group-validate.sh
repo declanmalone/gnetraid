@@ -21,6 +21,18 @@ FILE=$2
 # for dealing with restarting a failed run later with a new $IDA_SKIP
 # value set. (see below)
 #
+#
+# IDA_REPORT_PREFIX=Something
+#
+# Will be prepended, along with an added hyphen to output report
+# names.
+#
+# I'm adding this because my first run missed some files and I need a
+# way of doing another run without re-scanning everything.
+#
+# This will be passed to worker-validate.pl so that it can pull out
+# previous results from the updated YAML file.
+#
 # IDA_WORKERS=4
 #
 # Number of workers, passed to script as "-n $WORKERS"

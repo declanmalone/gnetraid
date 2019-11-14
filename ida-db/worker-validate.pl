@@ -18,7 +18,7 @@ $0 - Do trial split of replicas, checking that sharefile hashes match
 Usage:
 
  \$ cd replica_dir
- \$ $0 [worker options] validation_list.yaml
+ \$ $0 [worker options] [report options] validation_list.yaml
 
 Worker options:
 
@@ -31,14 +31,24 @@ different m value in the range:
 
  0 <= m < n
 
+Report options:
+
+ -p previous
+
+If the YAML file has an old_status array, will look in it for a key
+matching {\$previous} and if found, will use those cached values
+instead of re-scanning files.
+
 EOT
 
 # getopts
-our ($opt_h, $opt_m, $opt_n,$opt_s) = (0,-1,-1,undef);
-getopts("m:n:s:h");
+our ($opt_h, $opt_m, $opt_n,$opt_s,$opt_p) = (0,-1,-1,undef,undef);
+getopts("m:n:s:p:h");
 die $usage if $opt_h;
 
 # Check options
+
+my $previous = $opt_p;
 
 # If worker options not given, assume single process processing all
 # the items (from the zero'th)
@@ -80,6 +90,21 @@ warn "k is $k, n is $n, w is $w\n";
 my $nshares = scalar(@$shares);
 warn "YAML file has $nshares replicas\n";
 
+# If the YAML file has a 'old_status' array we use the values stashed
+# in there to skip the expensive ida_validate operation.
+#
+# If it doesn't have that section, we create it
+my $old_status;
+if (exists $yaml->{old_status}) {
+    $old_status = $yaml->{old_status};
+    die "YAML has old_status, but you didn't give -p option\n"
+	unless defined $previous;
+} else {
+    # old_status is an array of hashes:
+    # my (@old_values) = @{ $old_status->[$row]->{$previous} }
+    $old_status = [ map {{}} (0 .. $nshares - 1) ];
+}
+
 # an all-correct result ("1" for all n shares listed)
 my $all_ok =  "1" x $n;
 my $no_file = "-" x $n;
@@ -113,9 +138,23 @@ for (my $i = $opt_s; $i < $nshares; $i += $opt_n) {
 
 	$replica_size = (stat $infile)[7];
 	$replica_hash = getfattr($infile, "shatag.sha256");
-	my @res = ida_validate(infile => $infile, k => $k, w => $w,
-			       tests => [@tests]);
-	$res = join "", @res;
+
+	# Check for previously cached results
+	my ($old_size, $old_hash, @res);
+	if (defined($previous) and exists $old_status->[$i]->{$previous}) {
+	    warn "Using cached values for $previous, row $i\n";
+	    ($old_size, $old_hash, $res) = 
+		@{ $old_status->[$i]->{$previous} };
+	    die "Previous size $old_size != $replica_size\n"
+		if $old_size != $replica_size;
+	    die "Previous hash $old_hash ne $replica_hash\n"
+		if $old_hash ne $replica_hash;
+	} else {
+	    warn "Calling ida_validate for row $i\n";
+	    @res = ida_validate(infile => $infile, k => $k, w => $w,
+				tests => [@tests]);
+	    $res = join "", @res;
+	}
 
 	# This is where we will normally report, suppressing reporting
 	# for files that don't exist
@@ -123,5 +162,6 @@ for (my $i = $opt_s; $i < $nshares; $i += $opt_n) {
 
     }
 
-    # for now, report all files checked, even if they don't exist
+    # Uncomment to report all files checked, even if they don't exist:
+    # print join "\0", ($i, $replica_size, $replica_hash, $res, "\n");
 }

@@ -10,6 +10,13 @@ use IO::All -encoding => "UTF-8";
 # Eliminate "wide character" messages
 use open ':std', ':encoding(UTF-8)';
 
+# option -y new_yaml_file
+use Getopt::Std;
+
+our ($opt_y);
+getopts("y:");
+my $output_yaml = $opt_y;
+
 # Use the same file names that I used in group-validate, but with disk
 # names matching those in the YAML file prepended (I renamed the
 # report file name manually after validation)
@@ -31,6 +38,11 @@ my $yaml = LoadFile("merged-share-data.yaml");
 my $replicas = @{$yaml->{shares}};
 sub empty_hash { { ok => 0, errs => 0 } };
 my @coverage = map {empty_hash} (1.. $replicas); 
+
+# Create a new old_status structure to store in output YAML file
+
+my $old_status = [ map {{}} (0.. $replicas - 1) ];
+$yaml->{old_status} = $old_status; # splice it into existing YAML
 
 my ($total_errors, $report_errors) = (0,0);
 for my $silo (@{$yaml->{silo_names}}) {
@@ -57,6 +69,10 @@ for my $silo (@{$yaml->{silo_names}}) {
 	    } else {
 		$coverage[$row]->{ok}++;
 	    }
+	    # Stash extracted values back in YAML
+	    warn "Stashing row $row, silo $silo [$status] back into YAML\n";
+	    $old_status->[$row]->{$silo} = 
+	    [ $replica_size,$replica_hash,$status ];
 	}
 	if ($report_errors) {
 	    warn "$silo: worker $worker reported $report_errors errors\n";
@@ -79,4 +95,8 @@ for my $row (0.. $replicas -1) {
 	++$report_errors;
 	warn "Not covered ($row): $replica_name\n";
     }
+}
+
+if (defined $output_yaml) {
+    DumpFile($output_yaml, $yaml) or die "Failed to write YAML: $!\n";
 }
