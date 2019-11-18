@@ -2,12 +2,8 @@
 use Mojolicious::Lite;
 use Digest::SHA;
 
-# 
-
-get '/' => sub {
-  my $c = shift;
-  $c->render(template => 'index');
-};
+# Index page includes a simple JavaScript WebSocket client
+get '/' => 'index';
 
 # WebSocket service 
 websocket '/sha' => sub {
@@ -92,10 +88,16 @@ message back here that reports on the SHA1 hash.
 
     // Outgoing messages
     // ws.onopen = function (event) {
-    //   window.setInterval(function () { 
+    //   window.setInterval(function () {
     // 	ws.send('Hello Mojo!')
     //   }, 1000);
     // };
+
+    // Handle closure
+    ws.onclose = function(event) {
+      pre.innerHTML += "WebSocket closed with code " + event.code + "\n";
+      pre.innerHTML += "Reload the page to re-connect\n";
+    }
 
   </script>
   </body>
