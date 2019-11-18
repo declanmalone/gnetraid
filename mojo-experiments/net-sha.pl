@@ -50,7 +50,7 @@ message back here that reports on the SHA1 hash.
   <div id="sub-topic-field" class="form-group">
     <label for="sub-topic">Filename: </label>
     <div class="input-group">
-      <input type="text" id="sub-topic" class="form-control" />
+      <input type="text" id="formvalue" class="form-control" />
       <span class="input-group-btn">
          <button class="btn btn-primary">Send</button>
       </span>
@@ -77,7 +77,12 @@ message back here that reports on the SHA1 hash.
     // var form = document.getElementById("form");
 
     document.forms["form"].onsubmit 
-      = function(e) { e.preventDefault(); ws.send(e); };
+      = function(e) { 
+        e.preventDefault();
+        // is there no better way of doing this based on ID?
+        var val = document.forms["form"].elements.item(0).value;
+        ws.send(val);
+      };
 
     // Incoming messages
     ws.onmessage = function (event) {
@@ -86,11 +91,11 @@ message back here that reports on the SHA1 hash.
     };
 
     // Outgoing messages
-    ws.onopen = function (event) {
-      window.setInterval(function () { 
-	ws.send('Hello Mojo!')
-      }, 1000);
-    };
+    // ws.onopen = function (event) {
+    //   window.setInterval(function () { 
+    // 	ws.send('Hello Mojo!')
+    //   }, 1000);
+    // };
 
   </script>
   </body>
