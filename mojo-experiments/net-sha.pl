@@ -2,6 +2,10 @@
 use Mojolicious::Lite;
 use Digest::SHA;
 
+use Mojo::IOLoop::Server;
+
+app->{transactions}={};
+
 # Index page includes a simple JavaScript WebSocket client
 get '/' => 'index';
 
@@ -18,8 +22,41 @@ websocket '/sha' => sub {
     # Incoming message
     $c->on(message => sub {
 	my ($c, $msg) = @_;
-	$c->send("echo: $msg");
 	$c->app->log->debug("Got message $msg\n");
+
+	if (exists(app->{transactions}->{$msg})) {
+	    my $port = app->{transactions}->{$msg}->{port};
+	    $c->send("$msg: already running on port $port");
+	    return;
+	}
+
+	my $server = Mojo::IOLoop::Server->new;
+	$server->on(accept => sub {
+	    my ($server,$handle) = @_;
+	    $c->app->log->debug("accepted connection\n");
+	    $server->stop;	# only accept one connection
+	    my $sum = Digest::SHA->new("sha1");
+	    my $stream = Mojo::IOLoop::Stream->new($handle);
+	    $stream->on(read => sub {
+		my ($stream,$data) = @_;
+		$sum->add($data);
+			});
+	    $stream->on(close => sub {
+		$c->app->log->debug("closing connection\n");
+		my $hex = $sum->hexdigest;
+		$c->send("$msg: $hex");
+		delete app->{transactions}->{$msg};
+			});
+	    app->{transactions}->{$msg}->{stream}=$stream;
+	    $stream->start;
+		    });
+	$server->listen(port => 0);
+	my $port = $server->port;
+	app->{transactions}->{$msg}->{port}=$port;
+	app->{transactions}->{$msg}->{server}=$server;
+	$server->start;
+	
+	$c->send("Port $port ready to receive $msg");
            });
 
     # Closed
@@ -37,21 +74,24 @@ __DATA__
 % title 'Welcome';
 <h1>Mojolicious WebSocket Example</h1>
 
-Enter a filename below to open a new port to receive that file on. You
-can use netcat to send the file to that port and we will receive a
-message back here that reports on the SHA1 hash.
+<p>This page connects to the server using a WebSocket and tells it to set
+up a server on a random port. You can then upload a file to that port
+and we get back the SHA1 of that file over the WebSocket.</p>
+
+<p>The steps are:
+
+<ol>
+<li> Enter some unique string to identify the file and submit </li>
+<li> The server listens on a random port and tells us the port number. </li>
+<li> Manually upload a file to the port (eg, <code>netcat -q0 localhost <i>port</i> &lt; input_file</code>)
+<li> The server reads the file and reports back the SHA1 sum </li>
+</ol>
 
 <!-- <input id="form"> <input id="submit" type="submit"> -->
 <form id="form">
-  <div id="sub-topic-field" class="form-group">
     <label for="sub-topic">Filename: </label>
-    <div class="input-group">
-      <input type="text" id="formvalue" class="form-control" />
-      <span class="input-group-btn">
-         <button class="btn btn-primary">Send</button>
-      </span>
-    </div>
-  </div>
+    <input type="text" id="formvalue" class="form-control" />
+    <button class="btn btn-primary">Send</button>
 </form>
 
 <h3>Transcript</h3>
