@@ -180,17 +180,23 @@ websocket '/sha' => sub {
 		    # IOLoop::Stream can read from a file, but not
 		    # write to one!
 		    my $client = Mojo::IOLoop::Client->new;
+		    app->{transactions}->{$file}->{client} = $client;
 		    $client->on(connect => sub {
 			my ($client, $handle) = @_;
 			$c->app->log->debug("Sender connected to receiver");
 			my $istream = Mojo::IOLoop::Stream->new($fh);
 			my $ostream = Mojo::IOLoop::Stream->new($handle);
+			app->{transactions}->{$file}->{istream} = $istream;
+			app->{transactions}->{$file}->{ostream} = $ostream;
 			$ostream->start;
 			$istream->on(read => sub {
 			    my ($istream,$data) = @_;
 			    my $size = length($data);
 			    $c->app->log->debug("sent $size bytes");
 			    $ostream->write($data);
+				     });
+			$istream->on(close => sub {
+			    $ostream->close_gracefully;
 				     });
 			$istream->start;
 				});
@@ -201,6 +207,7 @@ websocket '/sha' => sub {
 		    $client->connect(address => 'localhost',
 				     port => $port);
 		    $client->reactor->start unless $client->reactor->is_running;
+		    $c->send("Sender finished");
 		}
 	    } else {
 		$c->send("Invalid filename '$file'");
