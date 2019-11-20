@@ -1,0 +1,29 @@
+% layout 'default';
+% title 'Welcome';
+<h1>Mojolicious WebSocket Example</h1>
+
+<p>This page connects to the server using a WebSocket and tells it to set
+up a server on a random port. You can then upload a file to that port
+and we get back the SHA1 of that file over the WebSocket.</p>
+
+<p>The steps are:
+
+<ol>
+<li> Enter some unique string to identify the file and submit </li>
+<li> The server listens on a random port and tells us the port number. </li>
+<li> Manually upload a file to the port (eg, <code>netcat -q0 localhost <i>port</i> &lt; input_file</code>)
+<li> The server reads the file and reports back the SHA1 sum </li>
+</ol>
+
+<!-- <input id="form"> <input id="submit" type="submit"> -->
+<form id="form">
+    <label for="sub-topic">Filename: </label>
+    <input type="text" id="formvalue" class="form-control" />
+    <button class="btn btn-primary">Send</button>
+</form>
+
+<h3>Transcript</h3>
+
+<pre id="preblock">
+</pre>
+
