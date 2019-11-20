@@ -3,9 +3,15 @@
 use strict;
 use warnings;
 
-use Mojo::File 'curfile';
-use lib curfile->dirname->sibling('lib')->to_string;
+#use Mojo::File 'curfile';
+#use lib curfile->dirname->sibling('lib')->to_string;
+
+use Digest::SHA;
+
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
 use Mojolicious::Commands;
 
 # Start command line interface for application
-Mojolicious::Commands->start_app('ida-daemon');
+Mojolicious::Commands->start_app('IDA::Daemon');

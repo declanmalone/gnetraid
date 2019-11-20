@@ -1,4 +1,4 @@
-package ida-daemon::Controller::Example;
+package IDA::Daemon::Controller::Example;
 use Mojo::Base 'Mojolicious::Controller';
 
 # This action will render a template
