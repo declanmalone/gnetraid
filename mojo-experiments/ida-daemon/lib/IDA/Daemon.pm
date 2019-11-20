@@ -1,9 +1,6 @@
 package IDA::Daemon;
 use Mojo::Base 'Mojolicious';
 
-use FindBin qw($Bin);
-use lib "$Bin/../lib";
-
 use Mojo::IOLoop::Server;
 
 # This method will run once at server start
@@ -92,7 +89,7 @@ sub startup {
 	      my ($port, $file) = ($1,$2);
 	      # Only allow sending of file in current directory
 	      if ($file =~ m|^\./[^/]+$|) {
-		  if (!open my $fh, "<", "$Bin/$file") {
+		  if (!open my $fh, "<", "$file") {
 		      $c->send("No such file '$file'");
 		  } else {
 		      # IOLoop::Stream can read from a file, but not
