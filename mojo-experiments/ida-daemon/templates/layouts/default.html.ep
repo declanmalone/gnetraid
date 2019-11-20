@@ -1,5 +1,42 @@
 <!DOCTYPE html>
 <html>
   <head><title><%= title %></title></head>
-  <body><%= content %></body>
+  <body>
+  <%= content %>
+
+  <!-- if I put the script first, getElementById fails -->
+  <script>
+    var pre = document.getElementById("preblock");
+    var ws  = new WebSocket('<%= url_for('sha')->to_abs %>');
+    // var form = document.getElementById("form");
+
+    document.forms["form"].onsubmit 
+      = function(e) { 
+        e.preventDefault();
+        // is there no better way of doing this based on ID?
+        var val = document.forms["form"].elements.item(0).value;
+        ws.send("RECEIVE " + val);
+      };
+
+    // Incoming messages
+    ws.onmessage = function (event) {
+	pre.innerHTML += event.data + "\n";
+	// document.body.innerHTML += event.data + '<br/>';
+    };
+
+    // Outgoing messages
+    // ws.onopen = function (event) {
+    //   window.setInterval(function () {
+    // 	ws.send('Hello Mojo!')
+    //   }, 1000);
+    // };
+
+    // Handle closure
+    ws.onclose = function(event) {
+      pre.innerHTML += "WebSocket closed with code " + event.code + "\n";
+      pre.innerHTML += "Reload the page to re-connect\n";
+    }
+
+  </script>
+  </body>
 </html>
