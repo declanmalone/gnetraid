@@ -58,7 +58,7 @@ sub startup {
               return 1;
               $c->render(text => 'Welcome! commonName matched!');
           } else {
-              $c->render(status => 403, text => "You're not on the list!");
+              $c->render(status => 403, text => "You're not on the list, $cn!");
           }
       }
       return undef;
@@ -182,7 +182,7 @@ sub startup {
 	  my ($c, $code, $reason) = @_;
 	  $c->app->log->debug("WebSocket closed with status $code");
 	     });
-		});
+		})->over('ssl_auth');
 
 }
 
