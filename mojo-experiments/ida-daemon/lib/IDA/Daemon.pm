@@ -18,6 +18,8 @@ sub startup {
 
   # Configure the application
   $self->secrets($config->{secrets});
+  $self->{secure} = $config->{proto} // "" eq "https" ? 1 : 0;
+  $self->{auth_mode} = $config->{auth_mode} // "server";
 
   # Router
   my $r = $self->routes;
@@ -70,10 +72,11 @@ sub startup {
   $app->{transactions}={};
 
   # Index page includes a simple JavaScript WebSocket client
-  $r->get('/')->to(template => 'index')->over('ssl_auth');
+  my $index =  $r->get('/')->to(template => 'index');
+  $index->over('ssl_auth') if $self->{auth_mode} eq "mutual";
 
   # WebSocket service 
-  $r->websocket('/sha' => sub {
+  my $sha = $r->websocket('/sha' => sub {
       my $c = shift;
 
       # Opened
@@ -182,7 +185,10 @@ sub startup {
 	  my ($c, $code, $reason) = @_;
 	  $c->app->log->debug("WebSocket closed with status $code");
 	     });
-		})->over('ssl_auth');
+			  });
+
+  $sha->over('ssl_auth') if $self->{auth_mode} eq "mutual";
+
 
 }
 
