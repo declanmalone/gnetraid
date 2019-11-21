@@ -2,10 +2,12 @@ package IDA::Daemon;
 use Mojo::Base 'Mojolicious';
 
 use Mojo::IOLoop::Server;
+use IO::Socket::SSL;
 
 # This method will run once at server start
 sub startup {
   my $self = shift;
+  my $app = $self->app;
 
   # Find our commands
   push @{$self->commands->namespaces}, 'IDA::Command';
@@ -20,13 +22,55 @@ sub startup {
   # Router
   my $r = $self->routes;
 
+  # Callback to debug SSL verify
+  IO::Socket::SSL::set_defaults(
+      callback => sub {
+	  # say "Disposition: $_[0]";
+	  # say "Cert store (C):<<$_[1]>>";
+	  # say "Issuer/Owner:<<$_[2]>>";
+	  say "Errors?: $_[3]";
+	  say $_[0] ? "Accepting cert" : "Not accepting cert";
+	  return  $_[0];
+      });
+
+  # SSL Mutual Authentication (requires a whitelist of auth'd cn's)
+  $config->{auth_cns} = {} unless exists $config->{auth_cns};
+  $r->add_condition(ssl_auth => sub {
+      my ($route, $c, $captures, $num) = @_;
+
+      my $id     = $c->tx->connection;
+      my $handle = Mojo::IOLoop->stream($id)->handle;
+      my $authorised_cns = $app->config->{auth_cns};
+
+      if (ref $handle ne 'IO::Socket::SSL') {
+          # Not SSL connection
+          # if we get here, chances are that server hasn't
+          # defined its web identity (cert, key).
+
+          my $type = ref $handle;
+          $c->render(text => "ref = $type (not IO::Socket::SSL)");
+      } else {
+          my $cn = $handle->peer_certificate('commonName');
+          unless (defined $cn) {
+              $c->render(status => 403, text => 'No client cert received');
+          } elsif (exists $authorised_cns->{$cn}) {
+              $c->stash(authorised => $cn);
+              return 1;
+              $c->render(text => 'Welcome! commonName matched!');
+          } else {
+              $c->render(status => 403, text => "You're not on the list!");
+          }
+      }
+      return undef;
+  });
+
   # Normal route to controller
   #  $r->get('/')->to('example#welcome');
 
-  $self->app->{transactions}={};
+  $app->{transactions}={};
 
   # Index page includes a simple JavaScript WebSocket client
-  $r->get('/' => 'index');
+  $r->get('/')->to(template => 'index')->over('ssl_auth');
 
   # WebSocket service 
   $r->websocket('/sha' => sub {
@@ -47,8 +91,8 @@ sub startup {
 	  if ($msg =~ /^RECEIVE (.*)$/) {
 	      $msg = $1;
 	      
-	      if (exists($self->app->{transactions}->{$msg})) {
-		  my $port = $self->app->{transactions}->{$msg}->{port};
+	      if (exists($app->{transactions}->{$msg})) {
+		  my $port = $app->{transactions}->{$msg}->{port};
 		  $c->send("$msg: already running on port $port");
 		  return;
 	      }
@@ -70,15 +114,15 @@ sub startup {
 		      $c->app->log->debug("closing connection");
 		      my $hex = $sum->hexdigest;
 		      $c->send("$msg: $hex");
-		      delete $self->app->{transactions}->{$msg};
+		      delete $app->{transactions}->{$msg};
 			      });
-		  $self->app->{transactions}->{$msg}->{stream}=$stream;
+		  $app->{transactions}->{$msg}->{stream}=$stream;
 		  $stream->start;
 			  });
 	      $server->listen(port => 0);
 	      my $port = $server->port;
-	      $self->app->{transactions}->{$msg}->{port}=$port;
-	      $self->app->{transactions}->{$msg}->{server}=$server;
+	      $app->{transactions}->{$msg}->{port}=$port;
+	      $app->{transactions}->{$msg}->{server}=$server;
 	      $server->start;
 	      
 	      $c->send("Port $port ready to receive $msg");
@@ -95,14 +139,14 @@ sub startup {
 		      # IOLoop::Stream can read from a file, but not
 		      # write to one!
 		      my $client = Mojo::IOLoop::Client->new;
-		      $self->app->{transactions}->{$file}->{client} = $client;
+		      $app->{transactions}->{$file}->{client} = $client;
 		      $client->on(connect => sub {
 			  my ($client, $handle) = @_;
 			  $c->app->log->debug("Sender connected to receiver");
 			  my $istream = Mojo::IOLoop::Stream->new($fh);
 			  my $ostream = Mojo::IOLoop::Stream->new($handle);
-			  $self->app->{transactions}->{$file}->{istream} = $istream;
-			  $self->app->{transactions}->{$file}->{ostream} = $ostream;
+			  $app->{transactions}->{$file}->{istream} = $istream;
+			  $app->{transactions}->{$file}->{ostream} = $ostream;
 			  $ostream->start;
 			  $istream->on(read => sub {
 			      my ($istream,$data) = @_;
