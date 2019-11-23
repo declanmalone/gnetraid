@@ -177,8 +177,9 @@ sub startup {
 
 	  } else {
 	      $c->send("Invalid command!");
-	  }	    
-	     });
+	  }
+	     }
+      );
 
       # Closed
       $c->on(finish => sub {
