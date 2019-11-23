@@ -71,7 +71,7 @@ for my $silo (@{$yaml->{silo_names}}) {
 		$coverage[$row]->{ok}++;
 	    }
 	    # Stash extracted values back in YAML
-	    warn "Stashing row $row, silo $silo [$status] back into YAML\n";
+	    # warn "Stashing row $row, silo $silo [$status] back into YAML\n";
 	    $old_status->[$row]->{$silo} = 
 	    [ $replica_size,$replica_hash,$status ];
 	}

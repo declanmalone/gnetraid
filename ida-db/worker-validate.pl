@@ -105,6 +105,9 @@ if (exists $yaml->{old_status}) {
     $old_status = [ map {{}} (0 .. $nshares - 1) ];
 }
 
+# Make sure that we flush output after every line
+$| = 1;
+
 # an all-correct result ("1" for all n shares listed)
 my $all_ok =  "1" x $n;
 my $no_file = "-" x $n;
