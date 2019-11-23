@@ -29,36 +29,33 @@ my %drive_hash = map { $_ => 1 } @drive_list;
 
 # path is where the canonical copy of the archive should be found
 my %archives = (
-		"tv"          => {
+		"Cathy"          => {
 				  drive => "Cathy",
-				  path => "/video/tv",
+				  path => "/queue-4,7",
 				 },
-		"movies"      => {
+		"Janice"      => {
 				  drive => "Janice",
-				  path => "/video/movies",
+				  path => "/queue-4,7",
 				 },
-		"music"       => {
+		"Tomoko"       => {
 				  drive => "Tomoko",
-				  path => "/music",
+				  path => "/queue-4,7",
 				 },
-		"documentary" => {
+		"Midori" => {
 				  drive => "Midori",
-				  path => "/video/documentary",
-				 },
-		"standup"     => {
-				  drive => "Midori",
-				  path => "/video/standup",
-				 },
-		"shorts"     => {
-				  drive => "Midori",
-				  path => "/video/shorts",
+				  path => "/queue-4,7",
 				 },
 		);
-my $share_root = "/shares";
+my $share_root = "/shares-4,7";
 
 # link_dir stores symbolic links to the root of each drive;
 # see comments on 'config' operation below
 my $link_dir = "$ENV{HOME}/.media-raid";
+
+# I want to mount over sshfs in my home dir rather than setting up NFS
+# and getting root involved. As a result, any mentions of /media have
+# to be changed to $MEDIA.
+my $MEDIA = $link_dir;
 
 ##
 ### end of hard-coded options
@@ -80,14 +77,15 @@ sub find_archive_info {
   $_= shift;
 
   $_= abs_path($_);
-  unless (m|^/media|) {
-    warn "File '$_' not in /media\n";
+  #warn "\$MEDIA is $MEDIA\n";
+  unless (m|^${MEDIA}|) {
+    warn "File '$_' not in $MEDIA\n";
     return 0;
   }
 
  ($in_drive,$in_archive) = ("","");
   foreach my $drive (@drive_list) {
-    if (m|^/media/$drive|) {
+    if (m|^$MEDIA/$drive|) {
       $in_drive=$drive;
       last;
     }
@@ -100,7 +98,7 @@ sub find_archive_info {
   foreach my $archive (keys %archives) {
     my $archive_drive = $archives{$archive}->{drive};
     next if ($archive_drive ne $in_drive);
-    my $archive_path = "/media/$archive_drive" .
+    my $archive_path = "$MEDIA/$archive_drive" .
       $archives{$archive}->{path};
     next unless (/^$archive_path/);
     $in_archive = $archive;
@@ -113,7 +111,7 @@ sub find_archive_info {
     my ($main_archive,$main_archive_drive,$wrong_drive) = ("","","");
     foreach my $archive (keys %archives) {
       my $archive_path = $archives{$archive}->{path};
-      if (m|^/media/(\w+)$archive_path|) {
+      if (m|^$MEDIA/(\w+)$archive_path|) {
 	$wrong_drive = $1;
 	$main_archive = $archive;
 	$main_archive_drive = $archives{$archive}->{drive};
@@ -161,7 +159,7 @@ sub find_sharefile_info {
   my $header_info;
 
   my $relative_file = $original_file;
-  $relative_file =~ s|/media/\w+||;
+  $relative_file =~ s|$MEDIA/\w+||;
 
   my $archive_path = $archives{$archive}->{path};
   $relative_file =~ s|$archive_path||;
@@ -171,7 +169,7 @@ sub find_sharefile_info {
 
     # first some basic file checks to see if the file exists
     my $sharefile;
-    $sharefile = "/media/$drive$share_root" .
+    $sharefile = "$MEDIA/$drive$share_root" .
       "$archive_path/$relative_file.sf";
 
 #    warn "$sharefile\n";
@@ -247,7 +245,7 @@ sub scan_file_or_dir {
 
   # modify filename to make it suitable for printing relative to
   # archive root (keeping absfile as original absolute filename)
-  $filename =~ s|^/media/$in_drive||;
+  $filename =~ s|^$MEDIA/$in_drive||;
   $filename =~ s|^$in_root/?||;
 
   my $copies = 100;
@@ -262,7 +260,7 @@ sub scan_file_or_dir {
   if (-d) {
     $good_tick = "d";
     foreach my $drive (@drive_list) {
-      $share_copy = "/media/$drive$share_root/$in_root/$filename";
+      $share_copy = "$MEDIA/$drive$share_root/$in_root/$filename";
       if (-d $share_copy) {
 	++$sharecount;
       }
@@ -302,7 +300,7 @@ sub scan_file_or_dir {
   if (-d) {
 
     foreach my $drive (@drive_list) {
-      $other_copy = "/media/$drive/$in_root/$filename";
+      $other_copy = "$MEDIA/$drive/$in_root/$filename";
       if ($in_drive eq $drive) {
 	$ticks .= "D";
       } else {
@@ -320,7 +318,7 @@ sub scan_file_or_dir {
   } else { # regular file
 
     foreach my $drive (@drive_list) {
-      $other_copy = "/media/$drive/$in_root/$filename";
+      $other_copy = "$MEDIA/$drive/$in_root/$filename";
       if ($in_drive eq $drive) {
 	$ticks .= "1";
       } else {
@@ -400,7 +398,7 @@ sub cmp_file_or_dir {
   my $filespec;
 
   my $shortname = $infile;
-  $shortname =~ s|^/media/$in_drive||;
+  $shortname =~ s|^$MEDIA/$in_drive||;
   $shortname =~ s|^$in_root||;
 
   # warn "Comparing $infile\n";
@@ -415,7 +413,7 @@ sub cmp_file_or_dir {
 
   # calculate filespec via our symbolic links
   $filespec = $infile;
-  $filespec =~ s|^/media/\w+/|$link_dir/\%s/|;
+  $filespec =~ s|^$MEDIA/\w+/|$link_dir/\%s/|;
   # $filespec =~ s|$|.sf-\%s|; # sf_split doesn't globally replace %s
   $filespec .= ".sf";
 
@@ -499,7 +497,7 @@ sub split_file_or_dir {
   my $filespec;
 
   my $shortname = $infile;
-  $shortname =~ s|^/media/$in_drive||;
+  $shortname =~ s|^$MEDIA/$in_drive||;
   $shortname =~ s|^$in_root||;
 
   # we can't split directories
@@ -513,7 +511,7 @@ sub split_file_or_dir {
   # calculate filespec using links in our private directory to
   # put shares in correct places (%s is share number)
   $filespec = $infile;
-  $filespec =~ s|^/media/\w+/|$link_dir/\%s/|;
+  $filespec =~ s|^$MEDIA/\w+/|$link_dir/\%s/|;
   # $filespec =~ s|$|.sf-\%s|; # sf_split doesn't globally replace %s
   $filespec .= ".sf";
 
@@ -524,7 +522,7 @@ sub split_file_or_dir {
   for my $i (0..$nshares-1) {	# note shares count from 0 up
     my $dir_to_make = $File::Find::dir;
     my $drive = $drive_list[$i];
-    $dir_to_make =~ s|^/media/\w+/|/media/$drive$share_root/|;
+    $dir_to_make =~ s|^$MEDIA/\w+/|$MEDIA/$drive$share_root/|;
     unless (-d $dir_to_make) {
       if ($dry_run) {
 	warn "split would mkpath '$dir_to_make'\n" if ($verbose > 1);
@@ -570,8 +568,8 @@ sub split_file_or_dir {
 
   } else {
 
-    # warn "Splitting '$infile'.\n"
-    #	. "(filespec is $filespec)\n"
+     warn "Splitting '$infile'.\n"
+	 . "(filespec is $filespec)\n";
     #  if $verbose > 0;
 
     die "Error splitting $infile. Quitting.\n" unless
@@ -664,11 +662,11 @@ sub move_function {
     for my $i (0..$nshares-1) {	# share numbers count from zero
 
       my $sfilespec = $source;
-      $sfilespec =~ s|^/media/\w+/|$link_dir/\%s/|;
+      $sfilespec =~ s|^$MEDIA/\w+/|$link_dir/\%s/|;
       $sfilespec .= ".sf" unless -d $source;
 
       my $tfilespec = $target;
-      $tfilespec =~ s|^/media/\w+/|$link_dir/\%s/|;
+      $tfilespec =~ s|^$MEDIA/\w+/|$link_dir/\%s/|;
       $tfilespec .= ".sf" unless -d $source or -d $target;
 
       my $sourceshare = sf_sprintf_filename($sfilespec,$source,0,$i);
@@ -845,7 +843,7 @@ sub recursive_lint {
     foreach (sort { $a cmp $b } keys %known_files) {
       my $orig = $_;
       $orig =~ s/\.sf$//;
-      if (-f "/media/$in_drive/$in_root/$relative_path/$orig"
+      if (-f "$MEDIA/$in_drive/$in_root/$relative_path/$orig"
 	and @{$known_files{$_}} >= $quorum) {
 	warn " -- $relative_path/$_\n" if $verbose;
 	next;
@@ -899,7 +897,7 @@ sub lint_delint_function {
     my $filename = $absfile;
 
     # get relative file name
-    $filename =~ s|^/media/$in_drive||;
+    $filename =~ s|^$MEDIA/$in_drive||;
     $filename =~ s|^$in_root/?||;
 
     my $hash = check_for_shares($filename);

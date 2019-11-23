@@ -768,7 +768,7 @@ sub scan {
     my @statinfo;
     my $this_archive  = $lhash->{archive};
     my $this_root     = $lhash->{store_root};
-    #    my $re            = $lhash->{regexp};
+    my $re            = $lhash->{regexp};
 
     # modify filename to make it suitable for printing relative to
     # archive root (keeping absfile as original absolute filename)
@@ -1116,9 +1116,11 @@ sub cmp_function {
   }
 }
 
-=cut
 
 # Just POD hereafter
+
+=end comment
+
 
 =head1 NAME
 
@@ -1127,8 +1129,6 @@ Media::RAID - Implement a RAID-like backup system using Crypt::IDA::*
 =head1 VERSION
 
 Version 0.01
-
-=cut
 
 
 =head1 SYNOPSIS

@@ -3,7 +3,9 @@
 use strict;
 use warnings;
 
-use lib '/home/dec/share/perl/5.10.1';
+use FindBin '$Bin';
+use lib "$Bin/../lib";
+
 use Media::RAID;
 use Media::RAID::Store qw(new_drive_store new_fixed_store);
 
@@ -36,6 +38,10 @@ my ($quorum,$nshares,$kwidth)=(3,4,1);
 my @drive_list = ('Cathy', 'Janice', 'Tomoko', 'Midori');
 my %drive_hash = map { $_ => 1 } @drive_list;
 
+=for comment
+
+# 
+
 # path is where the canonical copy of the archive should be found
 my %archives = (
 		"tv"          => {
@@ -63,6 +69,10 @@ my %archives = (
 				   path => "/video/shorts",
 				 },
 	       );
+
+=cut
+
+
 my $share_root = "/shares";
 
 # link_dir stores symbolic links to the root of each drive;
@@ -1133,6 +1143,6 @@ if      ($command eq "split") {
 } elsif ($command eq "dumpconfig") {
   print $raid->dumpconfig . "\n";
 } else {
-  die "Internally unsupported command '$command'\n";
+  die "Unknown command '$command'\n";
 }
 
