@@ -116,7 +116,7 @@ sub new {
 	alpha     => 24,
 	gen       => 2048,
 	blocksize => 1024,
-	swapsize  => 48,
+	swapsize  => 128,
 	# tuning/debugging (sets #define FOO in code, test using #ifdef)
 	# Main options: LONG_MULTIPLY | SWITCH_TABLES | HOST_TABLES
 	defines   => [qw/LONG_MULTIPLY HOST_TABLES/], 
@@ -448,7 +448,6 @@ sub pivot {
 		# cancelled, so no further action required
 		warn "RC: Cancelled [i=$i]\n" if $debug;
 		return $self->{remain};
-
 	    }
 
 	    # only check code,symbol if it wasn't cancelled

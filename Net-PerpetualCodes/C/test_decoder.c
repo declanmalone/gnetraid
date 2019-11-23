@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
     code = buf + sizeof(unsigned);
     sym  = code + settings.code_size;
     if (eof) break;
-    //continue;
+
     int rc;
     switch(settings.qbits) {
     case  8: rc = pivot_gf8 (&settings, &decoder, i,
@@ -136,6 +136,9 @@ int main(int argc, char *argv[]) {
     }
     if (eof) break;
   }
-  fprintf(stderr, "Fully decoded after %d packets\n", packets);
+  if (eof) 
+    fprintf(stderr, "EOF on input. Need more packets?\n");
+  else 
+    fprintf(stderr, "Fully decoded after %d packets\n", packets);
   exit(0);
 }

@@ -14,7 +14,7 @@
 // Apparently I can't inline this. Strange.
 unsigned char gf8_mul_long(unsigned int a, unsigned char b) {
 
-#ifdef OPERAND_CHECK
+#ifdef CHECK_OPERANDS
   // Checking if operands are 0 or 1 may (or may not) be faster
   // (I expect it not to be)
   if (a < 2) { return a ? b : 0; }
@@ -189,6 +189,7 @@ kernel void pivot_gf8(
   for (j = start_range; j < next_range; ++j)
     sym[j] = host_sym[j];
 
+#ifdef CHECK_MATHS
   // Sanity check maths
   if (id == 0) {
     if (GF8_INV(0x53) != 0xca) {
@@ -204,7 +205,8 @@ kernel void pivot_gf8(
       rc_vec[6] = 4; return;
     }
   }
-  
+#endif
+
   // Main loop
   while ( ++tries < GEN * 2 ) {
 
@@ -223,8 +225,10 @@ kernel void pivot_gf8(
       rc_vec[3] = ctz_code;
       rc_vec[4] = ctz_row;
     }
+
     did_swap = 0;
-    if ((DO_SWAP) && (ctz_code > ctz_row)) {
+#ifdef DO_SWAP
+    if (ctz_code > ctz_row) {
 
       // Host needs to know which rows to swap
       if (id == 0)
@@ -242,14 +246,18 @@ kernel void pivot_gf8(
       // Set variable so we can update local_swaps later
       did_swap = 1;
     }
-
+#endif
     // The code below doesn't care that we didn't actually swap code
     // with coding row or sym with symbol row
     
     // subtract coding row (or swapped row) from code
     cancelled = 1;
     // reuse zero_sym here to mean number of non-zero elements
+#ifdef DO_SWAP
     zero_sym = ALPHA - (did_swap? ctz_row : ctz_code);
+#else
+    zero_sym = ALPHA;
+#endif
     k = i * ALPHA;
     for (j = 0; j < zero_sym ; ++j)
       if (code[j] ^= coding[j + k])
@@ -262,8 +270,10 @@ kernel void pivot_gf8(
       if (sym[ j ] ^= symbol[j + k])
 	zero_sym = 0;
 
+#ifdef DO_SWAP
     // I delayed updating this
     local_swaps += did_swap;
+#endif
 
     if (cancelled) {
       if (zero_sym)
@@ -279,7 +289,9 @@ kernel void pivot_gf8(
     for (j = 0; j < ALPHA; ++j)
       if (code[j]) break; else ++clz_code;
     temp = GF8_INV(code[clz_code]);
+#ifdef CHECK_INVERSE
     if (id == 0) rc_vec[7] = temp;
+#endif
 
     // can combine code vector multiplication with shift left
     k = clz_code + 1;
@@ -310,8 +322,10 @@ kernel void pivot_gf8(
     temp = 1 << (i & 0x07);	/* bit mask from 1 .. 128 */
     if (id == 0) rc_vec[5] = temp;
     if (filled[(i >> 3)] & temp) {
+#ifdef CHECK_FILLED
       // debug: check how many (up to uchar) filled slots we encountered
       if (id == 0) rc_vec[2]++;
+#endif
     } else {
       // not filled, so we can return. Host handles copying code,sym
       rc = 0;		/* 0: success, needs writing */
