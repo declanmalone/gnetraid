@@ -5,7 +5,7 @@
 typedef void (*sighandler_t)(int);
 
 #define CMDBUFSIZ  512		/* for command interpreter input */
-#define __STANDALONE__          /* set to compile main() */
+// #define __STANDALONE__          /* set to compile main() */
 
 /* 
   for 64-bit file offsets, set LARGEFILE_SUPPORT. Make sure that this

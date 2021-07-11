@@ -10,13 +10,15 @@
   actually gone, or that additions/subtractions will wrap around on
   reaching max/min values.
 */
+#include <stdint.h>
+
 typedef unsigned char    gf2_u8;
-typedef unsigned short   gf2_u16;
-typedef unsigned long    gf2_u32;
+typedef uint16_t         gf2_u16;
+typedef uint32_t         gf2_u32;
 typedef unsigned char*   gf2_apn; /* arbitrary-precision number */
 typedef signed char      gf2_s8;
-typedef signed short     gf2_s16;
-typedef signed long      gf2_s32;
+typedef int16_t          gf2_s16;
+typedef int32_t          gf2_s32;
 
 #define GF2_LITTLE_ENDIAN 1
 #define GF2_BIG_ENDIAN    2

@@ -245,7 +245,7 @@ static const unsigned char fast_gf2_exp[] = {
   0, 0, 0, 0, 0, 0, 0, 0,
 };
 
-inline unsigned char gf2_mul8 (unsigned char a, unsigned char b) {
+/* inline */ unsigned char gf2_mul8 (unsigned char a, unsigned char b) {
   /* keep 8-bit log/exp tables handy */
   static const signed short  *log_table=fast_gf2_log;
   static const unsigned char *exp_table=fast_gf2_exp+512;
